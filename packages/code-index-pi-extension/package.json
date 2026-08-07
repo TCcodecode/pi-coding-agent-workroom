@@ -1,0 +1,25 @@
+{
+  "name": "@pi-desk/code-index-pi-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./extensions/code-index.ts",
+  "exports": {
+    ".": "./extensions/code-index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "keywords": ["pi-package", "pi", "code-index"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "@pi-desk/code-index": "*",
+    "typebox": "^1.3.7"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

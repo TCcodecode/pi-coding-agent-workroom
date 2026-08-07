@@ -1,0 +1,1623 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Composer } from "./components/Composer";
+import { collectFileChanges, Timeline } from "./components/Timeline";
+import { ChangeInspector } from "./components/ChangeInspector";
+import { ResourceInspector } from "./components/ResourceInspector";
+import { SessionSidebar } from "./components/SessionSidebar";
+import { SessionTabBar } from "./components/SessionTabBar";
+import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
+import { SettingsDialog } from "./components/SettingsDialog";
+import { HelpDialog } from "./components/HelpDialog";
+import { TreeDialog } from "./components/TreeDialog";
+import { HttpWorkbench } from "./components/HttpWorkbench";
+import { AppIcon } from "./components/icons";
+import { ShortcutKeys } from "./components/ShortcutKeys";
+import { getPiApi } from "./state/piApi";
+import { useAppStore } from "./state/appStore";
+import type { InspectorTab } from "./components/ResourceInspector";
+import type { LiveSessionSummary, PiEvent, PiSnapshot, SessionStatus } from "../shared/protocol";
+import {
+  closeTab as closeTabInList,
+  displayTabTitle,
+  ensureInWorkingSet,
+  findRestorableTab,
+  loadOpenTabs,
+  patchTab,
+  promotePreviewTab,
+  saveOpenTabs,
+  sortTabsPinnedFirst,
+  type SessionTab,
+  togglePinTab,
+  touchTab,
+  upsertTab,
+  WORKING_SET_LIMIT,
+} from "./state/sessionTabs";
+
+const SESSION_SCOPED_EVENT_TYPES = new Set<PiEvent["type"]>([
+  "session_started",
+  "session_completed",
+  "session_error",
+  "user_message_created",
+  "assistant_message_started",
+  "assistant_message_delta",
+  "assistant_message_completed",
+  "thinking_started",
+  "thinking_delta",
+  "thinking_completed",
+  "tool_call_started",
+  "tool_call_delta",
+  "tool_call_completed",
+  "file_change_undone",
+  "queue_updated",
+  "model_changed",
+  "thinking_level_changed",
+  "agent_started",
+  "turn_started",
+  "turn_completed",
+  "compaction_started",
+  "compaction_completed",
+  "auto_retry_started",
+  "auto_retry_completed",
+  "model_select",
+  "session_name_changed",
+  "todos_updated",
+]);
+
+type RightPane = "inspector" | "changes";
+
+function canBePreview(hasConversation: boolean, status?: SessionStatus): boolean {
+  return !hasConversation && status !== "running" && status !== "awaiting_approval";
+}
+
+function readPanelWidth(key: string, fallback: number): number {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function defaultChangesWidth(): number {
+  const viewport = typeof window === "undefined" ? 1440 : window.innerWidth;
+  return Math.min(1280, Math.max(520, Math.round(viewport * 0.65)));
+}
+
+export function App() {
+  const state = useAppStore();
+  const api = getPiApi();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [rightPane, setRightPane] = useState<RightPane>("inspector");
+  const [selectedChangePath, setSelectedChangePath] = useState<string | undefined>();
+  const [inspectorWidth, setInspectorWidth] = useState(() => readPanelWidth("pi.inspectorWidth", 300));
+  const [changesWidth, setChangesWidth] = useState(() => readPanelWidth("pi.changesWidth", defaultChangesWidth()));
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("pi.sidebarWidth") ?? 260));
+  useEffect(() => {
+    localStorage.setItem("pi.sidebarWidth", String(sidebarWidth));
+  }, [sidebarWidth]);
+  useEffect(() => {
+    localStorage.setItem("pi.inspectorWidth", String(inspectorWidth));
+  }, [inspectorWidth]);
+  useEffect(() => {
+    localStorage.setItem("pi.changesWidth", String(changesWidth));
+  }, [changesWidth]);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("context");
+  const [commands, setCommands] = useState<PaletteCommand[]>([]);
+  const [branchName, setBranchName] = useState<string | undefined>();
+  const [workspaceMode, setWorkspaceMode] = useState<"pi" | "http">(() => {
+    try {
+      return localStorage.getItem("pi.workspaceMode") === "http" ? "http" : "pi";
+    } catch {
+      return "pi";
+    }
+  });
+  const [openTabs, setOpenTabs] = useState<SessionTab[]>(() => loadOpenTabs().tabs);
+  const [activeTabId, setActiveTabId] = useState<string | undefined>(() => loadOpenTabs().activeTabId);
+  const [liveSessions, setLiveSessions] = useState<LiveSessionSummary[]>([]);
+  const sessionChanges = useMemo(() => collectFileChanges(state.timeline), [state.timeline]);
+  const initialRestoredRef = useRef(false);
+  const timelineWrapRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const openTabsRef = useRef(openTabs);
+  const activeTabIdRef = useRef(activeTabId);
+  const liveSessionsRef = useRef(liveSessions);
+  const committedTabIdsRef = useRef(new Set<string>());
+  const requestNewSessionRef = useRef<() => void>(() => undefined);
+  openTabsRef.current = openTabs;
+  activeTabIdRef.current = activeTabId;
+  liveSessionsRef.current = liveSessions;
+
+  const openChanges = useCallback((path?: string) => {
+    const selected = path && sessionChanges.some((change) => change.path === path)
+      ? path
+      : sessionChanges[0]?.path;
+    setSelectedChangePath(selected);
+    setRightPane("changes");
+    setInspectorOpen(true);
+  }, [sessionChanges]);
+
+  const undoChange = useCallback(async (path: string) => {
+    if (!api?.undoFileChange) return;
+    try {
+      const sessionKey = activeTabIdRef.current;
+      await api.undoFileChange(path, sessionKey ? { sessionKey } : undefined);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  }, [api]);
+
+  const openChangeFile = useCallback(async (path: string) => {
+    if (!api?.openFile) return;
+    try {
+      await api.openFile(path);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  }, [api]);
+
+  const resizeRightPanel = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = rightPane === "changes" ? changesWidth : inspectorWidth;
+    const minWidth = rightPane === "changes" ? 360 : 280;
+    const maxWidth = Math.max(minWidth, Math.min(1280, window.innerWidth - sidebarWidth - 5 - 240));
+    const onMove = (moveEvent: MouseEvent) => {
+      const next = Math.min(maxWidth, Math.max(minWidth, startWidth - (moveEvent.clientX - startX)));
+      if (rightPane === "changes") setChangesWidth(next);
+      else setInspectorWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+  };
+
+  useEffect(() => {
+    setSelectedChangePath((current) => current && sessionChanges.some((change) => change.path === current)
+      ? current
+      : sessionChanges[0]?.path);
+  }, [sessionChanges]);
+
+  useEffect(() => {
+    saveOpenTabs(openTabs, activeTabId);
+  }, [openTabs, activeTabId]);
+
+  // If runtime already has a session but tabs are empty (e.g. tests / cold path), seed a tab.
+  useEffect(() => {
+    const session = state.session;
+    if (!session.sessionId || openTabsRef.current.length > 0) return;
+    const projectId =
+      state.projects?.find((item) => item.path === session.cwd || item.id === session.cwd)?.id ??
+      state.activeProjectId ??
+      session.cwd;
+    if (!projectId) return;
+    const hasConversation = state.timeline.some((item) => item.kind === "user");
+    const next = upsertTab([], {
+      sessionId: session.sessionId,
+      sessionFile: session.sessionFile,
+      projectId,
+      title: session.name || "Untitled",
+      status: session.status,
+      isPreview: canBePreview(hasConversation, session.status),
+    });
+    if (!canBePreview(hasConversation, session.status)) {
+      committedTabIdsRef.current.add(next.activeTabId);
+    }
+    setOpenTabs(next.tabs);
+    setActiveTabId(next.activeTabId);
+  }, [state.session.sessionId, state.session.sessionFile, state.session.name, state.session.status, state.session.cwd, state.timeline, state.projects, state.activeProjectId]);
+
+  // Follow the conversation to the bottom while new content streams in,
+  // unless the user has scrolled up to read older content.
+  useEffect(() => {
+    const wrap = timelineWrapRef.current;
+    if (wrap && stickToBottomRef.current) wrap.scrollTop = wrap.scrollHeight;
+  }, [state.timeline]);
+
+  const patchTabStatus = useCallback((sessionKey: string, status: SessionStatus) => {
+    if (status === "running" || status === "awaiting_approval") {
+      committedTabIdsRef.current.add(sessionKey);
+    }
+    setOpenTabs((tabs) => {
+      const patched = tabs.map((tab) =>
+        tab.id === sessionKey
+          ? {
+              ...tab,
+              status,
+              isPreview:
+                status === "running" || status === "awaiting_approval"
+                  ? false
+                  : tab.isPreview,
+            }
+          : tab,
+      );
+      openTabsRef.current = patched;
+      return patched;
+    });
+  }, []);
+
+  const promoteTab = useCallback((sessionKey?: string) => {
+    const tabId = sessionKey ?? activeTabIdRef.current;
+    if (!tabId) return;
+    committedTabIdsRef.current.add(tabId);
+    setOpenTabs((tabs) => {
+      const patched = promotePreviewTab(tabs, tabId);
+      openTabsRef.current = patched;
+      return patched;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!api) return;
+    let active = true;
+    const unsubscribe = api.onEvent((event) => {
+      if (event.type === "live_sessions_changed") {
+        setLiveSessions(event.payload.sessions);
+        return;
+      }
+
+      const key = event.sessionKey;
+      const isSessionScoped = SESSION_SCOPED_EVENT_TYPES.has(event.type);
+      const activeSessionId = useAppStore.getState().session.sessionId;
+      const isActiveSession =
+        !key ||
+        key === activeTabIdRef.current ||
+        Boolean(event.sessionId && event.sessionId === activeSessionId);
+
+      if (
+        event.type === "user_message_created" ||
+        event.type === "agent_started" ||
+        event.type === "turn_started"
+      ) {
+        promoteTab(key);
+      }
+
+      // Background live session: update tab status only; do not clobber foreground timeline.
+      if (key && isSessionScoped && !isActiveSession) {
+        if (event.type === "agent_started" || event.type === "turn_started") {
+          patchTabStatus(key, "running");
+        } else if (event.type === "turn_completed" || event.type === "session_completed") {
+          patchTabStatus(key, event.type === "session_completed" ? "completed" : "idle");
+        } else if (event.type === "session_error") {
+          patchTabStatus(key, "error");
+        } else if (event.type === "session_name_changed") {
+          setOpenTabs((tabs) => {
+            const patched = tabs.map((tab) =>
+              tab.id === key
+                ? {
+                    ...tab,
+                    title: event.payload.name || tab.title,
+                    sessionId: event.payload.sessionId || tab.sessionId,
+                    sessionFile: event.payload.sessionFile || tab.sessionFile,
+                  }
+                : tab,
+            );
+            openTabsRef.current = patched;
+            return patched;
+          });
+        }
+        // Refresh live list opportunistically when status-ish events arrive.
+        void api.listLiveSessions?.().then((list) => {
+          if (active) setLiveSessions(list);
+        });
+        return;
+      }
+
+      useAppStore.getState().applyEvent(event);
+    });
+    void api.getSnapshot().then(async (snapshot) => {
+      if (!active) return;
+      useAppStore.getState().replaceSnapshot(snapshot);
+      const projects = await api.listProjects?.();
+      if (projects && active) {
+        const activeProjectId = snapshot.activeProjectId ?? projects[0]?.id;
+        useAppStore.setState({ projects, activeProjectId });
+        const project = projects.find((item) => item.id === activeProjectId);
+        if (project && api.listSessions && api.startSession && !initialRestoredRef.current) {
+          initialRestoredRef.current = true;
+          const list = await api.listSessions(project.path);
+          if (!active) return;
+          useAppStore.setState({ sessions: list });
+          // Prefer restoring last active tab if still valid; else most recent session.
+          const saved = loadOpenTabs();
+          const preferred =
+            findRestorableTab(saved.tabs, saved.activeTabId, project.id, project.path) ??
+            (list[0]?.sessionFile
+              ? {
+                  id: `file:${list[0].sessionFile}`,
+                  sessionId: list[0].sessionId,
+                  sessionFile: list[0].sessionFile,
+                  projectId: project.id,
+                  title: list[0].name,
+                }
+              : undefined);
+          if (preferred?.sessionFile) {
+            const sessionKey =
+              "id" in preferred && preferred.id
+                ? preferred.id
+                : `file:${preferred.sessionFile}`;
+            const snap = await api.startSession({
+              cwd: project.path,
+              sessionPath: preferred.sessionFile,
+              sessionKey,
+            });
+            if (!active) return;
+            applySnapshot(snap);
+            const restoredHasConversation = snap.timeline.some((item) => item.kind === "user");
+            if (!canBePreview(restoredHasConversation, snap.session.status)) {
+              committedTabIdsRef.current.add(sessionKey);
+            }
+            const next = ensureInWorkingSet(
+              saved.tabs.length ? saved.tabs : [],
+              {
+                id: sessionKey,
+                sessionId: snap.session.sessionId || preferred.sessionId,
+                sessionFile: snap.session.sessionFile ?? preferred.sessionFile,
+                projectId: project.id,
+                title: snap.session.name || preferred.title || "Untitled",
+                status: snap.session.status,
+                isPreview: canBePreview(
+                  snap.timeline.some((item) => item.kind === "user"),
+                  snap.session.status,
+                ),
+              },
+              sessionKey,
+            );
+            if (next.ok) {
+              setOpenTabs(next.tabs);
+              setActiveTabId(next.activeTabId);
+              openTabsRef.current = next.tabs;
+              activeTabIdRef.current = next.activeTabId;
+            }
+          }
+        }
+      }
+      if (api.listLiveSessions && active) {
+        const live = await api.listLiveSessions();
+        if (active) setLiveSessions(live);
+      }
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [api, promoteTab, patchTabStatus]);
+
+  useEffect(() => {
+    void api?.getCommands().then((loaded) => {
+      if (loaded.length > 0) setCommands(loaded.map((command) => ({ id: command.id, name: command.name, description: command.description, source: command.source })));
+    });
+  }, [api, state.session.sessionId]);
+
+  useEffect(() => {
+    let active = true;
+    const cwd = state.session.cwd;
+    if (!cwd || !api?.getGitBranch) {
+      setBranchName(undefined);
+      return;
+    }
+    void api.getGitBranch(cwd).then((branch) => {
+      if (active) setBranchName(branch);
+    });
+    return () => {
+      active = false;
+    };
+  }, [api, state.session.cwd, state.session.sessionId]);
+
+  const applySnapshot = (snapshot: PiSnapshot | undefined) => {
+    if (!snapshot) return;
+    useAppStore.getState().replaceSnapshot(snapshot);
+    if (snapshot.projects?.length) {
+      useAppStore.setState({
+        projects: snapshot.projects,
+        activeProjectId: snapshot.activeProjectId ?? snapshot.projects[0]?.id,
+      });
+    }
+  };
+
+  /** Write live session metadata onto the active tab and keep the ref in sync (avoids losing tabs on switch). */
+  const commitActiveTabMeta = useCallback(() => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return openTabsRef.current;
+    const session = useAppStore.getState().session;
+    if (!session.sessionId && !session.sessionFile) return openTabsRef.current;
+    const committed = openTabsRef.current.map((item) => {
+      if (item.id !== tabId) return item;
+      const status = session.status ?? item.status;
+      const committed =
+        item.pinned ||
+        committedTabIdsRef.current.has(item.id) ||
+        status === "running" ||
+        status === "awaiting_approval";
+      return {
+        ...item,
+        sessionId: session.sessionId || item.sessionId,
+        sessionFile: session.sessionFile || item.sessionFile,
+        title: session.name?.trim() ? session.name : item.title,
+        status,
+        // History loaded from disk does not mean the user has committed this
+        // tab in the current working set. Promotion happens explicitly on
+        // send/run, not merely because the session has old messages.
+        isPreview: committed ? false : true,
+      };
+    });
+    openTabsRef.current = committed;
+    setOpenTabs(committed);
+    return committed;
+  }, []);
+
+  /** True when a brand-new tab slot can be admitted (or an existing identity will only focus). */
+  const canAdmitTab = useCallback(
+    (incoming: { sessionId?: string; sessionFile?: string }) => {
+      const tabs = openTabsRef.current;
+      const file = incoming.sessionFile?.trim() || "";
+      const sessionId = incoming.sessionId?.trim() || "";
+      if (file && tabs.some((t) => t.sessionFile === file)) return true;
+      if (sessionId && tabs.some((t) => t.sessionId === sessionId)) return true;
+      if (tabs.length < WORKING_SET_LIMIT) return true;
+      if (tabs.some((t) => !t.pinned)) return true;
+      return false;
+    },
+    [],
+  );
+
+  /**
+   * Open or focus a tab under the working-set cap (≤9, pin + LRU).
+   * Returns active tab id, or undefined if rejected (all 9 pinned).
+   */
+  const syncTabFromSession = useCallback(
+    (snapshot: PiSnapshot, projectId: string, titleHint?: string) => {
+      const session = snapshot.session;
+      const result = ensureInWorkingSet(
+        openTabsRef.current,
+        {
+          sessionId: session.sessionId,
+          sessionFile: session.sessionFile,
+          projectId,
+          title: displayTabTitle(session.name || titleHint, "Untitled"),
+          status: session.status,
+          isPreview: canBePreview(
+            snapshot.timeline.some((item) => item.kind === "user"),
+            session.status,
+          ),
+        },
+        activeTabIdRef.current,
+      );
+      if (!result.ok) {
+        pushError(result.message);
+        return undefined;
+      }
+      openTabsRef.current = result.tabs;
+      setOpenTabs(result.tabs);
+      setActiveTabId(result.activeTabId);
+      activeTabIdRef.current = result.activeTabId;
+      if (
+        snapshot.timeline.some((item) => item.kind === "user") ||
+        session.status === "running" ||
+        session.status === "awaiting_approval"
+      ) {
+        committedTabIdsRef.current.add(result.activeTabId);
+      }
+      return result.activeTabId;
+    },
+    [],
+  );
+
+  // Keep active tab title/status aligned with live session (never shrink the tab list).
+  useEffect(() => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return;
+    const session = state.session;
+    const resolvedTitle = displayTabTitle(session.name, "");
+    setOpenTabs((tabs) => {
+      const current = tabs.find((item) => item.id === tabId);
+      if (!current) return tabs;
+      const patched = tabs.map((item) => {
+        if (item.id !== tabId) return item;
+        return {
+          ...item,
+          sessionId: session.sessionId || item.sessionId,
+          sessionFile: session.sessionFile || item.sessionFile,
+          // Prefer a real session name; keep previous tab title if name is still generic empty.
+          title: resolvedTitle || displayTabTitle(item.title),
+          status: session.status ?? item.status,
+        };
+      });
+      openTabsRef.current = patched;
+      return patched;
+    });
+  }, [state.session.sessionId, state.session.sessionFile, state.session.name, state.session.status]);
+
+  // Sidebar list often has a better display name (first message). Push those into matching tabs.
+  useEffect(() => {
+    if (!state.sessions?.length) return;
+    setOpenTabs((tabs) => {
+      let changed = false;
+      const patched = tabs.map((tab) => {
+        const match = state.sessions.find(
+          (item) =>
+            (tab.sessionFile && item.sessionFile === tab.sessionFile) ||
+            (tab.sessionId && item.sessionId === tab.sessionId),
+        );
+        const listName = displayTabTitle(match?.name, "");
+        if (!listName) return tab;
+        const current = displayTabTitle(tab.title, "");
+        const currentIsGeneric =
+          !current ||
+          current === "Untitled" ||
+          current === "Untitled session" ||
+          current === "New session";
+        // Update when tab title is generic, or list name is a clearer non-generic title.
+        if (currentIsGeneric && listName !== current) {
+          changed = true;
+          return { ...tab, title: listName };
+        }
+        if (!currentIsGeneric && listName !== current && match?.name && match.name === listName) {
+          // Explicit rename in catalog should win.
+          if (match.name !== tab.title) {
+            changed = true;
+            return { ...tab, title: listName };
+          }
+        }
+        return tab;
+      });
+      if (!changed) return tabs;
+      openTabsRef.current = patched;
+      return patched;
+    });
+  }, [state.sessions]);
+
+  const activateTab = useCallback(
+    async (tabId: string) => {
+      // Persist whatever is currently open onto the leaving tab first.
+      const tabsAfterCommit = commitActiveTabMeta();
+      const tab = tabsAfterCommit.find((item) => item.id === tabId);
+      if (!tab) return;
+      if (
+        tab.id === activeTabIdRef.current &&
+        tab.sessionId &&
+        tab.sessionId === useAppStore.getState().session.sessionId
+      ) {
+        const touched = touchTab(tabsAfterCommit, tabId);
+        openTabsRef.current = touched;
+        setOpenTabs(touched);
+        setActiveTabId(tabId);
+        activeTabIdRef.current = tabId;
+        return;
+      }
+      try {
+        // Multi-runtime: never abort the previous tab's agent on switch.
+        const project = useAppStore.getState().projects?.find((item) => item.id === tab.projectId);
+        const cwd = project?.path ?? tab.projectId;
+
+        // Prefer explicit session file. Never call newSession on activate — that
+        // would replace the tab's conversation and can collapse the tab list.
+        let sessionPath = tab.sessionFile;
+        if (!sessionPath && tab.sessionId && api?.listSessions) {
+          const list = await api.listSessions(cwd);
+          sessionPath = list.find((item) => item.sessionId === tab.sessionId)?.sessionFile;
+        }
+
+        const live = liveSessionsRef.current;
+        const liveHit =
+          live.find((item) => item.sessionKey === tabId) ??
+          (sessionPath
+            ? live.find((item) => item.sessionFile === sessionPath)
+            : undefined);
+
+        let snap: PiSnapshot | undefined;
+        if (liveHit && api?.focusSession) {
+          snap = await api.focusSession(liveHit.sessionKey);
+        } else if (sessionPath) {
+          snap = await api?.startSession({ cwd, sessionPath, sessionKey: tabId });
+        } else {
+          snap = await api?.startSession({ cwd, sessionKey: tabId });
+        }
+        applySnapshot(snap);
+
+        setActiveTabId(tabId);
+        activeTabIdRef.current = tabId;
+        const state = useAppStore.getState();
+        const patched = tabsAfterCommit.map((item) => {
+          if (item.id !== tabId) return item;
+          const status = state.session.status ?? item.status;
+          const committed =
+            item.pinned ||
+            committedTabIdsRef.current.has(item.id) ||
+            status === "running" ||
+            status === "awaiting_approval";
+          return {
+            ...item,
+            sessionId: state.session.sessionId || item.sessionId,
+            sessionFile: state.session.sessionFile || item.sessionFile || sessionPath,
+            title: state.session.name?.trim() ? state.session.name : item.title,
+            status,
+            isPreview: committed ? false : true,
+          };
+        });
+        const touched = touchTab(patched, tabId);
+        openTabsRef.current = touched;
+        setOpenTabs(touched);
+
+        if (api?.listLiveSessions) {
+          setLiveSessions(await api.listLiveSessions());
+        }
+      } catch (error) {
+        pushError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [api, commitActiveTabMeta],
+  );
+
+  const handleCloseTab = useCallback(
+    async (tabId: string) => {
+      const wasActive = activeTabIdRef.current === tabId;
+      const result = closeTabInList(openTabsRef.current, tabId, activeTabIdRef.current);
+      openTabsRef.current = result.tabs;
+      setOpenTabs(result.tabs);
+      setActiveTabId(result.activeTabId);
+      activeTabIdRef.current = result.activeTabId;
+      if (!wasActive) return;
+      if (result.activeTabId) {
+        await activateTab(result.activeTabId);
+        return;
+      }
+      // No tabs left — clear main UI only. Do not abort/dispose solely because the
+      // working set is empty (Phase B keeps host runtime alive; Phase A still has
+      // a single runtime so the agent may keep occupying it until next start).
+      try {
+        useAppStore.getState().replaceSnapshot({
+          ...useAppStore.getState(),
+          session: {
+            ...useAppStore.getState().session,
+            sessionId: "",
+            name: "Untitled session",
+            status: "idle",
+            sessionFile: undefined,
+          },
+          timeline: [],
+          toolCalls: {},
+          queue: { steering: [], followUp: [] },
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [activateTab],
+  );
+
+  const handleCloseTabs = useCallback(
+    async (tabIds: string[], preferredTabId?: string) => {
+      const ids = new Set(tabIds);
+      if (ids.size === 0) return;
+
+      const tabsBefore = commitActiveTabMeta();
+      const previousActiveId = activeTabIdRef.current;
+      const remaining = tabsBefore.filter((tab) => !ids.has(tab.id));
+      let nextActiveId = previousActiveId && !ids.has(previousActiveId) ? previousActiveId : undefined;
+      if (!nextActiveId && preferredTabId && remaining.some((tab) => tab.id === preferredTabId)) {
+        nextActiveId = preferredTabId;
+      }
+      if (!nextActiveId && remaining.length > 0) {
+        const previousIndex = tabsBefore.findIndex((tab) => tab.id === previousActiveId);
+        nextActiveId = remaining[Math.min(Math.max(previousIndex, 0), remaining.length - 1)]?.id;
+      }
+
+      openTabsRef.current = remaining;
+      setOpenTabs(remaining);
+      setActiveTabId(nextActiveId);
+      // Keep the old identity until activateTab commits it. Otherwise that
+      // commit would accidentally write the old session metadata onto the tab
+      // we are about to open.
+      activeTabIdRef.current = previousActiveId;
+
+      if (nextActiveId && nextActiveId !== previousActiveId) {
+        await activateTab(nextActiveId);
+        return;
+      }
+      if (nextActiveId) return;
+
+      activeTabIdRef.current = undefined;
+
+      try {
+        useAppStore.getState().replaceSnapshot({
+          ...useAppStore.getState(),
+          session: {
+            ...useAppStore.getState().session,
+            sessionId: "",
+            name: "Untitled session",
+            status: "idle",
+            sessionFile: undefined,
+          },
+          timeline: [],
+          toolCalls: {},
+          queue: { steering: [], followUp: [] },
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [activateTab, commitActiveTabMeta],
+  );
+
+  const handleTogglePin = useCallback((tabId: string) => {
+    const next = togglePinTab(openTabsRef.current, tabId);
+    if (next.find((tab) => tab.id === tabId)?.pinned) {
+      committedTabIdsRef.current.add(tabId);
+    }
+    openTabsRef.current = next;
+    setOpenTabs(next);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "n"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        requestNewSessionRef.current();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setInspectorOpen((prev) => !prev);
+      }
+      if ((event.metaKey || event.ctrlKey) && (event.key === "?" || event.key === "/")) {
+        event.preventDefault();
+        setHelpOpen((prev) => !prev);
+      }
+      // ⌘P / Ctrl+P → pin/unpin the active tab (preventDefault blocks browser Print)
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.code === "KeyP" || event.key.toLowerCase() === "p")
+      ) {
+        const id = activeTabIdRef.current;
+        if (id) {
+          event.preventDefault();
+          event.stopPropagation();
+          handleTogglePin(id);
+        }
+      }
+      // ⌘W / Ctrl+W → close (detach) the active session tab.
+      // The application menu has no ⌘W accelerator (see main.ts), so this
+      // keydown always reaches the renderer and never closes the window.
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "w"
+      ) {
+        const id = activeTabIdRef.current;
+        if (id) {
+          event.preventDefault();
+          event.stopPropagation();
+          void handleCloseTab(id);
+        }
+      }
+      // ⌘1–9 → activate Nth open tab (order = pinned first, then rest)
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+        const digit = event.key >= "1" && event.key <= "9" ? Number(event.key) : -1;
+        if (digit >= 1) {
+          const tab = sortTabsPinnedFirst(openTabsRef.current)[digit - 1];
+          if (tab) {
+            event.preventDefault();
+            void activateTab(tab.id);
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activateTab, handleCloseTab, handleTogglePin]);
+
+  const pushError = (message: string) => {
+    useAppStore.getState().applyEvent({
+      eventId: `error-${Date.now()}`,
+      workspaceId: "local",
+      timestamp: new Date().toISOString(),
+      sequence: Date.now(),
+      type: "session_error",
+      payload: { message },
+    });
+  };
+
+  /** Open folder → add project → start session. Simple. */
+  const openProject = async (): Promise<boolean> => {
+    try {
+      if (api?.addProject) {
+        const snapshot = await api.addProject();
+        if (!snapshot) return false;
+        applySnapshot(snapshot);
+        const projects = await api.listProjects();
+        const activeProjectId = snapshot.activeProjectId ?? projects[0]?.id;
+        useAppStore.setState({
+          projects,
+          activeProjectId,
+        });
+        if (activeProjectId) syncTabFromSession(snapshot, activeProjectId, snapshot.session.name);
+        if (snapshot.lastError) pushError(snapshot.lastError);
+        return true;
+      }
+      const cwd = await api?.chooseWorkspace();
+      if (!cwd) return false;
+      const snap = await api?.startSession({ cwd });
+      applySnapshot(snap);
+      if (snap) syncTabFromSession(snap, cwd, snap.session.name);
+      return true;
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  /** Switch which project is the New-session target — does not load a session. */
+  const setActiveProject = async (projectId: string) => {
+    try {
+      if (api?.setActiveProject) {
+        const result = await api.setActiveProject(projectId);
+        useAppStore.setState({
+          projects: result.projects,
+          activeProjectId: result.activeProjectId,
+        });
+        return;
+      }
+      // Fallback: local-only highlight if bridge is missing.
+      useAppStore.setState({ activeProjectId: projectId });
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const ensureSession = async (): Promise<boolean> => {
+    const { session, projects, activeProjectId } = useAppStore.getState();
+    if (session.sessionId) return true;
+
+    const project = projects?.find((p) => p.id === activeProjectId) ?? projects?.[0];
+    const cwd = project?.path ?? session.cwd;
+    if (!cwd) {
+      return openProject();
+    }
+
+    try {
+      applySnapshot(await api?.startSession({ cwd }));
+      return Boolean(useAppStore.getState().session.sessionId);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const handleNewSession = async (projectId: string) => {
+    try {
+      const project = useAppStore.getState().projects?.find((item) => item.id === projectId);
+      if (!project) {
+        pushError("Project not found");
+        return;
+      }
+      // Save current conversation onto its tab before opening a new one.
+      commitActiveTabMeta();
+      if (!canAdmitTab({})) {
+        pushError("Working set full (9 pinned). Unpin a tab to open another.");
+        return;
+      }
+      // Multi-runtime: do not abort other live agents when opening a new session.
+      const sessionKey = `tmp:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Reserve working-set slot early so pin-full cannot race.
+      const reserved = ensureInWorkingSet(
+        openTabsRef.current,
+        {
+          id: sessionKey,
+          sessionId: "",
+          projectId: project.id,
+          title: "Untitled",
+          isPreview: true,
+        },
+        activeTabIdRef.current,
+      );
+      if (!reserved.ok) {
+        pushError(reserved.message);
+        return;
+      }
+      openTabsRef.current = reserved.tabs;
+      setOpenTabs(reserved.tabs);
+      setActiveTabId(reserved.activeTabId);
+      activeTabIdRef.current = reserved.activeTabId;
+
+      applySnapshot(await api?.startSession({ cwd: project.path, sessionKey }));
+      await api?.newSession({ sessionKey });
+      const snap = await api?.getSnapshot();
+      applySnapshot(snap);
+      if (snap) {
+        // Patch the reserved tab in place (keep same sessionKey / tab id).
+        const patched = patchTab(openTabsRef.current, sessionKey, {
+          sessionId: snap.session.sessionId,
+          sessionFile: snap.session.sessionFile,
+          title: displayTabTitle(snap.session.name, "Untitled"),
+          status: snap.session.status,
+        });
+        const touched = touchTab(patched, sessionKey);
+        openTabsRef.current = touched;
+        setOpenTabs(touched);
+      }
+      if (api?.listLiveSessions) setLiveSessions(await api.listLiveSessions());
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  /**
+   * Sidebar New session: default to the project you were just in
+   * (session cwd → activeProjectId → first project). No project → open folder.
+   */
+  const requestNewSession = () => {
+    const { session, projects, activeProjectId } = useAppStore.getState();
+    const fromCwd = session.cwd
+      ? projects?.find((item) => item.path === session.cwd || item.id === session.cwd)?.id
+      : undefined;
+    const projectId = fromCwd ?? activeProjectId ?? projects?.[0]?.id;
+    if (projectId) {
+      void handleNewSession(projectId);
+      return;
+    }
+    void openProject();
+  };
+  requestNewSessionRef.current = requestNewSession;
+
+  /**
+   * Composer project control: move the chat workspace to another project.
+   * Always starts a **new empty** session — never resumes an old session file
+   * (that would dump the user into previous history when they only wanted a clean start).
+   */
+  const switchComposerProject = async (projectId: string) => {
+    await handleNewSession(projectId);
+  };
+
+  const openSession = async (sessionPath: string, projectId: string, sessionId?: string) => {
+    try {
+      const project = useAppStore.getState().projects?.find((item) => item.id === projectId);
+      const cwd = project?.path ?? projectId;
+      if (!sessionPath) {
+        pushError("This session has no saved file path");
+        return;
+      }
+      commitActiveTabMeta();
+      const catalogSession = useAppStore.getState().sessions.find(
+        (item) => item.sessionFile === sessionPath,
+      );
+      const requestedSessionId = sessionId?.trim() || catalogSession?.sessionId;
+      // Already in working set → just activate (may still switch single runtime).
+      const existing = openTabsRef.current.find(
+        (item) =>
+          item.sessionFile?.trim() === sessionPath.trim() ||
+          Boolean(requestedSessionId && item.sessionId === requestedSessionId),
+      );
+      if (existing) {
+        const patched = patchTab(openTabsRef.current, existing.id, {
+          sessionId: existing.sessionId || requestedSessionId,
+          sessionFile: existing.sessionFile || sessionPath,
+        });
+        openTabsRef.current = patched;
+        setOpenTabs(patched);
+        await activateTab(existing.id);
+        return;
+      }
+      if (!canAdmitTab({ sessionFile: sessionPath, sessionId: requestedSessionId })) {
+        pushError("Working set full (9 pinned). Unpin a tab to open another.");
+        return;
+      }
+      // Reserve the preview slot before the async host call. This makes the
+      // replacement visible immediately instead of leaving the old preview on
+      // screen until a historical session finishes loading.
+      const sessionKey = `file:${sessionPath}`;
+      const reserved = ensureInWorkingSet(
+        openTabsRef.current,
+        {
+          id: sessionKey,
+          sessionId: requestedSessionId ?? "",
+          sessionFile: sessionPath,
+          projectId: project?.id ?? projectId,
+          title: displayTabTitle(catalogSession?.name, "Session"),
+          status: catalogSession?.status,
+          isPreview: canBePreview(false, catalogSession?.status),
+        },
+        activeTabIdRef.current,
+      );
+      if (!reserved.ok) {
+        pushError(reserved.message);
+        return;
+      }
+      openTabsRef.current = reserved.tabs;
+      setOpenTabs(reserved.tabs);
+      setActiveTabId(reserved.activeTabId);
+      activeTabIdRef.current = reserved.activeTabId;
+      if (
+        catalogSession?.status === "running" ||
+        catalogSession?.status === "awaiting_approval"
+      ) {
+        committedTabIdsRef.current.add(reserved.activeTabId);
+      }
+
+      const snap = await api?.startSession({ cwd, sessionPath, sessionKey });
+      applySnapshot(snap);
+      if (snap) {
+        const title =
+          snap.session.name ||
+          useAppStore.getState().sessions.find((item) => item.sessionFile === sessionPath)?.name ||
+          "Session";
+        const patched = patchTab(openTabsRef.current, sessionKey, {
+          sessionId: snap.session.sessionId,
+          sessionFile: snap.session.sessionFile ?? sessionPath,
+          title: displayTabTitle(title, "Session"),
+          status: snap.session.status,
+          isPreview: canBePreview(false, snap.session.status),
+        });
+        if (
+          snap.session.status === "running" ||
+          snap.session.status === "awaiting_approval"
+        ) {
+          committedTabIdsRef.current.add(sessionKey);
+        }
+        openTabsRef.current = patched;
+        setOpenTabs(patched);
+      }
+      if (api?.listLiveSessions) setLiveSessions(await api.listLiveSessions());
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const renameSession = async (sessionPath: string, name: string): Promise<string> => {
+    if (!api?.renameSession) throw new Error("Rename is not available");
+    const result = await api.renameSession(sessionPath, name);
+    // Refresh project session list so sidebar + topbar stay aligned after rename.
+    const cwd = useAppStore.getState().session.cwd;
+    if (cwd && api.listSessions) {
+      const list = await api.listSessions(cwd);
+      useAppStore.setState({ sessions: list });
+    }
+    setOpenTabs((tabs) =>
+      tabs.map((tab) => (tab.sessionFile === sessionPath ? { ...tab, title: result.name } : tab)),
+    );
+    return result.name;
+  };
+
+  const deleteSession = async (sessionPath: string, projectId: string): Promise<void> => {
+    if (!api?.deleteSession) throw new Error("Delete is not available");
+    try {
+      const tab = openTabsRef.current.find((item) => item.sessionFile === sessionPath);
+      await api.deleteSession(sessionPath);
+      // Re-pull snapshot so deleting the active session yields empty main area.
+      applySnapshot(await api.getSnapshot());
+      const project = useAppStore.getState().projects?.find((item) => item.id === projectId);
+      const cwd = project?.path ?? projectId;
+      if (cwd && api.listSessions) {
+        const list = await api.listSessions(cwd);
+        useAppStore.setState({ sessions: list });
+      }
+      if (tab) await handleCloseTab(tab.id);
+      else {
+        setOpenTabs((tabs) => tabs.filter((item) => item.sessionFile !== sessionPath));
+      }
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const cloneSession = async (session: { sessionId: string; sessionFile?: string }, projectId: string): Promise<void> => {
+    if (!api?.cloneSession) throw new Error("Clone is not available");
+    try {
+      // Host clone always forks the *current* runtime leaf — open target first if needed.
+      if (session.sessionId !== useAppStore.getState().session.sessionId) {
+        if (!session.sessionFile) throw new Error("Session has no file path");
+        await openSession(session.sessionFile, projectId);
+      }
+      await api.cloneSession();
+      const snap = await api.getSnapshot();
+      applySnapshot(snap);
+      const project = useAppStore.getState().projects?.find((item) => item.id === projectId);
+      const cwd = project?.path ?? useAppStore.getState().session.cwd;
+      if (cwd && api.listSessions) {
+        const list = await api.listSessions(cwd);
+        useAppStore.setState({ sessions: list });
+      }
+      if (snap) syncTabFromSession(snap, projectId, snap.session.name);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const removeProject = async (projectId: string): Promise<void> => {
+    if (!api?.removeProject) throw new Error("Remove project is not available");
+    try {
+      const result = await api.removeProject(projectId);
+      useAppStore.setState({
+        projects: result.projects,
+        activeProjectId: result.activeProjectId,
+      });
+      // If runtime was disposed, sync empty main state.
+      applySnapshot(await api.getSnapshot());
+      if (result.activeProjectId && result.activeProjectId !== projectId && api.listSessions) {
+        const project = result.projects.find((item) => item.id === result.activeProjectId);
+        if (project) {
+          const list = await api.listSessions(project.path);
+          useAppStore.setState({ sessions: list });
+        }
+      } else {
+        useAppStore.setState({ sessions: [] });
+      }
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const revealInFolder = (path: string): void => {
+    void api?.revealInFolder?.(path);
+  };
+
+  const submit = async (text: string): Promise<boolean> => {
+    if (!api) return false;
+    try {
+      if (!(await ensureSession())) return false;
+      const mode = useAppStore.getState().session.status === "running" ? "followUp" : "prompt";
+      const resolved = await resolveSessionReferences(text);
+      const sessionKey = activeTabIdRef.current;
+      const opts = sessionKey ? { sessionKey } : undefined;
+
+      const commandMatch = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(resolved.trim());
+      const command = commandMatch
+        ? commands.find((item) => item.name.replace(/^\//, "") === commandMatch[1])
+        : undefined;
+      if (command?.source === "builtin") {
+        await api.executeCommand(command.name, commandMatch?.[2] ?? "");
+        applySnapshot(await api.getSnapshot());
+        return true;
+      }
+      if (command?.source === "extension") {
+        // AgentSession.prompt executes registered extension commands immediately,
+        // including while another turn is streaming. They must not be queued.
+        promoteTab(sessionKey);
+        await api.prompt(resolved, opts);
+        return true;
+      }
+
+      // Promote synchronously, before the host emits user_message_created, so
+      // opening another session immediately after Send cannot replace this tab.
+      promoteTab(sessionKey);
+      if (mode === "followUp") await api.followUp(resolved, opts);
+      else await api.prompt(resolved, opts);
+      // Sending marks the active tab as recently used (LRU).
+      if (sessionKey) {
+        const touched = touchTab(openTabsRef.current, sessionKey);
+        openTabsRef.current = touched;
+        setOpenTabs(touched);
+      }
+      return true;
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const editFollowUp = async (index: number, text: string): Promise<boolean> => {
+    if (!api?.editFollowUp) return false;
+    try {
+      if (!(await ensureSession())) return false;
+      const resolved = await resolveSessionReferences(text);
+      const sessionKey = activeTabIdRef.current;
+      const expectedText = useAppStore.getState().queue.followUp[index];
+      await api.editFollowUp(index, resolved, sessionKey ? { sessionKey } : undefined, expectedText);
+      return true;
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const sendFollowUpNow = async (index: number): Promise<boolean> => {
+    if (!api?.sendFollowUpNow) return false;
+    try {
+      if (!(await ensureSession())) return false;
+      const sessionKey = activeTabIdRef.current;
+      const expectedText = useAppStore.getState().queue.followUp[index];
+      await api.sendFollowUpNow(index, sessionKey ? { sessionKey } : undefined, expectedText);
+      return true;
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const resolveSessionReferences = async (text: string): Promise<string> => {
+    const marker = /@session:(\S+)/g;
+    let result = text;
+    const matches = [...text.matchAll(marker)];
+    for (const match of matches) {
+      const sessionPath = match[1];
+      try {
+        const { name, context } = await api!.getSessionContext(sessionPath);
+        result = result.replace(match[0], `[referenced session: ${name}]\n${context}`);
+      } catch {
+        pushError(`Failed to load referenced session: ${sessionPath}`);
+        result = result.replace(match[0], "");
+      }
+    }
+    return result.trim();
+  };
+
+  const composerProjectId =
+    state.projects?.find((p) => p.path === state.session.cwd || p.id === state.session.cwd)?.id ??
+    state.activeProjectId;
+
+  const projectName =
+    state.projects?.find((p) => p.id === composerProjectId)?.name ||
+    state.session.cwd?.split("/").pop() ||
+    state.projects?.find((p) => p.id === state.activeProjectId)?.name;
+  const isNewSessionEmpty = Boolean(projectName && state.session.sessionId);
+
+  const changeWorkspaceMode = (mode: "pi" | "http") => {
+    setWorkspaceMode(mode);
+    try {
+      localStorage.setItem("pi.workspaceMode", mode);
+    } catch {
+      // Ignore storage failures in restricted/test environments.
+    }
+  };
+
+  const httpAgentChat = (
+    <div className="http-agent-chat-shell">
+      <div className="http-agent-timeline">
+        {state.timeline.length > 0 ? (
+          <Timeline items={state.timeline} sessionStatus={state.session.status} onReviewChanges={openChanges} />
+        ) : (
+          <div className="http-chat-empty"><AppIcon name="messageSquare" size="lg" /><p>Ask the Agent to create, review, or explain a test in this Project.</p></div>
+        )}
+      </div>
+      <Composer
+        onSubmit={submit}
+        history={state.timeline.flatMap((item) => item.kind === "user" ? [item.content] : [])}
+        conversationId={activeTabId ?? state.session.sessionId}
+        onAbort={() => void api?.abort(activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined)}
+        onPickFile={() => api?.chooseFile() ?? Promise.resolve(undefined)}
+        sessions={state.sessions}
+        listProjectFiles={(cwd) => api?.listProjectFiles?.(cwd) ?? Promise.resolve([])}
+        isRunning={state.session.status === "running"}
+        commands={commands}
+        queue={state.queue}
+        onEditFollowUp={editFollowUp}
+        onSendFollowUpNow={sendFollowUpNow}
+        models={state.models ?? []}
+        model={state.session.model}
+        projects={state.projects ?? []}
+        projectId={composerProjectId}
+        onProjectChange={(projectId) => void switchComposerProject(projectId)}
+        onOpenProject={() => void openProject()}
+        thinkingLevel={state.session.thinkingLevel}
+        onModelSelect={(model) => void api?.setModel(model)}
+        onThinkingLevel={(level) => void api?.setThinkingLevel(level)}
+        workspaceName={projectName}
+        workspacePath={state.session.cwd || undefined}
+        branchName={branchName}
+        placeholder="Ask the Agent about this HTTP test..."
+      />
+    </div>
+  );
+
+  if (workspaceMode === "http") {
+    return (
+      <HttpWorkbench
+        projects={state.projects ?? []}
+        activeProjectId={state.activeProjectId}
+        onSelectProject={async (projectId) => {
+          await setActiveProject(projectId);
+          await switchComposerProject(projectId);
+        }}
+        onOpenProject={() => void openProject()}
+        onModeChange={changeWorkspaceMode}
+        onNewChat={requestNewSession}
+        sidebarWidth={sidebarWidth}
+        agentChat={httpAgentChat}
+      />
+    );
+  }
+
+  return (
+    <main
+      className={`app-shell ${inspectorOpen ? "with-inspector" : "chat-only"} ${inspectorOpen && rightPane === "changes" ? "changes-open" : ""}`}
+      style={{
+        "--sidebar-width": `${sidebarWidth}px`,
+        "--right-panel-width": `${rightPane === "changes" ? changesWidth : inspectorWidth}px`,
+      } as React.CSSProperties}
+    >
+      <SessionSidebar
+        workspaceMode={workspaceMode}
+        onWorkspaceModeChange={changeWorkspaceMode}
+        projects={state.projects ?? []}
+        activeProjectId={state.activeProjectId}
+        sessions={state.sessions}
+        activeSessionId={state.session.sessionId}
+        activeSessionStatus={state.session.status}
+        liveSessions={liveSessions}
+        model={state.session.model}
+        thinkingLevel={state.session.thinkingLevel}
+        onAddProject={() => void openProject()}
+        onRequestNewSession={requestNewSession}
+        onNewSession={(projectId) => void handleNewSession(projectId)}
+        onSelectProject={(projectId) => void setActiveProject(projectId)}
+        onSelectSession={(path, projectId, sessionId) => void openSession(path, projectId, sessionId)}
+        onRenameSession={renameSession}
+        onDeleteSession={deleteSession}
+        onCloneSession={(session, projectId) => void cloneSession(session, projectId)}
+        onRemoveProject={(projectId) => void removeProject(projectId)}
+        onRevealInFolder={revealInFolder}
+        loadSessions={async (cwd) => (await api?.listSessions?.(cwd)) ?? []}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
+      <div
+        className="panel-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          const startX = event.clientX;
+          const startWidth = sidebarWidth;
+          const onMove = (moveEvent: MouseEvent) => {
+            const next = Math.min(420, Math.max(200, startWidth + (moveEvent.clientX - startX)));
+            setSidebarWidth(next);
+          };
+          const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            document.body.style.cursor = "";
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+          document.body.style.cursor = "col-resize";
+        }}
+      />
+
+      <section className="main-column">
+        <header className="topbar topbar-with-tabs">
+          <div className="topbar-tabs">
+            <SessionTabBar
+              tabs={openTabs}
+              activeTabId={activeTabId}
+              projects={state.projects ?? []}
+              onActivate={(tabId) => void activateTab(tabId)}
+              onClose={(tabId) => void handleCloseTab(tabId)}
+              onCloseOthers={(tabId) => {
+                const ids = openTabsRef.current.filter((tab) => tab.id !== tabId).map((tab) => tab.id);
+                void handleCloseTabs(ids, tabId);
+              }}
+              onCloseToRight={(tabId) => {
+                const ordered = sortTabsPinnedFirst(openTabsRef.current);
+                const index = ordered.findIndex((tab) => tab.id === tabId);
+                if (index < 0) return;
+                void handleCloseTabs(ordered.slice(index + 1).map((tab) => tab.id), tabId);
+              }}
+              onTogglePin={handleTogglePin}
+            />
+          </div>
+          <div className="topbar-side topbar-actions">
+            <button
+              className="topbar-button help-button"
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts"
+              onClick={() => setHelpOpen(true)}
+            >
+              <AppIcon name="circleHelp" size="sm" />
+              <ShortcutKeys className="topbar-kbd" compact keys={["mod", "?"]} />
+            </button>
+            <button
+              className={`topbar-button ${inspectorOpen ? "active" : ""}`}
+              aria-label="Toggle inspector"
+              onClick={() => (inspectorOpen ? setInspectorOpen(false) : setInspectorOpen(true))}
+            >
+              <AppIcon name="panelRight" size="sm" />
+              <ShortcutKeys className="topbar-kbd" compact keys={["mod", "B"]} />
+            </button>
+          </div>
+        </header>
+
+        <div
+          ref={timelineWrapRef}
+          className={`timeline-wrap ${state.timeline.length === 0 ? "is-empty" : ""}`}
+          onScroll={() => {
+            const wrap = timelineWrapRef.current;
+            if (!wrap) return;
+            stickToBottomRef.current = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+          }}
+        >
+          <div className="chat-column">
+            {state.timeline.length > 0 ? (
+              <Timeline items={state.timeline} sessionStatus={state.session.status} onReviewChanges={openChanges} />
+            ) : (
+              <div className="welcome-block">
+                {!isNewSessionEmpty ? (
+                  <div className="welcome-orb"><AppIcon name="messageSquare" size="lg" /></div>
+                ) : null}
+                <h1>
+                  {!projectName
+                    ? "Open a project"
+                    : state.session.sessionId
+                      ? "What are we building?"
+                      : "No session open"}
+                </h1>
+                {!isNewSessionEmpty ? (
+                  <>
+                    <p className="welcome-copy">
+                      {!projectName
+                        ? "Use + next to Projects, or Open project… in the chat box."
+                        : "Select a session in the sidebar, or create a new one."}
+                    </p>
+                    {!projectName ? (
+                      <button type="button" className="welcome-primary" onClick={() => void openProject()}>
+                        Open project
+                      </button>
+                    ) : (
+                      <button type="button" className="welcome-primary" onClick={requestNewSession}>
+                        New session
+                      </button>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="composer-dock">
+          <div className="chat-column">
+            <Composer
+              onSubmit={submit}
+              history={state.timeline.flatMap((item) => item.kind === "user" ? [item.content] : [])}
+              conversationId={activeTabId ?? state.session.sessionId}
+              onAbort={() =>
+                void api?.abort(
+                  activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined,
+                )
+              }
+              onPickFile={() => api?.chooseFile() ?? Promise.resolve(undefined)}
+              sessions={state.sessions}
+              listProjectFiles={(cwd) => api?.listProjectFiles?.(cwd) ?? Promise.resolve([])}
+              isRunning={state.session.status === "running"}
+              commands={commands}
+              queue={state.queue}
+              onEditFollowUp={editFollowUp}
+              onSendFollowUpNow={sendFollowUpNow}
+              models={state.models ?? []}
+              model={state.session.model}
+              projects={state.projects ?? []}
+              projectId={composerProjectId}
+              onProjectChange={(projectId) => void switchComposerProject(projectId)}
+              onOpenProject={() => void openProject()}
+              thinkingLevel={state.session.thinkingLevel}
+              onModelSelect={(model) => void api?.setModel(model)}
+              onThinkingLevel={(level) => void api?.setThinkingLevel(level)}
+              workspaceName={projectName}
+              workspacePath={state.session.cwd || undefined}
+              branchName={branchName}
+            />
+          </div>
+        </div>
+      </section>
+
+      {inspectorOpen && (
+        <div
+          className="panel-resizer right-panel-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize right panel"
+          onMouseDown={resizeRightPanel}
+        />
+      )}
+
+      {inspectorOpen && (
+        rightPane === "changes" ? (
+          <ChangeInspector
+            changes={sessionChanges}
+            selectedPath={selectedChangePath}
+            onSelect={setSelectedChangePath}
+            onOpenFile={(path) => void openChangeFile(path)}
+            onUndo={(path) => void undoChange(path)}
+            onOpenInspector={() => setRightPane("inspector")}
+            onClose={() => setInspectorOpen(false)}
+          />
+        ) : (
+          <ResourceInspector
+            session={state.session}
+            resources={state.resources}
+            tools={state.tools ?? []}
+            onToggleTools={(names) => void api?.setTools(names)}
+            onToggleSkills={(patterns) => void api?.setSkills(patterns)}
+            onOpenChanges={() => openChanges()}
+            changeCount={sessionChanges.length}
+            onClose={() => setInspectorOpen(false)}
+            tab={inspectorTab}
+            onTabChange={setInspectorTab}
+          />
+        )
+      )}
+
+      <CommandPalette
+        open={paletteOpen}
+        commands={commands}
+        onClose={() => setPaletteOpen(false)}
+        onSelect={async (command) => {
+          setPaletteOpen(false);
+          await api?.executeCommand(command.name);
+          // Reload (and other state-mutating commands) change main-process
+          // resources (extensions/skills/prompts). Re-pull the snapshot so
+          // the inspector reflects them without an app restart.
+          applySnapshot(await api?.getSnapshot());
+        }}
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        models={state.models ?? []}
+        model={state.session.model}
+        thinkingLevel={state.session.thinkingLevel}
+        onModelSelect={(model) => void api?.setModel(model)}
+        onThinkingLevel={(level) => void api?.setThinkingLevel(level)}
+        onClose={() => setSettingsOpen(false)}
+        listProviders={
+          api?.listProviders
+            ? async () => {
+                const rows = await api.listProviders();
+                return Array.isArray(rows) ? rows : [];
+              }
+            : undefined
+        }
+        loginWithApiKey={api?.loginWithApiKey ? (id, key) => api.loginWithApiKey(id, key) : undefined}
+        logoutProvider={api?.logoutProvider ? (id) => api.logoutProvider(id) : undefined}
+        loginWithOAuth={api?.loginWithOAuth ? (id) => api.loginWithOAuth(id) : undefined}
+        answerAuthPrompt={api?.answerAuthPrompt ? (promptId, answer) => api.answerAuthPrompt(promptId, answer) : undefined}
+        cancelProviderLogin={api?.cancelProviderLogin ? (id) => api.cancelProviderLogin(id) : undefined}
+        openExternal={api?.openExternal ? (url) => api.openExternal(url) : undefined}
+        onProvidersChanged={async () => {
+          const nextModels = (await api?.getModels?.()) ?? [];
+          useAppStore.setState({ models: nextModels });
+        }}
+        getMcpConfig={
+          api?.getMcpConfig
+            ? async () => {
+                const view = await api.getMcpConfig();
+                return view ?? { cwd: "", sources: [], servers: [] };
+              }
+            : undefined
+        }
+        setMcpServerEnabled={api?.setMcpServerEnabled ? (name, enabled) => api.setMcpServerEnabled(name, enabled) : undefined}
+        importCursorMcp={api?.importCursorMcp ? () => api.importCursorMcp() : undefined}
+        openMcpConfigFile={api?.openMcpConfigFile ? () => api.openMcpConfigFile() : undefined}
+      />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} diagnostics={state.diagnostics} />
+      <TreeDialog
+        open={treeOpen}
+        loadTree={async () => (await api?.getSessionTree()) ?? []}
+        onFork={(entryId) => {
+          setTreeOpen(false);
+          void api?.forkSession(entryId);
+        }}
+        onClose={() => setTreeOpen(false)}
+      />
+    </main>
+  );
+}

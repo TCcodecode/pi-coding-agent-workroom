@@ -1,0 +1,2452 @@
+import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { readdir } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import {
+  createAgentSessionFromServices,
+  createAgentSessionRuntime,
+  createAgentSessionServices,
+  getAgentDir,
+  ModelRuntime,
+  SessionManager,
+  type ExtensionAPI,
+  type AgentSessionRuntime,
+} from "@earendil-works/pi-coding-agent";
+import type {
+  LiveSessionSummary,
+  ModelOption,
+  PiCommand,
+  PiEvent,
+  PiSnapshot,
+  ProjectSummary,
+  ProviderAuthStatus,
+  ProviderLoginEvent,
+  ProviderLoginPrompt,
+  ProviderUsageSnapshot,
+  ResourceSnapshot,
+  SessionCommandOptions,
+  SessionKey,
+  SessionStatus,
+  SessionTodoItem,
+  SessionTreeNode,
+  ThinkingLevel,
+  TimelineItem,
+  ToolCallState,
+  ToolOption,
+  FileChangeSummary,
+  McpConfigView,
+  McpStatusSnapshotView,
+} from "../src/shared/protocol.js";
+import type { IndexStatus } from "@pi-desk/code-index";
+import {
+  isTodoToolName,
+  reconstructTodosFromMessages,
+  sessionTodoExtension,
+  todosFromToolResult,
+} from "@pi-desk/session-todo";
+import {
+  createMcpBridgeFactory,
+  importCursorMcpConfig,
+  projectMcpOverridePath,
+  readMcpConfigs,
+  setMcpServerDisabled,
+} from "@pi-desk/mcp-bridge";
+import type { McpStatusSnapshot } from "@pi-desk/mcp-bridge";
+import { deleteSessionFile, getSessionContext, listSessions as loadSessionCatalog, resolveSessionDisplayName } from "./sessionCatalog.js";
+import {
+  addProject,
+  getActiveProjectId,
+  listProjects,
+  removeProject as removeProjectFromCatalog,
+  setActiveProject,
+  touchProject,
+} from "./projectCatalog.js";
+import { mergePiCommands } from "./piCommands.js";
+import {
+  createDefaultUsageRegistry,
+  type AccountUsage,
+  type ProviderUsageRegistry,
+} from "./providerUsage/index.js";
+import { createFileChangeSummary, createFileChangeSummaryFromPatch, filePathFromToolArgs, filePathFromToolInput } from "./fileChanges.js";
+import { HttpWorkbenchStore } from "./httpWorkbench.js";
+import { registerHttpWorkbenchTools } from "./httpWorkbenchExtension.js";
+
+export interface PiSessionLike {
+  sessionId: string;
+  sessionFile?: string;
+  sessionName?: string;
+  cwd: string;
+  model?: { provider?: string; id?: string };
+  thinkingLevel: string;
+  readonly isStreaming: boolean;
+  readonly messages: unknown[];
+  getActiveToolNames(): string[];
+  getAllTools(): unknown[];
+  sessionManager?: {
+    getTree(): Array<{ entry: { id: string; type: string; message?: { role?: string; content?: unknown }; summary?: string }; children: unknown[] }>;
+    buildSessionContext?: () => { messages?: unknown[] };
+    getSessionName?(): string | undefined;
+    appendSessionInfo?(name: string): string;
+    getSessionFile?(): string | undefined;
+    getLeafId?(): string | null;
+  };
+  settingsManager?: {
+    getPackages(): Array<string | { source: string }>;
+    getDefaultProvider?(): string | undefined;
+    getDefaultModel?(): string | undefined;
+    getEnabledModels?(): string[] | undefined;
+  };
+  getSessionStats(): {
+    tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+    cost: number;
+  };
+  getContextUsage?(): { tokens: number; contextWindow: number } | undefined;
+  subscribe(listener: (event: unknown) => void): () => void;
+  prompt(text: string, options?: unknown): Promise<void>;
+  steer(text: string): Promise<void>;
+  followUp(text: string): Promise<void>;
+  clearQueue?(): { steering: string[]; followUp: string[] };
+  getSteeringMessages?(): readonly string[];
+  getFollowUpMessages?(): readonly string[];
+  abort(): Promise<void>;
+  setThinkingLevel(level: string): void;
+  getAvailableThinkingLevels?(): string[];
+  setActiveToolsByName(tools: string[]): void;
+  compact(instructions?: string): Promise<unknown>;
+  reload(options?: unknown): Promise<void>;
+  setModel?(model: unknown): Promise<void>;
+  setSessionName?(name: string): void;
+  navigateTree?(targetId: string, options?: unknown): Promise<unknown>;
+  exportToHtml?(outputPath?: string): Promise<string>;
+  exportToJsonl?(outputPath?: string): string;
+  modelRuntime?: {
+    getModels(): ReadonlyArray<{ provider?: string; id?: string; name?: string }>;
+    getModel(provider: string, id: string): unknown;
+    getAvailable?(providerId?: string): Promise<ReadonlyArray<{ provider?: string; id?: string; name?: string }>>;
+    getAvailableSnapshot?(): ReadonlyArray<{ provider?: string; id?: string; name?: string }>;
+    hasConfiguredAuth?(providerId: string): boolean;
+    getProviders?(): ReadonlyArray<{
+      id: string;
+      name: string;
+      auth?: { apiKey?: { login?: unknown }; oauth?: unknown };
+    }>;
+    getProvider?(providerId: string): { id: string; name: string; auth?: { apiKey?: { login?: unknown }; oauth?: unknown } } | undefined;
+    getProviderAuthStatus?(providerId: string): { configured: boolean; source?: string; label?: string };
+    listCredentials?(): Promise<ReadonlyArray<{ providerId: string; type: "api_key" | "oauth" }>>;
+    login?(
+      providerId: string,
+      type: "api_key" | "oauth",
+      interaction: {
+        prompt: (prompt: { type: string; message?: string; options?: Array<{ id: string; label: string }> }) => Promise<string>;
+        notify: (event: unknown) => void;
+        signal?: AbortSignal;
+      },
+    ): Promise<unknown>;
+    logout?(providerId: string): Promise<void>;
+    refresh?(options?: { allowNetwork?: boolean }): Promise<unknown>;
+    isUsingOAuth?(providerId: string): boolean;
+  };
+  resourceLoader?: {
+    getAgentsFiles(): { agentsFiles: Array<{ path: string }> };
+    getSkills(): { skills: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
+    getPrompts(): { prompts: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
+    getThemes(): { themes: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
+    getExtensions(): { extensions: Array<{ path?: string; name?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }>; errors: Array<{ path: string; error: string }> };
+  };
+  extensionRunner?: { getRegisteredCommands(): Array<{ invocationName?: string; name: string; description?: string; sourceInfo?: { path?: string } }> };
+}
+
+export interface PiRuntimeLike {
+  session: PiSessionLike;
+  cwd: string;
+  switchSession(sessionPath: string, options?: unknown): Promise<{ cancelled: boolean }>;
+  newSession(options?: unknown): Promise<{ cancelled: boolean }>;
+  fork(entryId: string, options?: unknown): Promise<{ cancelled: boolean }>;
+  importFromJsonl(inputPath: string, cwdOverride?: string): Promise<{ cancelled: boolean }>;
+  dispose(): Promise<void>;
+  diagnostics?: Array<{ type?: string; message?: string }>;
+}
+
+export type PiRuntimeFactory = (options: { cwd: string; sessionPath?: string }) => Promise<PiRuntimeLike>;
+export type PiEventListener = (event: PiEvent) => void;
+
+export type AuthModelRuntimeFactory = () => Promise<ModelRuntime>;
+
+export interface PiHostOptions {
+  workspaceId?: string;
+  agentDir?: string;
+  runtime?: PiRuntimeLike;
+  runtimeFactory?: PiRuntimeFactory;
+  /** Override for Settings → Providers auth operations (tests). */
+  authRuntimeFactory?: AuthModelRuntimeFactory;
+  clipboardWriter?: (text: string) => void;
+  /** Open a URL in the user's default browser (OAuth authorization links). */
+  openExternal?: (url: string) => void;
+  /** Override provider usage adapter registry (tests). */
+  usageRegistry?: ProviderUsageRegistry;
+  /** Balance cache TTL in ms (default 60s). */
+  usageCacheTtlMs?: number;
+}
+
+interface RuntimeSlot {
+  key: SessionKey;
+  runtime: PiRuntimeLike;
+  unsubscribe?: () => void;
+  assistantMessageId?: string;
+  thinkingMessageId?: string;
+  sessionTodos: SessionTodoItem[];
+  todoRevision: number;
+  sessionGeneration: number;
+  status: SessionStatus;
+  pendingFileMutations: Map<string, { path: string; absolutePath: string; before?: string }>;
+  completedFileMutations: Map<string, { path: string; absolutePath: string; before?: string; after?: string }>;
+}
+
+export class PiHost {
+  private readonly workspaceId: string;
+  private readonly agentDir: string;
+  private readonly listeners = new Set<PiEventListener>();
+  private readonly runtimeFactory?: PiRuntimeFactory;
+  private readonly authRuntimeFactory?: AuthModelRuntimeFactory;
+  private readonly clipboardWriter?: (text: string) => void;
+  private readonly openExternal?: (url: string) => void;
+  private readonly usageRegistry: ProviderUsageRegistry;
+  private readonly usageCacheTtlMs: number;
+  private httpWorkbench?: HttpWorkbenchStore;
+  /** Multi-session live slots. Foreground is `foregroundKey`. */
+  private readonly slots = new Map<SessionKey, RuntimeSlot>();
+  private foregroundKey?: SessionKey;
+  private sequence = 0;
+  private workspaceCwd: string | undefined;
+  private pendingTrust?: { cwd: string; hasProjectResources: boolean };
+  private availableModelsCache: ModelOption[] = [];
+  /** In-flight OAuth logins per provider (AbortController + pending prompt resolvers). */
+  private readonly oauthLogins = new Map<string, { controller: AbortController; resolvers: Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }> }>();
+  /** promptId → resolver lookup across all in-flight logins (for answerAuthPrompt). */
+  private readonly promptResolvers = new Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }>();
+  private promptCounter = 0;
+  /** Successful / short-lived failed account usage cache keyed by providerId. */
+  private readonly accountUsageCache = new Map<string, { at: number; account: AccountUsage }>();
+  /** Workspace-global merged MCP server status (last write per server wins). */
+  private mcpStatus?: McpStatusSnapshotView;
+
+  /** Foreground runtime (compat for single-session call sites). */
+  private get runtime(): PiRuntimeLike | undefined {
+    return this.getSlot()?.runtime;
+  }
+
+  private get sessionTodos(): SessionTodoItem[] {
+    return this.getSlot()?.sessionTodos ?? [];
+  }
+
+  constructor(options: PiHostOptions = {}) {
+    this.workspaceId = options.workspaceId ?? "local";
+    this.agentDir = options.agentDir ?? getAgentDir();
+    this.runtimeFactory = options.runtimeFactory;
+    this.authRuntimeFactory = options.authRuntimeFactory;
+    this.clipboardWriter = options.clipboardWriter;
+    this.openExternal = options.openExternal;
+    this.usageRegistry = options.usageRegistry ?? createDefaultUsageRegistry();
+    this.usageCacheTtlMs = options.usageCacheTtlMs ?? 60_000;
+    if (options.runtime) {
+      const key = this.keyForRuntime(options.runtime);
+      this.attachRuntime(key, options.runtime);
+      this.foregroundKey = key;
+    }
+  }
+
+  setHttpWorkbenchStore(store: HttpWorkbenchStore): void {
+    this.httpWorkbench = store;
+  }
+
+  private getSlot(sessionKey?: SessionKey): RuntimeSlot | undefined {
+    const key = sessionKey ?? this.foregroundKey;
+    if (!key) return undefined;
+    return this.slots.get(key);
+  }
+
+  private keyForRuntime(runtime: PiRuntimeLike): SessionKey {
+    const file = runtime.session.sessionFile ?? runtime.session.sessionManager?.getSessionFile?.();
+    if (file) return `file:${file}`;
+    if (runtime.session.sessionId) return `id:${runtime.session.sessionId}`;
+    return `tmp:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private findSlotBySessionFile(sessionPath: string): RuntimeSlot | undefined {
+    for (const slot of this.slots.values()) {
+      const file =
+        slot.runtime.session.sessionFile ?? slot.runtime.session.sessionManager?.getSessionFile?.();
+      if (file && resolvePathsEqual(file, sessionPath)) return slot;
+    }
+    return undefined;
+  }
+
+  subscribe(listener: PiEventListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  async start(options: {
+    cwd: string;
+    sessionPath?: string;
+    sessionKey?: SessionKey;
+  }): Promise<PiSnapshot> {
+    this.workspaceCwd = options.cwd;
+    addProject(options.cwd);
+    setActiveProject(options.cwd);
+
+    // Reuse existing live slot for the same session file.
+    if (options.sessionPath) {
+      const byFile = this.findSlotBySessionFile(options.sessionPath);
+      if (byFile) {
+        this.foregroundKey = byFile.key;
+        this.emitLiveSessionsChanged();
+        await this.refreshAvailableModels();
+        return this.snapshot();
+      }
+    }
+
+    // Reuse existing slot by explicit key.
+    if (options.sessionKey && this.slots.has(options.sessionKey)) {
+      this.foregroundKey = options.sessionKey;
+      this.emitLiveSessionsChanged();
+      await this.refreshAvailableModels();
+      return this.snapshot();
+    }
+
+    // Legacy callers (no sessionKey): single-runtime replace semantics.
+    // Multi-session callers pass sessionKey and keep other slots alive.
+    if (!options.sessionKey) {
+      await this.disposeAllRuntimes();
+    }
+
+    const key =
+      options.sessionKey ??
+      (options.sessionPath
+        ? `file:${options.sessionPath}`
+        : `tmp:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+    const runtime = this.runtimeFactory
+      ? await this.runtimeFactory(options)
+      : await this.createSdkRuntime(options);
+    this.attachRuntime(key, runtime);
+    this.foregroundKey = key;
+    const session = runtime.session;
+    this.emit(
+      "session_started",
+      {
+        sessionId: session.sessionId,
+        cwd: runtime.cwd,
+        sessionName: this.resolveDisplayName(session),
+        model: this.modelName(session),
+        thinkingLevel: session.thinkingLevel as ThinkingLevel,
+      },
+      undefined,
+      key,
+    );
+    // Publish the hydrated state after the session reset event. This keeps the
+    // renderer's checklist correct when opening a session with persisted todos.
+    const slot = this.getSlot(key);
+    this.emit(
+      "todos_updated",
+      { todos: slot?.sessionTodos ?? [], revision: slot?.todoRevision ?? 0 },
+      undefined,
+      key,
+    );
+    // Auto-trust project resources — no confirmation dialog in the desktop UI.
+    this.emit("project_trust_resolved", { cwd: options.cwd, trusted: true }, undefined, key);
+    this.emitLiveSessionsChanged();
+    await this.refreshAvailableModels();
+    return this.snapshot();
+  }
+
+  async focusSession(sessionKey: SessionKey): Promise<PiSnapshot> {
+    const slot = this.slots.get(sessionKey);
+    if (!slot) throw new Error(`Unknown sessionKey: ${sessionKey}`);
+    this.foregroundKey = sessionKey;
+    this.workspaceCwd = slot.runtime.cwd;
+    addProject(slot.runtime.cwd);
+    setActiveProject(slot.runtime.cwd);
+    return this.snapshot();
+  }
+
+  isForegroundSession(sessionKey?: SessionKey): boolean {
+    return Boolean(sessionKey && sessionKey === this.foregroundKey);
+  }
+
+  /** Explicit dispose of one live slot (not used on tab close). */
+  async disposeSession(sessionKey: SessionKey): Promise<void> {
+    await this.disposeSlot(sessionKey);
+    this.emitLiveSessionsChanged();
+  }
+
+  listLiveSessions(): LiveSessionSummary[] {
+    return [...this.slots.values()].map((slot) => {
+      const session = slot.runtime.session;
+      const file = session.sessionFile ?? session.sessionManager?.getSessionFile?.();
+      const status: SessionStatus = session.isStreaming
+        ? "running"
+        : slot.status === "running"
+          ? "running"
+          : slot.status;
+      return {
+        sessionKey: slot.key,
+        sessionId: session.sessionId,
+        sessionFile: file,
+        cwd: slot.runtime.cwd,
+        projectId: slot.runtime.cwd,
+        name: this.resolveDisplayName(session),
+        status,
+      };
+    });
+  }
+
+  /** UI detach only — keep the agent alive. */
+  detachSession(_sessionKey: SessionKey): void {
+    // Intentionally no-op on host life.
+  }
+
+  listProjects(): ProjectSummary[] {
+    return listProjects();
+  }
+
+  addProjectFromPath(projectPath: string): ProjectSummary {
+    const project = addProject(projectPath);
+    this.workspaceCwd = project.path;
+    return project;
+  }
+
+  /**
+   * Remove a project from the desktop catalog only (does not delete session files).
+   * If the removed project was active / current cwd, dispose runtime so the UI can go empty.
+   */
+  async removeProject(projectId: string): Promise<{ projects: ProjectSummary[]; activeProjectId?: string }> {
+    const id = projectId.replace(/\/+$/, "") || projectId;
+    const runtimeCwd = this.runtime?.cwd?.replace(/\/+$/, "") || "";
+    const wasActive =
+      getActiveProjectId() === id || this.workspaceCwd === id || runtimeCwd === id;
+
+    removeProjectFromCatalog(id);
+
+    // Dispose any live slots whose cwd matches the removed project.
+    for (const slot of [...this.slots.values()]) {
+      const cwd = slot.runtime.cwd?.replace(/\/+$/, "") || "";
+      if (cwd === id) await this.disposeSlot(slot.key);
+    }
+
+    if (wasActive) {
+      this.workspaceCwd = getActiveProjectId();
+    }
+    this.emitLiveSessionsChanged();
+
+    return {
+      projects: listProjects(),
+      activeProjectId: getActiveProjectId(),
+    };
+  }
+
+  async selectProject(projectId: string): Promise<PiSnapshot> {
+    const project = setActiveProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return this.start({ cwd: project.path });
+  }
+
+  /** Catalog-only: set which project New session / defaults target. Does not touch runtime. */
+  setActiveProjectOnly(projectId: string): { projects: ProjectSummary[]; activeProjectId?: string } {
+    const project = setActiveProject(projectId);
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    return {
+      projects: listProjects(),
+      activeProjectId: getActiveProjectId(),
+    };
+  }
+
+  async prompt(text: string, opts?: SessionCommandOptions): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const session = slot.runtime.session;
+    // Resolve as soon as the message is accepted (preflight passes, turn starts)
+    // instead of waiting for the whole agent turn, so the composer can clear the
+    // input immediately. Turn errors after acceptance surface as session_error.
+    await new Promise<void>((resolve, reject) => {
+      let accepted = false;
+      void session
+        .prompt(text, {
+          preflightResult: (ok: boolean) => {
+            if (ok && !accepted) {
+              accepted = true;
+              touchProject(this.workspaceCwd ?? slot.runtime.cwd ?? "");
+              resolve();
+            }
+          },
+        } as never)
+        .then(
+          () => {
+            if (!accepted) resolve();
+          },
+          (error: unknown) => {
+            if (accepted) {
+              this.emit(
+                "session_error",
+                { message: error instanceof Error ? error.message : String(error) },
+                undefined,
+                slot.key,
+              );
+            } else {
+              reject(error);
+            }
+          },
+        );
+    });
+  }
+
+  async steer(text: string, opts?: SessionCommandOptions): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    touchProject(this.workspaceCwd ?? slot.runtime.cwd ?? "");
+    await slot.runtime.session.steer(text);
+  }
+
+  async followUp(text: string, opts?: SessionCommandOptions): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    touchProject(this.workspaceCwd ?? slot.runtime.cwd ?? "");
+    await slot.runtime.session.followUp(text);
+  }
+
+  async undoFileChange(path: string, opts?: SessionCommandOptions): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const absolutePath = resolve(slot.runtime.cwd, path);
+    const normalizedPath = relative(slot.runtime.cwd, absolutePath).replace(/\\/g, "/") || path;
+    const mutation = slot.completedFileMutations.get(normalizedPath);
+    if (!mutation) throw new Error(`This file change is no longer undoable: ${path}`);
+
+    const current = this.readTextFile(mutation.absolutePath);
+    if (current !== mutation.after) {
+      throw new Error(`Cannot undo ${mutation.path}: the file changed after the session edit`);
+    }
+
+    if (mutation.before === undefined) {
+      try {
+        unlinkSync(mutation.absolutePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    } else {
+      writeFileSync(mutation.absolutePath, mutation.before, "utf8");
+    }
+    slot.completedFileMutations.delete(normalizedPath);
+    this.emit("file_change_undone", { path: mutation.path }, undefined, slot.key);
+  }
+
+  async editFollowUp(index: number, text: string, opts?: SessionCommandOptions, expectedText?: string): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const queue = this.readQueueForEditing(slot);
+    const nextText = text.trim();
+    if (!nextText) throw new Error("Queued message cannot be empty");
+    if (!Number.isInteger(index) || index < 0 || index >= queue.followUp.length) {
+      throw new Error("Queued message is no longer available");
+    }
+    if (expectedText !== undefined && queue.followUp[index] !== expectedText) {
+      throw new Error("Queued message changed before it could be edited");
+    }
+    queue.followUp[index] = nextText;
+    await this.replaceQueue(slot, queue.steering, queue.followUp);
+    touchProject(this.workspaceCwd ?? slot.runtime.cwd ?? "");
+  }
+
+  async sendFollowUpNow(index: number, opts?: SessionCommandOptions, expectedText?: string): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const queue = this.readQueueForEditing(slot);
+    if (!Number.isInteger(index) || index < 0 || index >= queue.followUp.length) {
+      throw new Error("Queued message is no longer available");
+    }
+    if (expectedText !== undefined && queue.followUp[index] !== expectedText) {
+      throw new Error("Queued message changed before it could be sent");
+    }
+    const [message] = queue.followUp.splice(index, 1);
+    if (!message) throw new Error("Queued message is no longer available");
+
+    // While the agent is running this is Pi's steering delivery path. If a
+    // queue item survives until idle, send it as a normal prompt instead.
+    if (slot.runtime.session.isStreaming) {
+      queue.steering.push(message);
+      await this.replaceQueue(slot, queue.steering, queue.followUp);
+    } else {
+      await this.replaceQueue(slot, queue.steering, queue.followUp);
+      await this.prompt(message, opts);
+    }
+    touchProject(this.workspaceCwd ?? slot.runtime.cwd ?? "");
+  }
+
+  private readQueueForEditing(slot: RuntimeSlot): { steering: string[]; followUp: string[] } {
+    const session = slot.runtime.session;
+    if (!session.clearQueue || !session.getSteeringMessages || !session.getFollowUpMessages) {
+      throw new Error("Queue editing is unavailable for this session");
+    }
+    return {
+      steering: [...session.getSteeringMessages()],
+      followUp: [...session.getFollowUpMessages()],
+    };
+  }
+
+  private async replaceQueue(slot: RuntimeSlot, steering: string[], followUp: string[]): Promise<void> {
+    const session = slot.runtime.session;
+    if (!session.clearQueue) throw new Error("Queue editing is unavailable for this session");
+    session.clearQueue();
+    await Promise.all([
+      ...steering.map((message) => session.steer(message)),
+      ...followUp.map((message) => session.followUp(message)),
+    ]);
+  }
+
+  async abort(opts?: SessionCommandOptions): Promise<void> {
+    await this.requireSlot(opts?.sessionKey).runtime.session.abort();
+  }
+
+  setThinkingLevel(level: ThinkingLevel): void {
+    this.requireSession().setThinkingLevel(level);
+  }
+
+  setTools(tools: string[]): void {
+    this.requireSession().setActiveToolsByName(tools);
+  }
+
+  async setSkills(patterns: string[]): Promise<void> {
+    const settingsPath = join(this.agentDir, "settings.json");
+    const settings = this.readSettingsFile() ?? {};
+    const skills = patterns.filter((pattern) => typeof pattern === "string" && pattern.trim());
+    if (skills.length === 0) delete settings.skills;
+    else settings.skills = skills;
+    writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    await this.reload();
+  }
+
+  async warmupTools(): Promise<void> {
+    // Pre-download rg/fd on first launch so the grep/find tools work offline later.
+    // Load via createRequire (not import) so Vite's exports-map validation doesn't
+    // block the deep path into pi-coding-agent's internal tools-manager.
+    try {
+      const { createRequire } = await import("node:module");
+      const require = createRequire(import.meta.url);
+      const { ensureTool } = require("@earendil-works/pi-coding-agent/dist/utils/tools-manager.js");
+      await ensureTool("rg", true);
+      await ensureTool("fd", true);
+    } catch {
+      // warmup is best-effort; tools will try again on first use
+    }
+  }
+
+  async compact(instructions?: string): Promise<unknown> {
+    return this.requireSession().compact(instructions);
+  }
+
+  async reload(): Promise<void> {
+    await this.requireSession().reload();
+  }
+
+  async setModel(modelKey: string): Promise<void> {
+    const session = this.requireSession();
+    const [provider, ...idParts] = modelKey.split("/");
+    const id = idParts.join("/");
+    const model = session.modelRuntime?.getModel(provider, id);
+    if (!model || !session.setModel) throw new Error(`Model not found: ${modelKey}`);
+    await session.setModel(model);
+    this.emit("model_changed", { model: modelKey, provider });
+  }
+
+  async executeCommand(name: string, args = ""): Promise<void> {
+    const command = name.replace(/^\//, "");
+    switch (command) {
+      case "new":
+        await this.newSession();
+        return;
+      case "clone":
+        await this.cloneSession();
+        return;
+      case "compact":
+        await this.compact(args || undefined);
+        return;
+      case "reload":
+        await this.reload();
+        return;
+      case "name":
+        {
+          const session = this.requireSession();
+          if (!args.trim() || !session.setSessionName) throw new Error("/name requires a session name");
+          session.setSessionName(args.trim());
+        }
+        return;
+      case "model":
+        if (!args.trim()) throw new Error("/model requires provider/model");
+        await this.setModel(args.trim());
+        return;
+      case "import":
+        if (!args.trim()) throw new Error("/import requires a JSONL path");
+        await this.importSession(args.trim());
+        return;
+      case "export": {
+        const session = this.requireSession();
+        const out = args.trim();
+        const jsonlSession = session as PiSessionLike & { exportToJsonl?: (outputPath?: string) => string };
+        if (out.endsWith(".jsonl") && jsonlSession.exportToJsonl) {
+          jsonlSession.exportToJsonl(out);
+        } else {
+          await session.exportToHtml?.(out || undefined);
+        }
+        return;
+      }
+      case "copy": {
+        const session = this.requireSession() as PiSessionLike & { getLastAssistantText?: () => string };
+        const text = session.getLastAssistantText?.() ?? "";
+        if (text) await this.copyToClipboard(text);
+        return;
+      }
+      case "session": {
+        const session = this.requireSession();
+        const stats = session.getSessionStats();
+        this.emit("notification_created", { message: `Session ${session.sessionId} — tokens: ${stats.tokens.total}, cost: $${stats.cost.toFixed(4)}` });
+        return;
+      }
+      case "tree": {
+        const session = this.requireSession() as PiSessionLike & { navigateTree?: (targetId: string, options?: unknown) => Promise<unknown> };
+        if (!args.trim() || !session.navigateTree) throw new Error("/tree requires a session tree entry id");
+        await session.navigateTree(args.trim());
+        return;
+      }
+      default:
+        throw new Error(`Command ${name} needs a desktop UI flow`);
+    }
+  }
+
+  getCommands(): PiCommand[] {
+    const extensionCommands = this.runtime?.session.extensionRunner?.getRegisteredCommands() ?? [];
+    return mergePiCommands(extensionCommands.map((command) => ({ name: command.invocationName ?? command.name, description: command.description, source: command.sourceInfo?.path })));
+  }
+
+  getModels(): ModelOption[] {
+    return this.availableModelsCache;
+  }
+
+  /**
+   * Refresh models shown in the UI.
+   * Only keep providers the user intentionally chose for Pi
+   * (settings.defaultProvider + non-empty auth.json entries).
+   * Ambient env tokens from other tools (e.g. ANTHROPIC_AUTH_TOKEN) must not flood the list.
+   * The session's current model is always kept as a single option when missing.
+   */
+  async refreshAvailableModels(): Promise<ModelOption[]> {
+    const session = this.runtime?.session;
+    const modelRuntime = session?.modelRuntime;
+    if (!modelRuntime) {
+      this.availableModelsCache = [];
+      return this.availableModelsCache;
+    }
+
+    const thinkingLevels = (session?.getAvailableThinkingLevels?.() ?? [
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]) as ThinkingLevel[];
+
+    type RawModel = { provider?: string; id?: string; name?: string };
+    let raw: RawModel[] = [];
+
+    try {
+      if (modelRuntime.getAvailable) {
+        raw = [...(await modelRuntime.getAvailable())];
+      }
+    } catch {
+      raw = [];
+    }
+
+    if (raw.length === 0) {
+      raw = [...(modelRuntime.getAvailableSnapshot?.() ?? [])];
+    }
+
+    if (raw.length === 0) {
+      raw = [...(modelRuntime.getModels() ?? [])].filter((model) => {
+        const provider = model.provider ?? "";
+        return provider !== "" && Boolean(modelRuntime.hasConfiguredAuth?.(provider));
+      });
+    }
+
+    // Restrict to intentional Pi providers only (settings + auth.json). Never expand
+    // just because the current session model happens to be from another provider.
+    const intentional = this.intentionalProviders(session);
+    if (intentional.size > 0) {
+      raw = raw.filter((model) => intentional.has(model.provider ?? ""));
+    }
+
+    // Apply enabledModels patterns from settings when present.
+    const enabledPatterns =
+      session?.settingsManager?.getEnabledModels?.() ?? this.readSettingsEnabledModels();
+    if (enabledPatterns && enabledPatterns.length > 0) {
+      const matched = raw.filter((model) => this.matchesEnabledModel(model, enabledPatterns));
+      if (matched.length > 0) raw = matched;
+    }
+
+    // Always include the session's current model as a single entry if present.
+    const current = session?.model;
+    if (current?.provider && current.id) {
+      const key = `${current.provider}/${current.id}`;
+      if (!raw.some((model) => `${model.provider ?? ""}/${model.id ?? ""}` === key)) {
+        const found = modelRuntime.getModel?.(current.provider, current.id) as RawModel | undefined;
+        raw.unshift(found ?? { provider: current.provider, id: current.id, name: current.id });
+      }
+    }
+
+    const seen = new Set<string>();
+    const unique = raw.filter((model) => {
+      const key = `${model.provider ?? "unknown"}/${model.id ?? "unknown"}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    this.availableModelsCache = unique.map((model) => ({
+      id: `${model.provider ?? "unknown"}/${model.id ?? "unknown"}`,
+      provider: model.provider ?? "unknown",
+      label: model.name ?? model.id ?? "unknown",
+      available: true,
+      thinkingLevels,
+    }));
+
+    return this.availableModelsCache;
+  }
+
+  /**
+   * Providers the user explicitly configured for Pi.
+   * Sources: settings.defaultProvider (settingsManager or settings.json) + auth.json.
+   * Does NOT include ambient env-key providers or the current session model provider
+   * (session model is injected separately as one option).
+   */
+  private intentionalProviders(session?: PiSessionLike): Set<string> {
+    const providers = new Set<string>();
+
+    const defaultProvider =
+      session?.settingsManager?.getDefaultProvider?.() ?? this.readSettingsDefaultProvider();
+    if (defaultProvider) providers.add(defaultProvider);
+
+    try {
+      const authPath = join(this.agentDir, "auth.json");
+      if (existsSync(authPath)) {
+        const auth = JSON.parse(readFileSync(authPath, "utf8")) as Record<string, unknown>;
+        for (const [providerId, entry] of Object.entries(auth)) {
+          if (entry && typeof entry === "object" && Object.keys(entry as object).length > 0) {
+            providers.add(providerId);
+          }
+        }
+      }
+    } catch {
+      // ignore auth read errors
+    }
+
+    return providers;
+  }
+
+  private readSettingsFile(): Record<string, unknown> | undefined {
+    try {
+      const settingsPath = join(this.agentDir, "settings.json");
+      if (!existsSync(settingsPath)) return undefined;
+      return JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private readSettingsDefaultProvider(): string | undefined {
+    const settings = this.readSettingsFile();
+    const value = settings?.defaultProvider;
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  }
+
+  private readSettingsEnabledModels(): string[] | undefined {
+    const settings = this.readSettingsFile();
+    const value = settings?.enabledModels;
+    if (!Array.isArray(value)) return undefined;
+    const patterns = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return patterns.length > 0 ? patterns : undefined;
+  }
+
+  private matchesEnabledModel(
+    model: { provider?: string; id?: string },
+    patterns: string[],
+  ): boolean {
+    const provider = model.provider ?? "";
+    const id = model.id ?? "";
+    const full = `${provider}/${id}`.toLowerCase();
+    return patterns.some((pattern) => {
+      const p = pattern.toLowerCase();
+      if (p.includes("*")) {
+        const re = new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
+        return re.test(full) || re.test(id.toLowerCase());
+      }
+      return full === p || id.toLowerCase() === p || full.includes(p);
+    });
+  }
+
+  getTools(): ToolOption[] {
+    const session = this.runtime?.session;
+    const active = new Set(session?.getActiveToolNames() ?? []);
+    return (session?.getAllTools() as Array<{ name?: string; description?: string; sourceInfo?: { path?: string } }> ?? []).map((tool) => ({ name: tool.name ?? "unknown", description: tool.description ?? "", active: active.has(tool.name ?? ""), source: tool.sourceInfo?.path ?? "builtin" }));
+  }
+
+  getResources(): ResourceSnapshot {
+    const loader = this.runtime?.session.resourceLoader;
+    if (!loader) return { contextFiles: [], skills: [], promptTemplates: [], themes: [], extensions: [], packages: [], mcp: this.mcpStatus };
+    const extensions = loader.getExtensions();
+    const configuredPackages = this.runtime?.session.settingsManager?.getPackages() ?? [];
+    const extList = extensions.extensions.map((ext) => ({
+      name: ext.name ?? (ext.path ? basename(ext.path) : undefined) ?? "extension",
+      source: ext.path ?? "",
+      loaded: true,
+      pkgSource: ext.sourceInfo?.origin === "package" ? ext.sourceInfo?.source : undefined,
+    })).concat(extensions.errors.map((error) => ({ name: error.path, source: error.path, loaded: false, error: error.error, pkgSource: undefined })));
+    const skillsList = this.listSkills();
+    const promptsList = loader.getPrompts().prompts.map((prompt) => ({ name: prompt.name ?? prompt.filePath ?? "prompt", path: prompt.filePath ?? prompt.path ?? "" }));
+    const themesList = loader.getThemes().themes.map((theme) => ({ name: theme.name ?? theme.filePath ?? "theme", path: theme.filePath ?? theme.path ?? "", active: false }));
+
+    const extWithSource = extensions.extensions;
+    const skillItems = loader.getSkills().skills;
+    const promptItems = loader.getPrompts().prompts;
+    const themeItems = loader.getThemes().themes;
+
+    function pkgSource(pkg: string | { source: string }): string {
+      return typeof pkg === "string" ? pkg : pkg.source;
+    }
+
+    const packages = configuredPackages.map((pkg) => {
+      const src = pkgSource(pkg);
+      const isStr = typeof pkg === "string";
+      const enabled = isStr
+        ? true
+        : (() => {
+            const obj = pkg as Record<string, unknown>;
+            const filterKeys = ["extensions", "skills", "prompts", "themes"];
+            const hasFilters = filterKeys.some((k) => k in obj);
+            if (!hasFilters) return true;
+            return filterKeys.some((k) => {
+              const v = obj[k];
+              return Array.isArray(v) && v.length > 0;
+            });
+          })();
+      const counts = {
+        extensions: extWithSource.filter((e) => e.sourceInfo?.origin === "package" && e.sourceInfo?.source === src).length,
+        skills: skillItems.filter((s) => s.sourceInfo?.origin === "package" && s.sourceInfo?.source === src).length,
+        prompts: promptItems.filter((p) => p.sourceInfo?.origin === "package" && p.sourceInfo?.source === src).length,
+        themes: themeItems.filter((t) => t.sourceInfo?.origin === "package" && t.sourceInfo?.source === src).length,
+      };
+      return { name: src, source: src, enabled, resources: counts };
+    });
+
+    return {
+      contextFiles: loader.getAgentsFiles().agentsFiles.map((file) => ({ path: file.path, source: file.path.startsWith(this.agentDir) ? "global" : "project", loaded: true })),
+      skills: skillsList,
+      promptTemplates: promptsList,
+      themes: themesList,
+      extensions: extList,
+      packages,
+      mcp: this.mcpStatus,
+    };
+  }
+
+  private isDir(path: string): boolean {
+    try {
+      return statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
+  private collectSkillFiles(dir: string): string[] {
+    if (!existsSync(dir)) return [];
+    const files: string[] = [];
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.name.startsWith(".")) continue;
+        const full = join(dir, entry.name);
+        if (this.isDir(full)) {
+          files.push(...this.collectSkillFiles(full));
+        } else if (entry.isFile() && entry.name === "SKILL.md") {
+          files.push(full);
+        }
+      }
+    } catch {
+      // unreadable dir → skip
+    }
+    return files;
+  }
+
+  private isSkillExcluded(parentRel: string, parentName: string, patterns: string[]): boolean {
+    const excludes = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1).replace(/\/$/, ""));
+    return excludes.some((pattern) => {
+      // Exact parentRel match, e.g. !skills/superpowers/brainstorming (what the GUI writes).
+      if (parentRel === pattern) return true;
+      // Group globs, e.g. !skills/superpowers/** or !**/superpowers/** (pi-native form).
+      const groupGlob = /^(?:\*\*\/|skills\/)([^/*]+)\/\*\*$/.exec(pattern);
+      if (groupGlob) {
+        const base = `skills/${groupGlob[1]}`;
+        return parentRel === base || parentRel.startsWith(`${base}/`);
+      }
+      // Bare skill name, e.g. !brainstorming — pi matches parentName this way.
+      if (parentName === pattern) return true;
+      return false;
+    });
+  }
+
+  listSkills(): ResourceSnapshot["skills"] {
+    const patterns = (this.readSettingsFile()?.skills as string[] | undefined) ?? [];
+    const roots: Array<{ root: string; source: string }> = [
+      { root: join(homedir(), ".agents", "skills"), source: "agents" },
+      { root: join(this.agentDir, "skills"), source: "pi" },
+    ];
+    const skills: ResourceSnapshot["skills"] = [];
+    for (const { root, source } of roots) {
+      if (!existsSync(root)) continue;
+      let groups: string[] = [];
+      try {
+        groups = readdirSync(root, { withFileTypes: true }).filter((entry) => this.isDir(join(root, entry.name)) && !entry.name.startsWith(".")).map((entry) => entry.name);
+      } catch {
+        continue;
+      }
+      for (const group of groups) {
+        const groupDir = join(root, group);
+        const skillFiles = this.collectSkillFiles(groupDir);
+        for (const skillPath of skillFiles) {
+          const parentRel = join("skills", group, relative(groupDir, dirname(skillPath))).replace(/\\/g, "/");
+          const skillName = basename(dirname(skillPath));
+          skills.push({
+            name: skillName,
+            path: skillPath,
+            loaded: true,
+            group,
+            source,
+            enabled: !this.isSkillExcluded(parentRel, skillName, patterns),
+          });
+        }
+      }
+    }
+    return skills.sort((a, b) => (a.group ?? "").localeCompare(b.group ?? ""));
+  }
+
+  getSessionTree(): SessionTreeNode[] {
+    const nodes = this.runtime?.session.sessionManager?.getTree() ?? [];
+    const mapNode = (node: { entry: { id: string; type: string; message?: { role?: string; content?: unknown }; summary?: string }; children: unknown[] }): SessionTreeNode => ({
+      id: node.entry.id,
+      kind: node.entry.message?.role ?? node.entry.type,
+      label: node.entry.message ? this.messageText(node.entry.message) || node.entry.type : node.entry.summary ?? node.entry.type,
+      children: (node.children as Array<{ entry: { id: string; type: string; message?: { role?: string; content?: unknown }; summary?: string }; children: unknown[] }>).map(mapNode),
+    });
+    return nodes.map(mapNode);
+  }
+
+  async newSession(opts?: SessionCommandOptions): Promise<{ cancelled: boolean }> {
+    return this.requireSlot(opts?.sessionKey).runtime.newSession();
+  }
+
+  async switchSession(sessionPath: string): Promise<{ cancelled: boolean }> {
+    const slot = this.requireSlot();
+    const result = await slot.runtime.switchSession(sessionPath);
+    // Runtime may rebind session; ensure we subscribe to the active session after switch.
+    if (slot.runtime.session) {
+      slot.unsubscribe?.();
+      const generation = ++slot.sessionGeneration;
+      slot.unsubscribe = slot.runtime.session.subscribe((event) => {
+        if (slot.sessionGeneration !== generation) return;
+        this.handleSessionEvent(slot, event);
+      });
+      slot.todoRevision = 0;
+      this.hydrateSessionTodos(slot, slot.runtime.session);
+      this.emit(
+        "todos_updated",
+        { todos: slot.sessionTodos, revision: slot.todoRevision },
+        undefined,
+        slot.key,
+      );
+    }
+    await this.refreshAvailableModels();
+    return result;
+  }
+
+  async forkSession(entryId: string): Promise<{ cancelled: boolean }> {
+    return this.requireRuntime().fork(entryId);
+  }
+
+  async cloneSession(): Promise<{ cancelled: boolean }> {
+    const leafId = this.runtime?.session.sessionManager?.getLeafId?.();
+    if (!leafId) throw new Error("Nothing to clone yet");
+    return this.requireRuntime().fork(leafId, { position: "at" });
+  }
+
+  async importSession(path: string, cwdOverride?: string): Promise<{ cancelled: boolean }> {
+    return this.requireRuntime().importFromJsonl(path, cwdOverride);
+  }
+
+  snapshot(): PiSnapshot {
+    const session = this.runtime?.session;
+    const stats = session?.getSessionStats();
+    const usage = session?.getContextUsage?.();
+    const queue = {
+      steering: session?.getSteeringMessages ? [...session.getSteeringMessages()] : [],
+      followUp: session?.getFollowUpMessages ? [...session.getFollowUpMessages()] : [],
+    };
+    const projects = listProjects();
+    const activeProjectId = getActiveProjectId() ?? (this.workspaceCwd ? this.workspaceCwd : undefined);
+    return {
+      workspaceId: this.workspaceId,
+      session: {
+        sessionId: session?.sessionId ?? "",
+        cwd: this.runtime?.cwd ?? this.workspaceCwd ?? "",
+        name: session ? this.resolveDisplayName(session) : "Untitled session",
+        status: session?.isStreaming ? "running" : "idle",
+        model: session ? this.modelName(session) : "",
+        provider: session?.model?.provider ?? "",
+        thinkingLevel: (session?.thinkingLevel ?? "medium") as ThinkingLevel,
+        contextTokens: usage?.tokens ?? 0,
+        contextWindow: usage?.contextWindow ?? 0,
+        inputTokens: stats?.tokens.input ?? 0,
+        outputTokens: stats?.tokens.output ?? 0,
+        cacheReadTokens: stats?.tokens.cacheRead ?? 0,
+        cacheWriteTokens: stats?.tokens.cacheWrite ?? 0,
+        cost: stats?.cost ?? 0,
+        sessionFile: session?.sessionFile,
+        todos: this.sessionTodos,
+      },
+      sessions: [],
+      projects,
+      activeProjectId,
+      timeline: this.hydrateTimeline(),
+      toolCalls: this.hydrateToolCalls(),
+      queue,
+      resources: this.getResources(),
+      models: this.getModels(),
+      tools: this.getTools(),
+      diagnostics: {
+        piVersion: "0.83.0",
+        sdkSessionId: session?.sessionId,
+        sessionFile: session?.sessionFile,
+        sequence: this.sequence,
+        messages: this.runtime?.diagnostics?.map((d) => d.message ?? "") ?? [],
+        errors: this.runtime?.diagnostics?.filter((d) => d.type === "error").map((d) => d.message ?? "") ?? [],
+      },
+    };
+  }
+
+  resolveTrust(trusted: boolean): void {
+    if (!this.pendingTrust) return;
+    this.emit("project_trust_resolved", { cwd: this.pendingTrust.cwd, trusted });
+    this.pendingTrust = undefined;
+  }
+
+  async listSessions(cwd = this.workspaceCwd) {
+    if (!cwd) return [];
+    return loadSessionCatalog(cwd);
+  }
+
+  async listProjectFiles(cwd = this.workspaceCwd): Promise<Array<{ path: string; isDir: boolean }>> {
+    if (!cwd) return [];
+    const root = resolve(cwd);
+    const results: Array<{ path: string; isDir: boolean }> = [];
+    const IGNORED = new Set([".git", "node_modules", ".next", "dist", "build", "out", ".cache", ".venv", "venv", "target"]);
+
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      if (depth > 5 || results.length >= 800) return;
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (results.length >= 800) return;
+        if (IGNORED.has(entry.name)) continue;
+        if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".env.local") continue;
+        const full = join(dir, entry.name);
+        const rel = full.slice(root.length + 1);
+        if (entry.isDirectory()) {
+          results.push({ path: rel, isDir: true });
+          await walk(full, depth + 1);
+        } else {
+          results.push({ path: rel, isDir: false });
+        }
+      }
+    };
+
+    await walk(root, 0);
+    return results;
+  }
+
+  /** Drop cached account balance for a provider (or all if omitted). */
+  invalidateAccountUsageCache(providerId?: string): void {
+    if (!providerId) {
+      this.accountUsageCache.clear();
+      return;
+    }
+    this.accountUsageCache.delete(providerId);
+  }
+
+  /**
+   * Session usage (local stats) + optional account balance/quota via pluggable adapters.
+   * Account fetches are cached per provider; pass `{ force: true }` to bypass.
+   */
+  async getProviderUsage(options?: { force?: boolean }): Promise<ProviderUsageSnapshot> {
+    const session = this.runtime?.session;
+    const stats = session?.getSessionStats();
+    const usage = session?.getContextUsage?.();
+    const providerId = session?.model?.provider ?? "";
+
+    const sessionDetail = {
+      inputTokens: stats?.tokens.input ?? 0,
+      outputTokens: stats?.tokens.output ?? 0,
+      cacheReadTokens: stats?.tokens.cacheRead ?? 0,
+      cacheWriteTokens: stats?.tokens.cacheWrite ?? 0,
+      cost: stats?.cost ?? 0,
+      contextTokens: usage?.tokens ?? 0,
+      contextWindow: usage?.contextWindow ?? 0,
+    };
+
+    if (!providerId) {
+      return {
+        providerId: "",
+        session: sessionDetail,
+        account: { mode: "unsupported", providerId: "", reason: "no_adapter" },
+      };
+    }
+
+    const account = await this.resolveAccountUsage(providerId, Boolean(options?.force));
+    return { providerId, session: sessionDetail, account };
+  }
+
+  private async resolveAccountUsage(providerId: string, force: boolean): Promise<AccountUsage> {
+    const now = Date.now();
+    if (!force) {
+      const hit = this.accountUsageCache.get(providerId);
+      if (hit) {
+        const ttl =
+          hit.account.mode === "unsupported" && hit.account.reason === "fetch_failed"
+            ? 10_000
+            : this.usageCacheTtlMs;
+        if (now - hit.at < ttl) return hit.account;
+      }
+    }
+
+    const adapter = this.usageRegistry.get(providerId);
+    if (!adapter) {
+      const account: AccountUsage = { mode: "unsupported", providerId, reason: "no_adapter" };
+      this.accountUsageCache.set(providerId, { at: now, account });
+      return account;
+    }
+
+    let credentialType: "api_key" | "oauth" | undefined;
+    try {
+      const runtime = await this.createAuthModelRuntime();
+      const creds = await runtime.listCredentials();
+      credentialType = creds.find((c) => c.providerId === providerId)?.type;
+      // Env-only keys may not appear in listCredentials; still allow adapters.
+      if (!credentialType) {
+        const status = runtime.getProviderAuthStatus(providerId);
+        if (status.configured) credentialType = "api_key";
+      }
+    } catch {
+      // leave undefined
+    }
+
+    const ctx = {
+      providerId,
+      credentialType,
+      getApiKey: async () => this.resolveProviderApiKey(providerId),
+    };
+
+    if (!adapter.supports(ctx)) {
+      const account: AccountUsage = {
+        mode: "unsupported",
+        providerId,
+        reason: credentialType === "oauth" ? "oauth" : "skipped",
+      };
+      this.accountUsageCache.set(providerId, { at: now, account });
+      return account;
+    }
+
+    const account = await adapter.fetchAccountUsage(ctx);
+    this.accountUsageCache.set(providerId, { at: Date.now(), account });
+    return account;
+  }
+
+  /** Resolve API key for a provider (auth.json / env / runtime). Never exposed to renderer. */
+  private async resolveProviderApiKey(providerId: string): Promise<string | undefined> {
+    try {
+      const runtime = await this.createAuthModelRuntime();
+      const auth = await runtime.getAuth(providerId);
+      const key = auth?.auth?.apiKey?.trim();
+      if (key) return key;
+    } catch {
+      // fall through
+    }
+    // Last-resort: common env var for DeepSeek (and any future env-only paths).
+    if (providerId === "deepseek") {
+      const envKey = process.env.DEEPSEEK_API_KEY?.trim();
+      if (envKey) return envKey;
+    }
+    return undefined;
+  }
+
+  /**
+   * List providers with login/logout capability and current auth status.
+   * Always uses a dedicated ModelRuntime against the agent dir so the list
+   * works even when no chat session is open / session runtime is incomplete.
+   */
+  async listProviders(): Promise<ProviderAuthStatus[]> {
+    const runtime = await this.createAuthModelRuntime();
+    try {
+      await runtime.getAvailable();
+    } catch {
+      // availability refresh is best-effort for status UI
+    }
+
+    const stored = new Map<string, "api_key" | "oauth">();
+    try {
+      for (const entry of await runtime.listCredentials()) {
+        stored.set(entry.providerId, entry.type);
+      }
+    } catch {
+      // ignore
+    }
+
+    const providers = [...runtime.getProviders()];
+    const rows: ProviderAuthStatus[] = providers.map((provider) => {
+      const status = runtime.getProviderAuthStatus(provider.id);
+      const sourceRaw = status.source ?? (status.configured ? "environment" : "none");
+      const source = normalizeAuthSource(sourceRaw);
+      const credentialType = stored.get(provider.id);
+      const apiKeyAuth = provider.auth?.apiKey as { login?: unknown } | undefined;
+      return {
+        id: provider.id,
+        name: provider.name,
+        configured: Boolean(status.configured),
+        source,
+        sourceLabel:
+          status.label ??
+          (source === "stored" ? "auth.json" : source === "environment" ? status.label : undefined),
+        hasApiKeyLogin: Boolean(apiKeyAuth && typeof apiKeyAuth.login === "function"),
+        hasOAuthLogin: Boolean(provider.auth?.oauth),
+        canLogout: stored.has(provider.id),
+        credentialType,
+      };
+    });
+
+    return rows.sort((left, right) => {
+      // Connected first, then name.
+      if (left.configured !== right.configured) return left.configured ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
+  }
+
+  /**
+   * Persist an API key via Pi ModelRuntime.login (same path as /login).
+   * After success, refreshes available models for the active session.
+   */
+  async loginWithApiKey(providerId: string, apiKey: string): Promise<{ name: string }> {
+    const key = apiKey.trim();
+    if (!providerId.trim()) throw new Error("Provider is required");
+    if (!key) throw new Error("API key is required");
+
+    const runtime = await this.createAuthModelRuntime();
+    const provider = runtime.getProvider(providerId);
+    if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+    const apiKeyAuth = provider.auth?.apiKey as { login?: unknown } | undefined;
+    if (!apiKeyAuth || typeof apiKeyAuth.login !== "function") {
+      throw new Error(`${provider.name} does not support API key login in Pi`);
+    }
+
+    let secretUses = 0;
+    await runtime.login(providerId, "api_key", {
+      prompt: async (prompt) => {
+        if (prompt.type === "secret" || prompt.type === "text" || prompt.type === "manual_code") {
+          secretUses += 1;
+          if (secretUses === 1) return key;
+          throw new Error(
+            `${provider.name} needs additional interactive steps not yet supported in desktop. Use the Pi CLI: /login ${providerId}`,
+          );
+        }
+        if (prompt.type === "select" && prompt.options?.[0]) {
+          // Prefer first option for multi-choice ambient setups (desktop simplification).
+          return prompt.options[0].id;
+        }
+        throw new Error(`Unsupported login prompt for ${provider.name}`);
+      },
+      notify: () => {
+        // API-key login is silent in desktop UI.
+      },
+    });
+
+    await this.syncModelsAfterAuthChange();
+    return { name: provider.name };
+  }
+
+  /** Remove a stored auth.json credential (same as /logout). Env vars are left alone. */
+  async logoutProvider(providerId: string): Promise<void> {
+    if (!providerId.trim()) throw new Error("Provider is required");
+    const runtime = await this.createAuthModelRuntime();
+    await runtime.logout(providerId);
+    await this.syncModelsAfterAuthChange();
+  }
+
+  /**
+   * Start an account (OAuth) login via Pi ModelRuntime.login (same as /login).
+   * Progress and interactive prompts are streamed to the renderer as
+   * `provider_login_event` events; the renderer answers prompts with
+   * answerAuthPrompt and may cancel with cancelProviderLogin.
+   */
+  async loginWithOAuth(providerId: string): Promise<{ name: string }> {
+    if (!providerId.trim()) throw new Error("Provider is required");
+
+    // Replace any in-flight login for the same provider.
+    this.abortOAuthLogin(providerId);
+
+    const controller = new AbortController();
+    const record = { controller, resolvers: new Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }>() };
+    this.oauthLogins.set(providerId, record);
+
+    try {
+      const runtime = await this.createAuthModelRuntime();
+      const provider = runtime.getProvider(providerId);
+      if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+      const oauth = provider.auth?.oauth as { login?: (interaction: unknown) => Promise<unknown> } | undefined;
+      if (!oauth || typeof oauth.login !== "function") {
+        throw new Error(`${provider.name} does not support account login in Pi`);
+      }
+
+      const credential = await runtime.login(providerId, "oauth", {
+        signal: controller.signal,
+        prompt: (prompt) => this.handleOAuthPrompt(providerId, record, prompt),
+        notify: (event) => this.handleOAuthNotify(providerId, event),
+      });
+      const name =
+        typeof credential === "object" && credential !== null && "name" in credential
+          ? String((credential as unknown as { name: unknown }).name)
+          : provider.name;
+      this.emit("provider_login_event", { providerId, event: { type: "done", name } });
+      await this.syncModelsAfterAuthChange();
+      return { name };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Skip the error event when cancelled from a newer login replacing this one.
+      if (this.oauthLogins.get(providerId) === record) {
+        this.emit("provider_login_event", { providerId, event: { type: "error", message } });
+      }
+      throw error;
+    } finally {
+      this.finishOAuthLogin(providerId, record);
+    }
+  }
+
+  /** Answer a pending interactive prompt surfaced during an account login. */
+  async answerAuthPrompt(promptId: string, answer: string): Promise<void> {
+    const resolver = this.promptResolvers.get(promptId);
+    if (!resolver) throw new Error(`Unknown auth prompt: ${promptId}`);
+    resolver.resolve(answer);
+  }
+
+  /** Cancel an in-flight account login for a provider. */
+  async cancelProviderLogin(providerId: string): Promise<void> {
+    if (!providerId.trim()) return;
+    this.abortOAuthLogin(providerId);
+  }
+
+  /** Abort a login's controller; pending prompts reject with "Login cancelled". */
+  private abortOAuthLogin(providerId: string): void {
+    const record = this.oauthLogins.get(providerId);
+    if (!record) return;
+    record.controller.abort();
+    for (const { reject } of record.resolvers.values()) {
+      reject(new Error("Login cancelled"));
+    }
+    record.resolvers.clear();
+    // Let loginWithOAuth's finally/finishOAuthLogin remove the record.
+  }
+
+  /** Terminal cleanup: reject leftovers, drop the record from the maps. */
+  private finishOAuthLogin(
+    providerId: string,
+    record: { controller: AbortController; resolvers: Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }> },
+  ): void {
+    for (const { reject } of record.resolvers.values()) {
+      reject(new Error("Login cancelled"));
+    }
+    record.resolvers.clear();
+    if (this.oauthLogins.get(providerId) === record) {
+      this.oauthLogins.delete(providerId);
+    }
+  }
+
+  /**
+   * Surface a login prompt to the renderer and wait for the answer.
+   * Races the answer against the login's cancel signal and the prompt's own
+   * signal (used by Pi for out-of-band completion, e.g. a manual_code prompt
+   * raced against a local callback server).
+   */
+  private async handleOAuthPrompt(
+    providerId: string,
+    record: { controller: AbortController; resolvers: Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }> },
+    prompt: { type: string; message?: string; placeholder?: string; options?: ReadonlyArray<{ id: string; label: string; description?: string }>; signal?: AbortSignal },
+  ): Promise<string> {
+    this.promptCounter += 1;
+    const promptId = `login-${this.promptCounter}`;
+    let resolve!: (value: string) => void;
+    let reject!: (error: Error) => void;
+    const answer = new Promise<string>((res, rej) => { resolve = res; reject = rej; });
+    const resolver = { resolve, reject };
+    record.resolvers.set(promptId, resolver);
+    this.promptResolvers.set(promptId, resolver);
+
+    const outgoing: ProviderLoginPrompt = {
+      promptId,
+      type: prompt.type as ProviderLoginPrompt["type"],
+      message: prompt.message ?? "",
+      ...(prompt.placeholder !== undefined ? { placeholder: prompt.placeholder } : {}),
+      ...(prompt.options && prompt.options.length > 0 ? { options: prompt.options.map((option) => ({ id: option.id, label: option.label, ...(option.description !== undefined ? { description: option.description } : {}) })) } : {}),
+    };
+    this.emit("provider_login_event", { providerId, event: { type: "prompt", prompt: outgoing } });
+
+    const onAbort = () => reject(new Error("Login cancelled"));
+    record.controller.signal.addEventListener("abort", onAbort, { once: true });
+    prompt.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await answer;
+    } finally {
+      record.controller.signal.removeEventListener("abort", onAbort);
+      prompt.signal?.removeEventListener("abort", onAbort);
+      record.resolvers.delete(promptId);
+      this.promptResolvers.delete(promptId);
+    }
+  }
+
+  /** Stream auth progress to the renderer; auto-open browser for URLs. */
+  private handleOAuthNotify(providerId: string, event: unknown): void {
+    const normalized = normalizeAuthEvent(event);
+    if (!normalized) return;
+    if (normalized.type === "auth_url") {
+      this.openExternal?.(normalized.url);
+    } else if (normalized.type === "device_code") {
+      this.openExternal?.(normalized.verificationUri);
+    }
+    this.emit("provider_login_event", { providerId, event: normalized });
+  }
+
+  /**
+   * Rename a session file. Works for the active session and for other listed sessions.
+   * Mirrors Pi CLI's renameSession (append session_info entry).
+   */
+  async renameSession(sessionPath: string, name: string): Promise<{ name: string }> {
+    const next = name.replace(/[\r\n]+/g, " ").trim();
+    if (!next) throw new Error("Session name is required");
+
+    const activePath = this.runtime?.session.sessionFile ?? this.runtime?.session.sessionManager?.getSessionFile?.();
+    const isActive =
+      Boolean(activePath) &&
+      Boolean(sessionPath) &&
+      resolvePathsEqual(activePath!, sessionPath);
+
+    if (isActive && this.runtime?.session.setSessionName) {
+      this.runtime.session.setSessionName(next);
+      const resolved = this.resolveDisplayName(this.runtime.session);
+      this.emit("session_name_changed", {
+        name: resolved,
+        sessionId: this.runtime.session.sessionId,
+        sessionFile: activePath,
+      });
+      return { name: resolved };
+    }
+
+    const manager = SessionManager.open(sessionPath);
+    manager.appendSessionInfo(next);
+    const resolved = manager.getSessionName() ?? next;
+    this.emit("session_name_changed", {
+      name: resolved,
+      sessionId: manager.getSessionId?.() ?? "",
+      sessionFile: sessionPath,
+    });
+    return { name: resolved };
+  }
+
+  async deleteSession(sessionPath: string): Promise<{ sessionPath: string }> {
+    const matching = this.findSlotBySessionFile(sessionPath);
+    if (matching) {
+      await this.disposeSlot(matching.key);
+    }
+    await deleteSessionFile(sessionPath);
+    this.emitLiveSessionsChanged();
+    return { sessionPath };
+  }
+
+  getSessionContext(sessionPath: string): { name: string; context: string } {
+    return getSessionContext(sessionPath);
+  }
+
+  async dispose(): Promise<void> {
+    await this.disposeAllRuntimes();
+    this.listeners.clear();
+  }
+
+  emitIndexStatus(status: IndexStatus, cwd: string): void {
+    this.emit("index_status_changed", { status, cwd });
+  }
+
+  private attachRuntime(key: SessionKey, runtime: PiRuntimeLike): void {
+    // Replace same key if present
+    const existing = this.slots.get(key);
+    if (existing) {
+      existing.unsubscribe?.();
+      void existing.runtime.dispose();
+      this.slots.delete(key);
+    }
+
+    const slot: RuntimeSlot = {
+      key,
+      runtime,
+      sessionTodos: [],
+      todoRevision: 0,
+      sessionGeneration: 0,
+      status: "idle",
+      pendingFileMutations: new Map(),
+      completedFileMutations: new Map(),
+    };
+
+    const bindSession = (session: PiSessionLike, announce = true): void => {
+      slot.unsubscribe?.();
+      const generation = ++slot.sessionGeneration;
+      slot.unsubscribe = session.subscribe((event) => {
+        if (slot.sessionGeneration !== generation) return;
+        this.handleSessionEvent(slot, event);
+      });
+      slot.assistantMessageId = undefined;
+      slot.thinkingMessageId = undefined;
+      slot.pendingFileMutations.clear();
+      slot.completedFileMutations.clear();
+      slot.todoRevision = 0;
+      this.hydrateSessionTodos(slot, session);
+      if (!announce) return;
+      this.emit(
+        "session_started",
+        {
+          sessionId: session.sessionId,
+          cwd: slot.runtime.cwd ?? this.workspaceCwd ?? "",
+          sessionName: this.resolveDisplayName(session),
+          model: this.modelName(session),
+          thinkingLevel: session.thinkingLevel as ThinkingLevel,
+        },
+        undefined,
+        slot.key,
+      );
+      if (slot.sessionTodos.length > 0) {
+        this.emit(
+          "todos_updated",
+          { todos: slot.sessionTodos, revision: slot.todoRevision },
+          undefined,
+          slot.key,
+        );
+      }
+    };
+
+    // The public start() event is the single initial session_started event.
+    // Re-emitting it here used to reset restored todos back to an empty list.
+    bindSession(runtime.session, false);
+    this.slots.set(key, slot);
+    const runtimeWithRebind = runtime as PiRuntimeLike & {
+      setRebindSession?: (callback: (session: PiSessionLike) => Promise<void>) => void;
+    };
+    runtimeWithRebind.setRebindSession?.(async (session) => bindSession(session));
+  }
+
+  private async createSdkRuntime(options: { cwd: string; sessionPath?: string }): Promise<PiRuntimeLike> {
+    const sessionManager = options.sessionPath
+      ? SessionManager.open(options.sessionPath, undefined, options.cwd)
+      : SessionManager.create(options.cwd);
+    const createRuntime = async ({ cwd, agentDir, sessionManager: manager, sessionStartEvent }: { cwd: string; agentDir: string; sessionManager: SessionManager; sessionStartEvent?: unknown }) => {
+      const services = await createAgentSessionServices({
+        cwd,
+        agentDir,
+        // Default workspace capability: OpenCode-style session todos.
+        resourceLoaderOptions: {
+          extensionFactories: [
+            {
+              name: "session-todo",
+              factory: (pi) =>
+                sessionTodoExtension(pi, (todos, sessionManager) =>
+                  this.applyTodosFromBranch(todos, sessionManager),
+                ),
+            },
+            // MCP support: runs pi-mcp-adapter in file-merge mode (standard
+            // mcp.json files are the single source of truth) and forwards its
+            // status snapshots to PiHost for the renderer.
+            { name: "mcp", factory: createMcpBridgeFactory((snapshot) => this.applyMcpStatus(snapshot)) },
+            ...(this.httpWorkbench
+              ? [{ name: "http-workbench", factory: (pi: ExtensionAPI) => registerHttpWorkbenchTools(pi, this.httpWorkbench!) }]
+              : []),
+          ],
+        },
+      });
+      // No `tools` allowlist: SDK treats it as an exclusive whitelist that
+      // hides every extension tool (e.g. pi-package code index). Activate
+      // all registered tools explicitly so built-in grep/find/ls (which the
+      // SDK does not enable by default) and extension tools both surface.
+      const result = await createAgentSessionFromServices({
+        services,
+        sessionManager: manager,
+        sessionStartEvent: sessionStartEvent as never,
+      });
+      result.session.setActiveToolsByName(result.session.getAllTools().map((tool) => tool.name));
+      return { ...result, services, diagnostics: services.diagnostics };
+    };
+    return createAgentSessionRuntime(createRuntime, {
+      cwd: options.cwd,
+      agentDir: this.agentDir,
+      sessionManager,
+    }) as unknown as Promise<PiRuntimeLike>;
+  }
+
+  /**
+   * Merge a pi-mcp-adapter status snapshot into the workspace-global view and
+   * broadcast it to the renderer. Called from the `mcp` extension factory
+   * (possibly before a runtime slot attaches), so the view is intentionally
+   * workspace-scoped rather than per-slot.
+   */
+  private applyMcpStatus(snapshot: McpStatusSnapshot): void {
+    const view: McpStatusSnapshotView = {
+      version: snapshot.version,
+      servers: snapshot.servers.map((server) => ({
+        name: server.name,
+        status: server.status,
+        toolCount: server.toolCount,
+        ...(server.failedAgoSeconds !== undefined ? { failedAgoSeconds: server.failedAgoSeconds } : {}),
+        disabled: server.disabled,
+      })),
+      totalTools: snapshot.totalTools,
+      connectedCount: snapshot.connectedCount,
+      disabledCount: snapshot.disabledCount,
+    };
+    this.mcpStatus = view;
+    this.emit("mcp_status_updated", view);
+  }
+
+  /** Workspace root for config operations: last started/opened folder wins. */
+  private mcpConfigCwd(cwd?: string): string | undefined {
+    return cwd ?? this.workspaceCwd ?? this.runtime?.session.cwd;
+  }
+
+  async getMcpConfig(cwd?: string): Promise<McpConfigView> {
+    const dir = this.mcpConfigCwd(cwd);
+    if (!dir) return { cwd: "", sources: [], servers: [] };
+    const { sources, mergedServers } = readMcpConfigs(dir);
+    return {
+      cwd: dir,
+      sources: sources.map((source) => ({
+        path: source.path,
+        exists: source.exists,
+        serverCount: Object.keys(source.servers).length,
+      })),
+      servers: Object.entries(mergedServers).map(([name, entry]) => {
+        const definers = sources.filter((source) => source.servers[name] !== undefined);
+        const source = definers.length > 0 ? definers[definers.length - 1].path : "";
+        return { name, disabled: entry.disabled === true, source };
+      }),
+    };
+  }
+
+  async setMcpServerEnabled(name: string, enabled: boolean): Promise<{ changed: boolean; path: string }> {
+    const dir = this.mcpConfigCwd();
+    if (!dir) throw new Error("No workspace open");
+    const result = setMcpServerDisabled(dir, name, enabled);
+    if (result.changed && this.runtime) {
+      // Rebuild the runtime so pi-mcp-adapter re-reads the merged config.
+      await this.reload();
+    }
+    return result;
+  }
+
+  async importCursorMcp(): Promise<{ imported: string[]; skipped: string[] }> {
+    const dir = this.mcpConfigCwd();
+    if (!dir) throw new Error("No workspace open");
+    const result = importCursorMcpConfig(dir);
+    if (result.imported.length > 0 && this.runtime) {
+      await this.reload();
+    }
+    return result;
+  }
+
+  async openMcpConfigFile(cwd?: string): Promise<string | undefined> {
+    const dir = this.mcpConfigCwd(cwd);
+    if (!dir) return undefined;
+    return projectMcpOverridePath(dir);
+  }
+
+  /** Rebuild mirrored todos from live messages or session manager context. */
+  private hydrateSessionTodos(slot: RuntimeSlot, session?: PiSessionLike): void {
+    let messages = (session?.messages ?? []) as unknown[];
+    if (messages.length === 0) {
+      messages = (session?.sessionManager?.buildSessionContext?.().messages ?? []) as unknown[];
+    }
+    slot.sessionTodos = reconstructTodosFromMessages(messages);
+  }
+
+  private applyTodosFromBranch(todos: SessionTodoItem[], sessionManager: unknown): void {
+    const slot = [...this.slots.values()].find(
+      (candidate) => candidate.runtime.session.sessionManager === sessionManager,
+    );
+    if (!slot) return;
+    slot.sessionTodos = todos;
+    slot.todoRevision += 1;
+    this.emit(
+      "todos_updated",
+      { todos: slot.sessionTodos, revision: slot.todoRevision },
+      undefined,
+      slot.key,
+    );
+  }
+
+  private applyTodosFromToolResult(
+    slot: RuntimeSlot,
+    toolName: string | undefined,
+    result: unknown,
+    isError: boolean,
+  ): void {
+    if (!toolName || !isTodoToolName(toolName) || isError) return;
+    const todos = todosFromToolResult(result);
+    if (!todos) return;
+    slot.sessionTodos = todos;
+    slot.todoRevision += 1;
+    this.emit(
+      "todos_updated",
+      { todos: slot.sessionTodos, revision: slot.todoRevision },
+      undefined,
+      slot.key,
+    );
+  }
+
+  private handleSessionEvent(slot: RuntimeSlot, raw: unknown): void {
+    const event = raw as {
+      type?: string;
+      message?: { role?: string; id?: string; content?: unknown };
+      assistantMessageEvent?: { type?: string; delta?: string };
+      toolCallId?: string;
+      toolName?: string;
+      args?: unknown;
+      partialResult?: unknown;
+      result?: unknown;
+      isError?: boolean;
+      steering?: readonly string[];
+      followUp?: readonly string[];
+      level?: ThinkingLevel;
+      name?: string;
+      provider?: unknown;
+      summary?: unknown;
+    };
+    const key = slot.key;
+    switch (event.type) {
+      case "message_start": {
+        const messageId = event.message?.id ?? this.nextId("assistant");
+        if (event.message?.role === "assistant") {
+          slot.assistantMessageId = messageId;
+          this.emit("assistant_message_started", { messageId }, raw, key);
+        } else if (event.message?.role === "user") {
+          this.emit(
+            "user_message_created",
+            { messageId, content: this.messageText(event.message) },
+            raw,
+            key,
+          );
+        }
+        break;
+      }
+      case "message_update": {
+        const update = event.assistantMessageEvent;
+        if (!update) break;
+        if (update.type === "text_delta" && update.delta) {
+          this.emit(
+            "assistant_message_delta",
+            { messageId: slot.assistantMessageId ?? this.nextId("assistant"), delta: update.delta },
+            raw,
+            key,
+          );
+        }
+        if (update.type === "thinking_start") {
+          slot.thinkingMessageId = this.nextId("thinking");
+          this.emit("thinking_started", { messageId: slot.thinkingMessageId }, raw, key);
+        }
+        if (update.type === "thinking_delta" && update.delta) {
+          this.emit(
+            "thinking_delta",
+            { messageId: slot.thinkingMessageId ?? this.nextId("thinking"), delta: update.delta },
+            raw,
+            key,
+          );
+        }
+        if (update.type === "thinking_end" && slot.thinkingMessageId) {
+          this.emit("thinking_completed", { messageId: slot.thinkingMessageId }, raw, key);
+        }
+        break;
+      }
+      case "message_end":
+        if (event.message?.role === "assistant" && slot.assistantMessageId) {
+          this.emit("assistant_message_completed", { messageId: slot.assistantMessageId }, raw, key);
+        }
+        break;
+      case "tool_execution_start":
+        this.trackFileMutationStart(slot, event.toolCallId, event.toolName, event.args);
+        this.emit(
+          "tool_call_started",
+          {
+            toolCallId: event.toolCallId ?? this.nextId("tool"),
+            toolName: event.toolName ?? "tool",
+            input: this.stringify(event.args),
+          },
+          raw,
+          key,
+        );
+        break;
+      case "tool_execution_update":
+        if (event.toolCallId) {
+          this.emit(
+            "tool_call_delta",
+            { toolCallId: event.toolCallId, delta: this.stringify(event.partialResult) },
+            raw,
+            key,
+          );
+        }
+        break;
+      case "tool_execution_end":
+        const change = this.finishFileMutation(slot, event.toolCallId, Boolean(event.isError));
+        if (event.toolCallId) {
+          this.emit(
+            "tool_call_completed",
+            {
+              toolCallId: event.toolCallId,
+              result: this.stringify(event.result),
+              isError: Boolean(event.isError),
+              ...(change ? { change } : {}),
+            },
+            raw,
+            key,
+          );
+        }
+        this.applyTodosFromToolResult(slot, event.toolName, event.result, Boolean(event.isError));
+        break;
+      case "session_tree":
+        // Branch navigation changes the effective message history. The todo
+        // extension rebuilds its own state on this event; mirror that branch
+        // after the extension handlers have finished.
+        this.hydrateSessionTodos(slot, slot.runtime.session);
+        slot.todoRevision += 1;
+        this.emit(
+          "todos_updated",
+          { todos: slot.sessionTodos, revision: slot.todoRevision },
+          undefined,
+          key,
+        );
+        break;
+      case "queue_update":
+        this.emit(
+          "queue_updated",
+          { steering: [...(event.steering ?? [])], followUp: [...(event.followUp ?? [])] },
+          raw,
+          key,
+        );
+        break;
+      case "thinking_level_changed":
+        if (event.level) this.emit("thinking_level_changed", { level: event.level }, raw, key);
+        break;
+      case "agent_end":
+        slot.status = "completed";
+        this.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
+        this.emit(
+          "session_completed",
+          {
+            sessionId: slot.runtime.session.sessionId,
+            sessionName: this.resolveDisplayName(slot.runtime.session),
+          },
+          raw,
+          key,
+        );
+        this.emitLiveSessionsChanged();
+        break;
+      case "session_info_changed": {
+        const session = slot.runtime.session;
+        const name =
+          (event.name ?? session?.sessionName ?? "").trim() || this.resolveDisplayName(session);
+        this.emit(
+          "session_name_changed",
+          {
+            name,
+            sessionId: session?.sessionId ?? "",
+            sessionFile: session?.sessionFile,
+          },
+          raw,
+          key,
+        );
+        break;
+      }
+      case "agent_start":
+        slot.status = "running";
+        this.emit("agent_started", {}, raw, key);
+        this.emitLiveSessionsChanged();
+        break;
+      case "turn_start":
+        slot.status = "running";
+        this.emit("turn_started", {}, raw, key);
+        this.emitLiveSessionsChanged();
+        break;
+      case "turn_end":
+        slot.status = "idle";
+        this.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
+        this.emit("turn_completed", {}, raw, key);
+        this.emitLiveSessionsChanged();
+        break;
+      case "compaction_start":
+        this.emit("compaction_started", {}, raw, key);
+        break;
+      case "compaction_end":
+        this.emit(
+          "compaction_completed",
+          {
+            summary:
+              event.result && typeof event.result === "object" && "summary" in event.result
+                ? String((event.result as { summary?: unknown }).summary ?? "") || undefined
+                : undefined,
+          },
+          raw,
+          key,
+        );
+        break;
+      case "auto_retry_start":
+        this.emit("auto_retry_started", {}, raw, key);
+        break;
+      case "auto_retry_end":
+        this.emit("auto_retry_completed", {}, raw, key);
+        break;
+      case "model_select":
+        if (event.name) {
+          this.emit(
+            "model_select",
+            { model: event.name, provider: event.provider ? String(event.provider) : undefined },
+            raw,
+            key,
+          );
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  private trackFileMutationStart(slot: RuntimeSlot, toolCallId: string | undefined, toolName: string | undefined, args: unknown): void {
+    if (!toolCallId || !toolName) return;
+    const rawPath = filePathFromToolArgs(toolName, args);
+    if (!rawPath) return;
+    const absolutePath = resolve(slot.runtime.cwd, rawPath);
+    slot.pendingFileMutations.set(toolCallId, {
+      path: relative(slot.runtime.cwd, absolutePath).replace(/\\/g, "/") || rawPath,
+      absolutePath,
+      before: this.readTextFile(absolutePath),
+    });
+  }
+
+  private finishFileMutation(slot: RuntimeSlot, toolCallId: string | undefined, isError: boolean): FileChangeSummary | undefined {
+    if (!toolCallId) return undefined;
+    const mutation = slot.pendingFileMutations.get(toolCallId);
+    slot.pendingFileMutations.delete(toolCallId);
+    if (!mutation || isError) return undefined;
+    const after = this.readTextFile(mutation.absolutePath);
+    const change = createFileChangeSummary(mutation.path, mutation.before, after);
+    if (change) {
+      const previous = slot.completedFileMutations.get(mutation.path);
+      slot.completedFileMutations.set(mutation.path, {
+        path: mutation.path,
+        absolutePath: mutation.absolutePath,
+        before: previous?.before ?? mutation.before,
+        after,
+      });
+    }
+    return change;
+  }
+
+  private readTextFile(path: string): string | undefined {
+    try {
+      return readFileSync(path, "utf8");
+    } catch {
+      return undefined;
+    }
+  }
+
+  private emit<T extends PiEvent["type"]>(
+    type: T,
+    payload: Extract<PiEvent, { type: T }>["payload"],
+    raw?: unknown,
+    sessionKey?: SessionKey,
+  ): void {
+    const key = sessionKey ?? this.foregroundKey;
+    const slot = key ? this.slots.get(key) : this.getSlot();
+    const event = {
+      eventId: this.nextId(type),
+      workspaceId: this.workspaceId,
+      sessionId: slot?.runtime.session.sessionId ?? this.runtime?.session.sessionId,
+      sessionKey: key ?? slot?.key,
+      timestamp: new Date().toISOString(),
+      sequence: this.sequence,
+      type,
+      payload,
+      raw,
+    } as PiEvent;
+    this.listeners.forEach((listener) => listener(event));
+  }
+
+  private emitLiveSessionsChanged(): void {
+    this.emit("live_sessions_changed", { sessions: this.listLiveSessions() });
+  }
+
+  private nextId(prefix: string): string {
+    this.sequence += 1;
+    return `${prefix}-${this.sequence}`;
+  }
+
+  private requireSlot(sessionKey?: SessionKey): RuntimeSlot {
+    const slot = this.getSlot(sessionKey);
+    if (!slot) throw new Error("Pi runtime has not been started");
+    return slot;
+  }
+
+  private requireRuntime(): PiRuntimeLike {
+    return this.requireSlot().runtime;
+  }
+
+  private requireSession(): PiSessionLike {
+    return this.requireRuntime().session;
+  }
+
+  private async disposeSlot(key: SessionKey): Promise<void> {
+    const slot = this.slots.get(key);
+    if (!slot) return;
+    slot.unsubscribe?.();
+    try {
+      await slot.runtime.session.abort();
+    } catch {
+      // ignore
+    }
+    try {
+      await slot.runtime.dispose();
+    } catch {
+      // ignore
+    }
+    this.slots.delete(key);
+    if (this.foregroundKey === key) {
+      this.foregroundKey = this.slots.keys().next().value;
+    }
+  }
+
+  private async disposeAllRuntimes(): Promise<void> {
+    const keys = [...this.slots.keys()];
+    for (const key of keys) {
+      await this.disposeSlot(key);
+    }
+    this.foregroundKey = undefined;
+  }
+
+  /** @deprecated use disposeAllRuntimes / disposeSlot */
+  private async disposeRuntime(): Promise<void> {
+    await this.disposeAllRuntimes();
+  }
+
+  /**
+   * Dedicated ModelRuntime for Settings → Providers (/login /logout).
+   * Always reads the same agent auth.json as the CLI, independent of whether
+   * a chat session is currently running.
+   */
+  private async createAuthModelRuntime(): Promise<ModelRuntime> {
+    if (this.authRuntimeFactory) return this.authRuntimeFactory();
+    return ModelRuntime.create({
+      authPath: join(this.agentDir, "auth.json"),
+      // null → skip custom models.json overlays; still loads built-in providers.
+      modelsPath: null,
+      allowModelNetwork: false,
+    });
+  }
+
+  private async syncModelsAfterAuthChange(): Promise<void> {
+    const live = this.runtime?.session.modelRuntime;
+    if (live?.refresh) {
+      try {
+        await live.refresh({ allowNetwork: false });
+      } catch {
+        // ignore refresh errors; getAvailable below still runs
+      }
+    } else if (live?.getAvailable) {
+      try {
+        await live.getAvailable();
+      } catch {
+        // ignore
+      }
+    }
+    await this.refreshAvailableModels();
+  }
+
+  private modelName(session: PiSessionLike): string {
+    if (!session.model) return "";
+    if (session.model.provider) return `${session.model.provider}/${session.model.id ?? "unknown"}`;
+    return session.model.id ?? "";
+  }
+
+  /** Match sidebar catalog naming: explicit name → first user message → Untitled. */
+  private resolveDisplayName(session?: PiSessionLike): string {
+    if (!session) return "Untitled session";
+    const explicit =
+      session.sessionName?.trim() ||
+      session.sessionManager?.getSessionName?.()?.trim() ||
+      "";
+    let firstMessage = "";
+    for (const message of session.messages ?? []) {
+      const msg = message as { role?: string; content?: unknown };
+      if (msg.role !== "user") continue;
+      const text = this.messageText(msg).trim();
+      if (text) {
+        firstMessage = text;
+        break;
+      }
+    }
+    return resolveSessionDisplayName({ name: explicit || undefined, firstMessage });
+  }
+
+  private messageText(message: { role?: string; id?: string; content?: unknown }): string {
+    if (typeof message.content === "string") return message.content;
+    if (Array.isArray(message.content)) {
+      return message.content
+        .map((part) => {
+          if (typeof part === "string") return part;
+          if (typeof part !== "object" || part === null) return "";
+          const record = part as { type?: string; text?: unknown; thinking?: unknown; content?: unknown };
+          if (record.type === "thinking") return "";
+          if (record.type === "toolCall" || record.type === "tool_use" || record.type === "functionCall") return "";
+          if (record.type === "text" || "text" in record) return String(record.text ?? "");
+          if (typeof record.content === "string") return record.content;
+          return "";
+        })
+        .join("");
+    }
+    if (message.content && typeof message.content === "object") {
+      return this.stringify(message.content);
+    }
+    return "";
+  }
+
+  /** Rebuild the chat timeline from persisted Pi session messages (for open/resume). */
+  private hydrateTimeline(): TimelineItem[] {
+    const session = this.runtime?.session;
+    // Prefer live agent messages; fall back to session manager context if empty.
+    let messages = (session?.messages ?? []) as Array<Record<string, unknown>>;
+    if (messages.length === 0) {
+      const manager = session?.sessionManager as { buildSessionContext?: () => { messages?: unknown[] } } | undefined;
+      messages = (manager?.buildSessionContext?.().messages ?? []) as Array<Record<string, unknown>>;
+    }
+
+    const items: TimelineItem[] = [];
+    const toolPaths = new Map<string, string>();
+    for (const [index, raw] of messages.entries()) {
+      const message = raw as {
+        role?: string;
+        id?: string;
+        content?: unknown;
+        toolCallId?: string;
+        toolName?: string;
+        isError?: boolean;
+        details?: unknown;
+        command?: string;
+        output?: string;
+        exitCode?: number;
+      };
+      const baseId = message.id ?? `hist-${index}`;
+      const role = message.role ?? "";
+
+      if (role === "user") {
+        const content = this.messageText(message);
+        if (content.trim()) items.push({ id: baseId, kind: "user", content, status: "completed" });
+        continue;
+      }
+
+      if (role === "assistant") {
+        const thinking = this.messageThinking(message);
+        if (thinking.trim()) {
+          items.push({ id: `${baseId}-thinking`, kind: "thinking", content: thinking, status: "completed" });
+        }
+        const content = this.messageText(message);
+        if (content.trim()) {
+          items.push({ id: baseId, kind: "assistant", content, status: "completed" });
+        }
+        for (const tool of this.messageToolCalls(message, baseId)) {
+          const path = filePathFromToolInput(tool.name, tool.input);
+          items.push({
+            id: tool.id,
+            kind: "tool",
+            toolCallId: tool.id,
+            toolName: tool.name,
+            input: tool.input,
+            status: "completed",
+          });
+          if (path) toolPaths.set(tool.id, path);
+        }
+        continue;
+      }
+
+      if (role === "toolResult" || role === "tool") {
+        const path = toolPaths.get(message.toolCallId ?? baseId);
+        const details = message.details as { patch?: unknown } | undefined;
+        const change = path && typeof details?.patch === "string"
+          ? createFileChangeSummaryFromPatch(path, details.patch)
+          : undefined;
+        items.push({
+          id: baseId,
+          kind: "tool",
+          toolCallId: message.toolCallId ?? baseId,
+          toolName: message.toolName ?? "tool",
+          input: "",
+          output: this.messageText(message) || this.stringify(message.content),
+          status: message.isError ? "error" : "completed",
+          ...(change ? { change } : {}),
+        });
+        continue;
+      }
+
+      if (role === "bashExecution") {
+        items.push({
+          id: baseId,
+          kind: "tool",
+          toolCallId: baseId,
+          toolName: "bash",
+          input: message.command ?? "",
+          output: message.output ?? "",
+          status: message.exitCode && message.exitCode !== 0 ? "error" : "completed",
+        });
+      }
+    }
+
+    return items;
+  }
+
+  private hydrateToolCalls(): Record<string, ToolCallState> {
+    const toolCalls: Record<string, ToolCallState> = {};
+    for (const item of this.hydrateTimeline()) {
+      if (item.kind !== "tool") continue;
+      toolCalls[item.toolCallId] = {
+        id: item.toolCallId,
+        toolName: item.toolName,
+        input: item.input,
+        output: item.output,
+        status: item.status === "error" ? "error" : "completed",
+      };
+    }
+    return toolCalls;
+  }
+
+  private messageThinking(message: { content?: unknown }): string {
+    if (!Array.isArray(message.content)) return "";
+    return message.content
+      .map((part) => {
+        if (typeof part !== "object" || part === null) return "";
+        const record = part as { type?: string; thinking?: unknown; text?: unknown };
+        if (record.type === "thinking") return String(record.thinking ?? record.text ?? "");
+        return "";
+      })
+      .join("");
+  }
+
+  private messageToolCalls(message: { content?: unknown }, baseId: string): Array<{ id: string; name: string; input: string }> {
+    if (!Array.isArray(message.content)) return [];
+    return message.content.flatMap((part, index) => {
+      if (typeof part !== "object" || part === null) return [];
+      const record = part as { type?: string; id?: string; toolCallId?: string; name?: string; toolName?: string; arguments?: unknown; input?: unknown; args?: unknown };
+      if (record.type !== "toolCall" && record.type !== "tool_use" && record.type !== "functionCall") return [];
+      return [{
+        id: record.id ?? record.toolCallId ?? `${baseId}-tool-${index}`,
+        name: record.name ?? record.toolName ?? "tool",
+        input: this.stringify(record.arguments ?? record.input ?? record.args ?? {}),
+      }];
+    });
+  }
+
+  private stringify(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (value === undefined) return "";
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  }
+
+  private async copyToClipboard(text: string): Promise<void> {
+    if (this.clipboardWriter) {
+      this.clipboardWriter(text);
+      return;
+    }
+    try {
+      const { clipboard } = await import("electron");
+      clipboard.writeText(text);
+    } catch {
+      // Non-Electron test environment: no-op
+    }
+  }
+}
+
+function resolvePathsEqual(left: string, right: string): boolean {
+  try {
+    return resolve(left) === resolve(right);
+  } catch {
+    return left === right;
+  }
+}
+
+function normalizeAuthSource(source: string): ProviderAuthStatus["source"] {
+  if (source === "stored" || source === "environment" || source === "runtime" || source === "none") {
+    return source;
+  }
+  // configuredRequestAuthStatus may return other labels; treat as environment-like ambient.
+  if (source.includes("env") || source.includes("API") || source.includes("KEY")) return "environment";
+  return "environment";
+}
+
+/** Normalize a Pi AuthEvent into the renderer-safe ProviderLoginEvent shape. */
+function normalizeAuthEvent(event: unknown): ProviderLoginEvent | undefined {
+  if (typeof event !== "object" || event === null) return undefined;
+  const record = event as { type?: unknown };
+  switch (record.type) {
+    case "auth_url": {
+      const { url, instructions } = event as { url: unknown; instructions?: unknown };
+      if (typeof url !== "string") return undefined;
+      return { type: "auth_url", url, ...(typeof instructions === "string" ? { instructions } : {}) };
+    }
+    case "device_code": {
+      const { userCode, verificationUri, intervalSeconds, expiresInSeconds } = event as { userCode: unknown; verificationUri: unknown; intervalSeconds?: unknown; expiresInSeconds?: unknown };
+      if (typeof userCode !== "string" || typeof verificationUri !== "string") return undefined;
+      return {
+        type: "device_code",
+        userCode,
+        verificationUri,
+        ...(typeof intervalSeconds === "number" ? { intervalSeconds } : {}),
+        ...(typeof expiresInSeconds === "number" ? { expiresInSeconds } : {}),
+      };
+    }
+    case "info": {
+      const { message, links } = event as { message: unknown; links?: unknown };
+      if (typeof message !== "string") return undefined;
+      const normalizedLinks = Array.isArray(links)
+        ? links
+            .filter((link): link is { url: unknown; label?: unknown } => typeof link === "object" && link !== null && typeof (link as { url?: unknown }).url === "string")
+            .map((link) => ({ url: link.url as string, ...(typeof link.label === "string" ? { label: link.label } : {}) }))
+        : undefined;
+      return { type: "info", message, ...(normalizedLinks && normalizedLinks.length > 0 ? { links: normalizedLinks } : {}) };
+    }
+    case "progress": {
+      const { message } = event as { message: unknown };
+      if (typeof message !== "string") return undefined;
+      return { type: "progress", message };
+    }
+    default:
+      return undefined;
+  }
+}
