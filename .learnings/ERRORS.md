@@ -141,3 +141,59 @@ Use the catalog mapping for each skill independently.
 - Related Files: none
 
 ---
+
+## [ERR-20260809-001] github_skill_read_command
+
+**Logged**: 2026-08-09T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: config
+
+### Summary
+The first attempt to read the GitHub skill file failed due to malformed shell quoting.
+
+### Error
+```text
+zsh:1: unmatched '
+```
+
+### Context
+- Attempted to read the GitHub skill before verifying the corrected repository.
+- The failure was caused by the command string, not by the skill file or repository.
+
+### Suggested Fix
+Use consistent quoting or double-quote the absolute skill path when invoking `sed`.
+
+### Metadata
+- Reproducible: no
+- Related Files: none
+
+---
+
+## [ERR-20260809-002] commit_tool_call_syntax
+
+**Logged**: 2026-08-09T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: config
+
+### Summary
+The first commit invocation failed before execution because the tool orchestration object was missing a comma.
+
+### Error
+```text
+SyntaxError: Unexpected identifier 'max_output_tokens'
+```
+
+### Context
+- The intended command was `git commit -m "docs: rewrite README"`.
+- No Git operation ran and the staged files were unchanged.
+
+### Suggested Fix
+Validate JavaScript tool-call object syntax before invoking the command.
+
+### Metadata
+- Reproducible: no
+- Related Files: none
+
+---

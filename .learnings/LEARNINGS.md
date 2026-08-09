@@ -29,6 +29,29 @@ Map screenshot coordinates to the layout boundaries and verify the targeted CSS 
 
 ---
 
+## [LRN-20260809-005] correction
+
+**Logged**: 2026-08-09T00:00:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: docs
+
+### Summary
+When the user asks to push a README change directly, the final target is the requested remote branch, not an intermediate feature branch.
+
+### Details
+The README rewrite was committed and pushed to `codex/rewrite-readme`, then that remote branch was deleted, but the change was not fast-forwarded to `origin/main`. The user clarified that the README must land directly on the remote `main` branch without a pull request.
+
+### Suggested Action
+Before creating a feature branch for a direct-push request, verify the requested destination branch. If the user explicitly wants direct delivery to `main`, fast-forward or amend `main` and push it directly; do not create a PR unless asked.
+
+### Metadata
+- Source: user_feedback
+- Related Files: README.md
+- Tags: git, github, branch, direct-push
+
+---
+
 ## [LRN-20260809-001] correction
 
 **Logged**: 2026-08-09T00:00:00+08:00
@@ -163,5 +186,28 @@ Trace every session-open entry point, add an App-level regression test or equiva
 - Source: user_feedback
 - Related Files: src/renderer/App.tsx, src/renderer/state/sessionTabs.ts
 - Tags: tabs, preview-tab, regression, integration-test
+
+---
+
+## [LRN-20260809-004] correction
+
+**Logged**: 2026-08-09T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: docs
+
+### Summary
+The README comparison target named Resonix is `esengine/deepseek-reasonix`.
+
+### Details
+The initial repo search interpreted “Resonix” as unrelated repositories, including an AI agent named Resonix-AG. The user provided the exact repository URL, which should be treated as the source of truth for the README research.
+
+### Suggested Action
+When a product name is ambiguous, ask for or verify the exact repository URL before selecting comparison projects.
+
+### Metadata
+- Source: user_feedback
+- Related Files: README.md
+- Tags: github, readme, product-identification
 
 ---
