@@ -284,6 +284,21 @@ export function SettingsDialog({
     }
   };
 
+  const tabMeta: Record<SettingsTab, { title: string; subtitle: string }> = {
+    general: {
+      title: "General",
+      subtitle: "Choose your default model and interface behavior.",
+    },
+    providers: {
+      title: "Providers",
+      subtitle: "Connect the services that power your workspace.",
+    },
+    mcp: {
+      title: "MCP",
+      subtitle: "Manage project tools and Model Context Protocol servers.",
+    },
+  };
+
   if (!open) return null;
 
   return (
@@ -291,49 +306,82 @@ export function SettingsDialog({
       <div className="settings-dialog settings-dialog-wide" onClick={(event) => event.stopPropagation()}>
         <div className="settings-heading">
           <div>
-            <strong>Settings</strong>
-            <p className="settings-subtitle">Models, providers, and session defaults</p>
+            <span className="settings-heading-kicker">PI DESK / SETTINGS</span>
+            <span className="settings-heading-title">
+              <strong>{tabMeta[tab].title}</strong>
+              {tab === "providers" && (
+                <button
+                  type="button"
+                  className="settings-info-button settings-heading-info-button"
+                  aria-label="Provider credential details"
+                  title="Same as Pi /login and /logout. Credentials are saved to ~/.pi/agent/auth.json. Environment variables still work but cannot be removed here."
+                >
+                  <AppIcon name="circleHelp" size="sm" />
+                </button>
+              )}
+            </span>
+            <p className="settings-subtitle">{tabMeta[tab].subtitle}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close settings">
-            <AppIcon name="x" size="sm" />
-          </button>
         </div>
 
-        <div className="settings-tabs" role="tablist" aria-label="Settings sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "general"}
-            className={`settings-tab ${tab === "general" ? "active" : ""}`}
-            onClick={() => setTab("general")}
-          >
-            General
+        <div className="settings-tabs">
+          <button type="button" className="settings-back-button" onClick={onClose}>
+            <AppIcon name="chevronRight" size="sm" />
+            <span>Back to app</span>
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "providers"}
-            className={`settings-tab ${tab === "providers" ? "active" : ""}`}
-            onClick={() => setTab("providers")}
-          >
-            Providers
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "mcp"}
-            className={`settings-tab ${tab === "mcp" ? "active" : ""}`}
-            onClick={() => setTab("mcp")}
-          >
-            MCP
-          </button>
+          <label className="settings-search">
+            <AppIcon name="search" size="sm" />
+            <input type="search" aria-label="Search settings" placeholder="Search settings…" />
+          </label>
+          <div className="settings-nav-label">SETTINGS</div>
+          <div className="settings-tab-list" role="tablist" aria-label="Settings sections">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "general"}
+              className={`settings-tab ${tab === "general" ? "active" : ""}`}
+              onClick={() => setTab("general")}
+            >
+              <AppIcon name="settings" size="sm" />
+              <span className="settings-tab-copy">
+                <span>General</span>
+                <small>Defaults</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "providers"}
+              className={`settings-tab ${tab === "providers" ? "active" : ""}`}
+              onClick={() => setTab("providers")}
+            >
+              <AppIcon name="user" size="sm" />
+              <span className="settings-tab-copy">
+                <span>Providers</span>
+                <small>Credentials</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "mcp"}
+              className={`settings-tab ${tab === "mcp" ? "active" : ""}`}
+              onClick={() => setTab("mcp")}
+            >
+              <AppIcon name="braces" size="sm" />
+              <span className="settings-tab-copy">
+                <span>MCP</span>
+                <small>Project tools</small>
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="settings-body">
           {tab === "general" && (
             <>
               <section className="settings-section">
-                <div className="settings-section-label">Available models</div>
+                <div className="settings-section-label">Available Models</div>
                 <div className="settings-field">
                   <div className="settings-field-meta">
                     <label>Default model</label>
@@ -365,7 +413,7 @@ export function SettingsDialog({
                     <span className="settings-motion-track" aria-hidden="true">
                       <span className="settings-motion-thumb" />
                     </span>
-                    <span>{motionEnabled ? "On" : "Off"}</span>
+                    <span className="settings-motion-state">{motionEnabled ? "On" : "Off"}</span>
                   </button>
                 </div>
               </section>
@@ -374,13 +422,6 @@ export function SettingsDialog({
 
           {tab === "providers" && (
             <section className="settings-section">
-              <div className="settings-section-label">Provider credentials</div>
-              <p className="settings-providers-lead">
-                Same as Pi <code>/login</code> and <code>/logout</code>. Connect with an API key or sign in with an
-                account; credentials are saved to <code>~/.pi/agent/auth.json</code>. Environment variables still work
-                but cannot be removed here.
-              </p>
-
               {providersLoading && <p className="settings-providers-status">Loading providers…</p>}
               {providersError && <p className="settings-providers-error">{providersError}</p>}
               {actionMessage && <p className="settings-providers-status">{actionMessage}</p>}
@@ -391,7 +432,7 @@ export function SettingsDialog({
 
               {providers.length > 0 && (
                 <>
-                  <div className="settings-field">
+                  <div className="settings-field settings-provider-picker">
                     <div className="settings-field-meta">
                       <label htmlFor="settings-provider-select">Provider</label>
                       <span>Pick a provider to connect or manage</span>
@@ -517,10 +558,10 @@ export function SettingsDialog({
 
                   {connectedProviders.length > 0 && (
                     <div className="settings-connected-block">
-                      <div className="settings-section-label">Currently available</div>
+                      <div className="settings-section-label">Currently Available</div>
                       <ul className="settings-connected-list">
-                        {connectedProviders.map((provider) => (
-                          <li key={provider.id}>
+                          {connectedProviders.map((provider) => (
+                            <li className="settings-connected-row" key={provider.id}>
                             <button
                               type="button"
                               className={`settings-connected-item ${provider.id === selectedId ? "active" : ""}`}
@@ -544,77 +585,78 @@ export function SettingsDialog({
           )}
 
           {tab === "mcp" && (
-            <section className="settings-section">
-              <div className="settings-section-label">MCP servers</div>
-              <p className="settings-providers-lead">
-                Model Context Protocol servers are read from standard <code>mcp.json</code> files —
-                global <code>~/.config/mcp/mcp.json</code> first, then the project’s{" "}
-                <code>.pi/mcp.json</code> (highest precedence). pi-desk writes per-project overrides
-                to <code>.pi/mcp.json</code>.
-              </p>
+            <section className="settings-section settings-mcp-section">
+              <div className="settings-mcp-header">
+                <div className="settings-mcp-header-copy">
+                  <div className="settings-section-label">Servers</div>
+                  <p className="settings-mcp-description">
+                    Toggle a server to reload its tools in the current workspace.
+                  </p>
+                </div>
+                <div className="settings-mcp-actions">
+                  <button
+                    type="button"
+                    className="settings-provider-btn primary"
+                    disabled={busy || !importCursorMcp}
+                    onClick={() => void importFromCursor()}
+                  >
+                    {busy ? "Working…" : "Import from Cursor"}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-provider-btn"
+                    disabled={!openMcpConfigFile}
+                    onClick={() => void openMcpFile()}
+                  >
+                    Edit mcp.json
+                  </button>
+                </div>
+              </div>
 
               {mcpError && <p className="settings-providers-error">{mcpError}</p>}
               {actionMessage && <p className="settings-providers-status">{actionMessage}</p>}
 
-              <div className="settings-field">
-                <div className="settings-field-meta">
-                  <label>Servers</label>
-                  <span>Toggling a server writes the override and reloads the runtime</span>
+              {!mcpConfig ? (
+                <p className="settings-providers-status">Loading MCP config…</p>
+              ) : mcpConfig.servers.length === 0 ? (
+                <div className="settings-empty-state">
+                  <strong>No MCP servers configured for this project</strong>
+                  <span>Import from Cursor or edit mcp.json to add project tools.</span>
                 </div>
-                {!mcpConfig ? (
-                  <p className="settings-providers-status">Loading MCP config…</p>
-                ) : mcpConfig.servers.length === 0 ? (
-                  <p className="settings-providers-status">No MCP servers configured for this project.</p>
-                ) : (
-                  <ul className="settings-mcp-list">
-                    {mcpConfig.servers.map((server) => {
-                      const live = mcpStatus?.servers.find((item) => item.name === server.name);
-                      return (
-                        <li className="settings-mcp-row" key={server.name}>
-                          <label className="settings-mcp-toggle">
-                            <input
-                              type="checkbox"
-                              checked={!server.disabled}
-                              disabled={busy || !setMcpServerEnabled}
-                              onChange={() => void toggleMcpServer(server.name, server.disabled)}
-                            />
-                            <span className="settings-mcp-name">{server.name}</span>
-                          </label>
-                          <span className={`settings-mcp-state ${live?.status === "failed" ? "failed" : ""}`}>
-                            {live
-                              ? `${live.status}${live.toolCount > 0 ? ` · ${live.toolCount} tools` : ""}`
-                              : server.disabled
-                                ? "disabled"
-                                : "not running"}
-                          </span>
+              ) : (
+                <ul className="settings-mcp-list">
+                  {mcpConfig.servers.map((server) => {
+                    const live = mcpStatus?.servers.find((item) => item.name === server.name);
+                    return (
+                      <li className="settings-mcp-row" key={server.name}>
+                        <div className="settings-mcp-identity">
+                          <span className="settings-mcp-name">{server.name}</span>
                           <small className="settings-mcp-source" title={server.source}>
                             {shortenMcpPath(server.source)}
                           </small>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-
-              <div className="settings-mcp-actions">
-                <button
-                  type="button"
-                  className="settings-provider-btn primary"
-                  disabled={busy || !importCursorMcp}
-                  onClick={() => void importFromCursor()}
-                >
-                  {busy ? "Working…" : "Import from Cursor"}
-                </button>
-                <button
-                  type="button"
-                  className="settings-provider-btn"
-                  disabled={!openMcpConfigFile}
-                  onClick={() => void openMcpFile()}
-                >
-                  Open config file
-                </button>
-              </div>
+                        </div>
+                        <span className={`settings-mcp-state ${live?.status === "failed" ? "failed" : ""}`}>
+                          {live
+                            ? `${live.status}${live.toolCount > 0 ? ` · ${live.toolCount} tools` : ""}`
+                            : server.disabled
+                              ? "disabled"
+                              : "not running"}
+                        </span>
+                        <label className="settings-mcp-toggle" aria-label={`Enable ${server.name}`}>
+                          <input
+                            className="settings-mcp-switch-input"
+                            type="checkbox"
+                            checked={!server.disabled}
+                            disabled={busy || !setMcpServerEnabled}
+                            onChange={() => void toggleMcpServer(server.name, server.disabled)}
+                          />
+                          <span className="settings-mcp-switch" aria-hidden="true" />
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
           )}
         </div>

@@ -314,3 +314,36 @@ Serialize or forward the returned value directly unless its wrapper shape is kno
 - **Notes**: Subsequent research uses the tool result directly.
 
 ---
+
+## [ERR-20260811-003] full_test_session_tab_shortcut_assertions
+
+**Logged**: 2026-08-11T13:19:30+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The full test suite has three unrelated `SessionTabBar` failures because shortcut text is rendered as separate key elements.
+
+### Error
+```text
+Unable to find an element with the text: /^(⌘1|Ctrl\\+1)$/
+Expected Ctrl+1, received textContent Ctrl1
+```
+
+### Context
+- `npm test -- --run` completed with 46 passing test files and 3 failing tests in `src/renderer/components/SessionTabBar.test.tsx`.
+- The Settings-specific tests passed; this failure is outside the Settings files changed in this task.
+
+### Suggested Fix
+Update the SessionTabBar assertions to query the shortcut group or normalize the separate `<kbd>` nodes before matching the displayed shortcut.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/renderer/components/SessionTabBar.test.tsx, src/renderer/components/SessionTabBar.tsx
+
+### Resolution
+- **Resolved**: 2026-08-11T13:20:30+08:00
+- **Notes**: Kept the existing shortcut label rendering and aligned shortcut styling with the topbar instead of splitting tab labels into separate key nodes. Full suite now passes: 47 test files, 415 tests.
+
+---

@@ -218,7 +218,7 @@ export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, o
       <div className="changes-inspector-content">
         <div className="change-inspector-section">
           <div className="change-inspector-section-heading">
-            <span>THIS SESSION</span>
+            <span>This Session</span>
             {changes.length > 0 && <span className="section-count">{changes.length}</span>}
           </div>
           {tree.length > 0 ? (

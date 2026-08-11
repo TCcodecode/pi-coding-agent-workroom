@@ -3,6 +3,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   displayTabTitle,
   modKeyLabel,
+  pinShortcutLabel,
   sortTabsPinnedFirst,
   tabShortcutLabel,
   type SessionTab,
@@ -48,16 +49,19 @@ export function SessionTabBar({
 }: SessionTabBarProps) {
   const mod = modKeyLabel();
   const orderedTabs = sortTabsPinnedFirst(tabs);
+  const isSingleTab = orderedTabs.length === 1;
+  const pinShortcut = pinShortcutLabel(mod);
 
   return (
     <div className="session-tab-bar" role="tablist" aria-label="Open sessions">
-      <div className="session-tab-scroll">
+      <div className={`session-tab-scroll ${isSingleTab ? "is-single" : ""}`}>
         {orderedTabs.map((tab, index) => {
           const active = tab.id === activeTabId;
           const title = displayTabTitle(tab.title);
           const project = projectLabel(tab.projectId, projects);
           const switchShortcut = tabShortcutLabel(index, mod);
           const pinLabel = tab.pinned ? `Unpin “${title}”` : `Pin “${title}”`;
+          const pinControlLabel = isSingleTab ? `${pinLabel} · Shortcut: ${pinShortcut}` : pinLabel;
           const hasOtherTabs = orderedTabs.length > 1;
           const hasTabsToRight = index < orderedTabs.length - 1;
           return (
@@ -68,21 +72,27 @@ export function SessionTabBar({
                   role="tab"
                   aria-selected={active}
                   title={[project, title, switchShortcut ? `Switch: ${switchShortcut}` : null]
+                    .concat(isSingleTab ? [`Pin: ${pinShortcut}`] : [])
                     .filter(Boolean)
                     .join(" · ")}
                 >
                   <button
                     type="button"
                     className={`session-tab-pin ${tab.pinned ? "is-pinned" : ""}`}
-                    aria-label={pinLabel}
-                    title={pinLabel}
+                    aria-label={pinControlLabel}
+                    title={pinControlLabel}
                     onClick={(event) => {
                       event.stopPropagation();
                       onTogglePin(tab.id);
                     }}
                   >
-                    <AppIcon name="pin" size="xs" fill={tab.pinned ? "currentColor" : "none"} />
+                    <AppIcon name="pin" size="md" fill={tab.pinned ? "currentColor" : "none"} />
                   </button>
+                  {isSingleTab ? (
+                    <span className="session-tab-pin-kbd" title={`Pin or unpin tab: ${pinShortcut}`}>
+                      {pinShortcut}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     className="session-tab-main"

@@ -114,7 +114,7 @@ export function mcpStatusIcon(status: McpServerRuntimeStatus): AppIconName {
 
 function TodoListSection({ todos }: { todos: SessionTodoItem[] }) {
   return (
-    <CollapsibleSection title="TODOS" count={todos.length > 0 ? todos.length : undefined} defaultOpen>
+    <CollapsibleSection title="Todos" count={todos.length > 0 ? todos.length : undefined} defaultOpen>
       {todos.length === 0 ? (
         <div className="inspector-muted">No todos yet</div>
       ) : (
@@ -376,7 +376,7 @@ function IndexPanel({ cwd, indexStatus }: { cwd: string; indexStatus: IndexStatu
 
   return (
     <div className="inspector-content">
-      <CollapsibleSection title="STATUS" defaultOpen>
+      <CollapsibleSection title="Status" defaultOpen>
         {!indexStatus ? (
           <div className="inspector-muted">
             <div>Not indexed yet</div>
@@ -417,7 +417,7 @@ function IndexPanel({ cwd, indexStatus }: { cwd: string; indexStatus: IndexStatu
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="SEARCH" defaultOpen>
+      <CollapsibleSection title="Search" defaultOpen>
         <div className="index-search">
           <input
             className="index-search-input"
@@ -466,7 +466,7 @@ function IndexPanel({ cwd, indexStatus }: { cwd: string; indexStatus: IndexStatu
       </CollapsibleSection>
 
       {(usages.length > 0 || loadingUsages) && selectedQualified && (
-        <CollapsibleSection title={`USAGES of ${selectedName}`} count={usages.length} defaultOpen>
+        <CollapsibleSection title={`Usages of ${selectedName}`} count={usages.length} defaultOpen>
           {loadingUsages && <div className="inspector-muted">Loading usages...</div>}
           {usages.map((usage, i) => (
             <div className="resource-row" key={`${usage.file}-${usage.line}-${i}`}>
@@ -658,7 +658,7 @@ export function ResourceInspector({
 
       {tab === "context" && (
         <div className="inspector-content">
-          <CollapsibleSection title="RUNTIME" defaultOpen>
+          <CollapsibleSection title="Runtime" defaultOpen>
             <div className="inspector-row">
               <span>Model</span>
               <strong>{session.model}</strong>
@@ -675,7 +675,7 @@ export function ResourceInspector({
 
           <TodoListSection todos={session.todos ?? []} />
 
-          <CollapsibleSection title="CONTEXT FILES" count={resources.contextFiles.length}>
+          <CollapsibleSection title="Context Files" count={resources.contextFiles.length}>
             {resources.contextFiles.length === 0 ? (
               <div className="inspector-muted">No context files loaded</div>
             ) : (
@@ -704,11 +704,18 @@ export function ResourceInspector({
             <div className="tool-list">
               {localTools.map((tool) => (
                 <label className="tool-toggle-row" key={tool.name}>
-                  <input type="checkbox" checked={tool.active} onChange={() => toggleTool(tool.name)} disabled={!onToggleTools} />
+                  <input
+                    className="inspector-switch-input"
+                    type="checkbox"
+                    checked={tool.active}
+                    onChange={() => toggleTool(tool.name)}
+                    disabled={!onToggleTools}
+                  />
                   <span className="tool-toggle-text">
                     <strong>{tool.name}</strong>
                     <small>{tool.description || tool.source}</small>
                   </span>
+                  <span className="inspector-switch" aria-hidden="true" />
                 </label>
               ))}
             </div>
@@ -718,7 +725,7 @@ export function ResourceInspector({
 
       {tab === "extensions" && (
         <div className="inspector-content">
-          <CollapsibleSection title="MCP SERVERS" count={resources.mcp ? resources.mcp.servers.length : undefined} defaultOpen>
+          <CollapsibleSection title="MCP Servers" count={resources.mcp ? resources.mcp.servers.length : undefined} defaultOpen>
             {!resources.mcp ? (
               <div className="inspector-muted">No MCP status reported yet</div>
             ) : resources.mcp.servers.length === 0 ? (
@@ -746,7 +753,7 @@ export function ResourceInspector({
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="SKILLS" count={localSkills.length} defaultOpen>
+          <CollapsibleSection title="Skills" count={localSkills.length} defaultOpen>
             {localSkills.length === 0 ? (
               <div className="inspector-muted">No skills discovered</div>
             ) : (
@@ -762,6 +769,7 @@ export function ResourceInspector({
                   <div className="skill-group" key={group}>
                     <label className="skill-group-heading">
                       <input
+                        className="inspector-switch-input"
                         type="checkbox"
                         checked={allEnabled}
                         disabled={!onToggleSkills}
@@ -769,6 +777,7 @@ export function ResourceInspector({
                       />
                       <span className="skill-group-name">{group}</span>
                       <small>{members.length}</small>
+                      <span className="inspector-switch" aria-hidden="true" />
                     </label>
                     {members.length > 1 && (
                       <div className="skill-group-members">
@@ -777,6 +786,7 @@ export function ResourceInspector({
                           .map((skill) => (
                           <label className="skill-toggle-row" key={skill.path}>
                             <input
+                              className="inspector-switch-input"
                               type="checkbox"
                               checked={skill.enabled !== false}
                               disabled={!onToggleSkills}
@@ -784,6 +794,7 @@ export function ResourceInspector({
                             />
                             <span className="skill-toggle-name">{skill.name}</span>
                             <em className={skill.enabled === false ? "disabled" : ""}>{skill.enabled === false ? "off" : "on"}</em>
+                            <span className="inspector-switch" aria-hidden="true" />
                           </label>
                         ))}
                       </div>
@@ -794,7 +805,7 @@ export function ResourceInspector({
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="EXTENSIONS & PACKAGES" count={resources.extensions.length + resources.packages.length} defaultOpen>
+          <CollapsibleSection title="Extensions & Packages" count={resources.extensions.length + resources.packages.length} defaultOpen>
             {resources.packages.length === 0 && resources.extensions.length === 0 ? (
               <div className="inspector-muted">No extensions or packages</div>
             ) : (

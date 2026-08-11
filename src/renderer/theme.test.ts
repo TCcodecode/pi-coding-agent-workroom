@@ -134,6 +134,39 @@ describe("PI Desk light surface hierarchy", () => {
     );
   });
 
+  it("keeps right-pane status colors semantic and indicator-only", () => {
+    expect(css).toContain("--right-pane-content-padding: var(--space-4)");
+    expect(css).toContain("--right-pane-row-height: 28px");
+    expect(css).toContain(".theme-light .todo-active,");
+    expect(css).toContain(".theme-light .mcp-status-label.cached { color: var(--info); background-color: transparent; }");
+    expect(css).toContain(".theme-light .resource-icon.failed,");
+    expect(css).toContain(".theme-light .mcp-status-label.failed { color: var(--danger); background-color: transparent; }");
+    expect(css).toMatch(/\.theme-light \.status-dot\.running\s*\{[\s\S]*background: var\(--status-running\)/s);
+    expect(css).toMatch(/\.theme-light \.status-dot\.idle\s*\{[\s\S]*background: var\(--status-idle\)/s);
+  });
+
+  it("keeps Inspector and Changes on the same content and control rhythm", () => {
+    expect(css).toMatch(
+      /\.theme-light \.inspector-content,[\s\S]*\.theme-light \.changes-inspector-content\s*\{[\s\S]*padding: var\(--right-pane-content-padding\) var\(--right-pane-content-padding\) var\(--right-pane-content-bottom\)/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.changes-inspector \.change-inspector-section-heading\s*\{[\s\S]*font-size: var\(--text-sm\)[\s\S]*line-height: var\(--leading-sm\)/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.changes-inspector \.change-collapse-button,[\s\S]*\.theme-light \.changes-inspector \.change-undo-button\s*\{[\s\S]*min-height: var\(--control-height-compact\)[\s\S]*border-radius: var\(--radius-sm\)/s,
+    );
+  });
+
+  it("uses the indigo accent for Inspector switches", () => {
+    expect(css).toContain("--inspector-switch-accent: #319DFF");
+    expect(css).toMatch(
+      /\.theme-light \.inspector \.tool-toggle-row:has\(\.inspector-switch-input:checked\) \.inspector-switch,[\s\S]*background: var\(--inspector-switch-accent\);/s,
+    );
+    expect(css).not.toContain(".tool-toggle-row:hover .inspector-switch");
+    expect(css).not.toContain(".skill-group-heading:hover .inspector-switch");
+    expect(css).not.toContain(".skill-toggle-row:hover .inspector-switch");
+  });
+
   it("styles change summaries as light Codex cards", () => {
     expect(css).toContain(".theme-light .change-summary");
     expect(css).toContain("border-color: #dedede");

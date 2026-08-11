@@ -22,7 +22,7 @@ describe("ChangeInspector", () => {
       />,
     );
 
-    expect(screen.getByText("THIS SESSION")).toBeInTheDocument();
+    expect(screen.getByText("This Session")).toBeInTheDocument();
     expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
     expect(screen.getByText("SessionSidebar.tsx")).toBeInTheDocument();
     expect(screen.getByText("SessionTabBar.tsx")).toBeInTheDocument();

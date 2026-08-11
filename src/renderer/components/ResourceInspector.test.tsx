@@ -132,7 +132,7 @@ describe("ResourceInspector", () => {
     expect(screen.queryByRole("button", { name: "Open session tree" })).not.toBeInTheDocument();
   });
 
-  test("Context tab shows TODOS section with items and empty state", () => {
+  test("Context tab shows Todos section with items and empty state", () => {
     renderInspector({
       session: {
         ...session,
@@ -143,7 +143,7 @@ describe("ResourceInspector", () => {
       },
       tab: "context",
     });
-    expect(screen.getByText("TODOS")).toBeInTheDocument();
+    expect(screen.getByText("Todos")).toBeInTheDocument();
     expect(screen.getByText("1/2 completed")).toBeInTheDocument();
     expect(screen.getByText("Now: Wire host")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "1 of 2 todos completed" })).toHaveAttribute("aria-valuenow", "1");
@@ -268,7 +268,7 @@ describe("ResourceInspector", () => {
       },
     });
     fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
-    expect(screen.getByText("EXTENSIONS & PACKAGES")).toBeInTheDocument();
+    expect(screen.getByText("Extensions & Packages")).toBeInTheDocument();
     expect(screen.getByText("foo")).toBeInTheDocument();
     expect(screen.getByText("my-ext")).toBeInTheDocument();
     expect(screen.getByText("top-ext")).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe("ResourceInspector", () => {
     expect(screen.queryByText("/top/index.ts")).not.toBeInTheDocument();
     expect(screen.queryByText("npm:foo")).not.toBeInTheDocument();
     expect(screen.queryByText("loaded")).not.toBeInTheDocument();
-    expect(screen.getByText("SKILLS")).toBeInTheDocument();
+    expect(screen.getByText("Skills")).toBeInTheDocument();
     expect(screen.getByText("git-master")).toBeInTheDocument();
   });
 
@@ -335,7 +335,7 @@ describe("ResourceInspector", () => {
       },
     });
     fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
-    expect(screen.getByText("MCP SERVERS")).toBeInTheDocument();
+    expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("github")).toBeInTheDocument();
     expect(screen.getByText("12 tools")).toBeInTheDocument();
     expect(screen.getByText("supabase")).toBeInTheDocument();
@@ -350,7 +350,7 @@ describe("ResourceInspector", () => {
   test("extensions tab shows MCP empty states when no status is reported", () => {
     renderInspector();
     fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
-    expect(screen.getByText("MCP SERVERS")).toBeInTheDocument();
+    expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("No MCP status reported yet")).toBeInTheDocument();
   });
 
@@ -502,8 +502,8 @@ describe("ResourceInspector", () => {
         packages: [],
       },
     });
-    expect(screen.getByText("RUNTIME")).toBeInTheDocument();
-    expect(screen.getByText("CONTEXT FILES")).toBeInTheDocument();
+    expect(screen.getByText("Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Context Files")).toBeInTheDocument();
     expect(screen.getByText("agents.md")).toBeInTheDocument();
   });
 
@@ -569,7 +569,7 @@ describe("ResourceInspector", () => {
       renderInspector();
       openIndexTab();
 
-      expect(screen.getByText("STATUS")).toBeInTheDocument();
+      expect(screen.getByText("Status")).toBeInTheDocument();
       expect(screen.getByText("ready")).toBeInTheDocument();
       expect(screen.getByText("42")).toBeInTheDocument();
       expect(screen.getByText("310")).toBeInTheDocument();
@@ -607,7 +607,7 @@ describe("ResourceInspector", () => {
       openIndexTab();
 
       fireEvent.change(screen.getByPlaceholderText("Search symbols..."), { target: { value: "myFunc" } });
-      fireEvent.click(screen.getByText("Search"));
+      fireEvent.click(document.querySelector(".index-search-btn")!);
 
       await waitFor(() => {
         expect(screen.getByText("myFunc")).toBeInTheDocument();
@@ -635,7 +635,7 @@ describe("ResourceInspector", () => {
       openIndexTab();
 
       fireEvent.change(screen.getByPlaceholderText("Search symbols..."), { target: { value: "MyClass" } });
-      fireEvent.click(screen.getByText("Search"));
+      fireEvent.click(document.querySelector(".index-search-btn")!);
 
       await waitFor(() => {
         expect(screen.getByText("MyClass")).toBeInTheDocument();
@@ -661,7 +661,7 @@ describe("ResourceInspector", () => {
       openIndexTab();
 
       fireEvent.change(screen.getByPlaceholderText("Search symbols..."), { target: { value: "nope" } });
-      fireEvent.click(screen.getByText("Search"));
+      fireEvent.click(document.querySelector(".index-search-btn")!);
 
       await waitFor(() => {
         expect(screen.getByText("No symbols found")).toBeInTheDocument();

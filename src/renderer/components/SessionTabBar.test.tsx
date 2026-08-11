@@ -14,6 +14,24 @@ const projects = [
 ];
 
 describe("SessionTabBar", () => {
+  test("removes the segmented capsule when only one tab is open", () => {
+    render(
+      <SessionTabBar
+        tabs={[tabs[0]!]}
+        activeTabId="t1"
+        projects={projects}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+        onTogglePin={vi.fn()}
+      />,
+    );
+
+    expect(document.querySelector(".session-tab-scroll")).toHaveClass("is-single");
+    expect(screen.getByRole("button", { name: /Unpin .First./i })).toBeInTheDocument();
+    expect(screen.getByText(/^(⌘1|Ctrl\+1)$/)).toBeInTheDocument();
+    expect(screen.getByText(/^(⌘P|Ctrl\+P)$/)).toBeInTheDocument();
+  });
+
   test("shows project suffix, ⌘N shortcuts and pin controls", () => {
     const onActivate = vi.fn();
     const onClose = vi.fn();

@@ -59,7 +59,7 @@ describe("SettingsDialog", () => {
     fireEvent.change(screen.getByRole("combobox", { name: /model/i }), {
       target: { value: "anthropic/claude-sonnet" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /close settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /back to app/i }));
 
     expect(onModelSelect).toHaveBeenCalledWith("anthropic/claude-sonnet");
     expect(onClose).toHaveBeenCalledTimes(1);
