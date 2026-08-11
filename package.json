@@ -1,6 +1,8 @@
 {
   "name": "pi-desk",
   "version": "0.1.0",
+  "description": "A desktop workspace for Pi coding agent sessions.",
+  "author": "TCcodecode",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -10,6 +12,10 @@
   "scripts": {
     "dev": "electron-vite",
     "build": "electron-vite build",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "preview": "electron-vite preview",
     "test": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit"
@@ -26,7 +32,6 @@
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-context-menu": "^2.3.7",
     "@vitejs/plugin-react": "^5.0.4",
-    "electron": "^43.3.0",
     "electron-vite": "^4.0.0",
     "lucide-react": "^1.30.0",
     "pi-mcp-adapter": "^2.21.0",
@@ -44,8 +49,45 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.tccodecode.pidesk",
+    "productName": "Pi Desk",
+    "artifactName": "PiDesk-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/.DS_Store"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"]
+    },
+    "dmg": {
+      "title": "Pi Desk",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Development",
+      "target": ["AppImage", "deb", "tar.gz"]
+    }
   }
 }

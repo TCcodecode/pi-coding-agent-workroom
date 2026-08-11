@@ -4,22 +4,28 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(resolve(process.cwd(), "src/renderer/styles.css"), "utf8");
 
-describe("PI Desk surface hierarchy", () => {
-  it("defines the approved Codex-like dark depth palette", () => {
-    expect(css).toContain("--surface-center: #171717");
-    expect(css).toContain("--surface-sidebar: #242424");
-    expect(css).toContain("--surface-inspector: #2B2B2B");
-    expect(css).toContain("--surface-topbar: #181818");
-    expect(css).toContain("--surface-elevated: #222222");
-    expect(css).toContain("--surface-code: #101010");
-    expect(css).toContain("--border-subtle: #343434");
+describe("PI Desk light surface hierarchy", () => {
+  it("defines the Codex-inspired light depth palette", () => {
+    expect(css).toContain("--surface-center: #ffffff");
+    expect(css).toContain("--surface-sidebar: #f5f5f5");
+    expect(css).toContain("--surface-inspector: #ffffff");
+    expect(css).toContain("--surface-topbar: #ffffff");
+    expect(css).toContain("--surface-elevated: #ffffff");
+    expect(css).toContain("--surface-code: #f7f7f7");
+    expect(css).toContain("--border-subtle: #e5e5e5");
+    expect(css).toContain("--accent-primary: #202020");
+    expect(css).toContain("--warning: #f97316");
+    expect(css).toContain("--interaction-hover-surface: #e9e9e9");
+    expect(css).toContain("--interaction-selected-surface: #e9e9e9");
+    expect(css).toContain("--interaction-focus-ring: 0 0 0 2px rgba(61, 61, 61, .14)");
+    expect(css).toContain("color-scheme: light");
   });
 
   it("assigns the darkest surface to the work area", () => {
-    expect(css).toMatch(/\.app-shell\s*,\s*\.main-column\s*\{[^}]*background: var\(--surface-center\)/s);
-    expect(css).toMatch(/\.sidebar\s*\{[^}]*background: var\(--surface-sidebar\)/s);
-    expect(css).toMatch(/\.inspector\s*\{[^}]*background: var\(--surface-inspector\)/s);
-    expect(css).toMatch(/\.topbar\s*\{[^}]*background: var\(--surface-topbar\)/s);
+    expect(css).toMatch(/\.app-shell\s*\{[^}]*background: var\(--surface-center\)/s);
+    expect(css).toContain(".theme-light .sidebar");
+    expect(css).toContain(".theme-light .inspector");
+    expect(css).toContain(".theme-light .topbar");
   });
 
   it("keeps HTTP Workbench on the shared surface hierarchy", () => {
@@ -27,5 +33,118 @@ describe("PI Desk surface hierarchy", () => {
     expect(css).toContain(".http-navigator,\n.http-empty-project-rail { color: var(--text-primary-dark); background: var(--surface-sidebar); }");
     expect(css).toContain(".http-chat-column,\n.http-chat-collapsed { background: var(--surface-inspector); }");
     expect(css).toContain(".http-editor { color: var(--text-primary-dark); background: var(--surface-code); }");
+    expect(css).toContain(".http-workbench-shell.theme-light");
+  });
+
+  it("separates black primary actions from neutral navigation and index controls", () => {
+    expect(css).toContain(".theme-light .send-button");
+    expect(css).toContain("background: #202020");
+    expect(css).toContain(".theme-light .mode-switcher button.is-active");
+    expect(css).toContain("background: #ffea88");
+    expect(css).toContain(".theme-light .index-btn");
+    expect(css).toContain(".theme-light .index-search-btn");
+    expect(css).toContain("background: #f7f7f7");
+  });
+
+  it("keeps chat bubbles and the composer neutral in daylight mode", () => {
+    expect(css).toContain(".theme-light .timeline-item.message-item.user .message-content");
+    expect(css).toContain("background: #f1f1f1");
+    expect(css).toContain(".theme-light .send-button");
+    expect(css).toContain("border-radius: 50%");
+    expect(css).toContain(".theme-light .composer-card:focus-within");
+    expect(css).toMatch(/\.theme-light \.composer-card\s*\{\s*padding-bottom: 8px;\s*\}/s);
+    expect(css).toMatch(
+      /\.theme-light \.topbar-button,[\s\S]*\.theme-light \.topbar-button\.active:hover\s*\{[^}]*color: var\(--text-secondary\);[^}]*background: transparent/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.topbar-button:active,[\s\S]*\.theme-light \.topbar-button\.active:focus-visible\s*\{[^}]*background: transparent[^}]*box-shadow: none[^}]*transform: none/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.topbar-button\.active,[\s\S]*\.theme-light \.topbar-button\.active:focus-visible\s*\{[^}]*color: var\(--text-primary\)[^}]*background: #e9e9e9[^}]*box-shadow: none/s,
+    );
+    expect(css).toMatch(/\.theme-light \.topbar-button \.topbar-kbd,[\s\S]*background: transparent/s);
+    expect(css).toMatch(
+      /\.theme-light \.composer-card \.ctrl-box,[\s\S]*\.theme-light \.composer-card \.composer-context-control\s*\{[^}]*border-color: transparent[^}]*background: transparent/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.composer-card \.ctrl-box:hover,[\s\S]*\.theme-light \.composer-card \.composer-context-control:hover\s*\{[^}]*background: var\(--surface-hover\)/s,
+    );
+  });
+
+  it("gives daylight dialogs a hairline border and soft shadow", () => {
+    expect(css).toContain(".theme-light .settings-dialog,");
+    expect(css).toContain("border-width: 1px");
+    expect(css).toContain("box-shadow: 0 8px 24px rgba(0, 0, 0, .08)");
+    expect(css).toContain(".theme-light .mode-switcher button,");
+    expect(css).toContain("font-weight: 500");
+  });
+
+  it("keeps project selection hover-based while the open session stays selected", () => {
+    expect(css).toContain(".theme-light .project-node-row:hover");
+    expect(css).toContain(".theme-light .project-node.active .project-node-toggle");
+    expect(css).toContain(".theme-light .project-node.active .project-node-row");
+    expect(css).toContain(".theme-light .session-item.nested.active");
+    expect(css).toContain(".theme-light .project-session-list");
+    expect(css).toContain("margin-top: 4px");
+    expect(css).toContain(".theme-light .project-node-row:hover");
+    expect(css).not.toContain(".theme-light .project-node:hover > .project-node-row");
+    expect(css).toContain("background: #e9e9e9");
+    expect(css).toContain(".theme-light .session-item.nested:hover,");
+    expect(css).toContain(".theme-light .composer-hints");
+    expect(css).toMatch(/\.theme-light \.composer-hints\s*\{\s*color: #3d3d3d;\s*font-weight: 400;\s*\}/s);
+    expect(css).toContain(".theme-light .sidebar-user-label");
+    expect(css).toMatch(/\.sidebar-user-label\s*\{[^}]*font-weight: 400/s);
+    expect(css).toMatch(/\.theme-light \.project-node-name\s*\{\s*font-weight: 400;\s*\}/s);
+    expect(css).toMatch(/\.theme-light \.sidebar-section-head\s*\{\s*color: #7d7d7d;\s*font-size: 12px;\s*font-weight: 600;\s*text-transform: none;\s*\}/s);
+    expect(css).toContain("--sidebar-leading-inset: 8px");
+    expect(css).toContain("--sidebar-leading-gap: 6px");
+    expect(css).toContain("--sidebar-leading-icon-slot: 16px");
+    expect(css).toContain("--sidebar-selection-inset: 8px");
+    expect(css).toContain("--sidebar-selection-gap: 4px");
+    expect(css).toMatch(/\.sidebar-leading-control\s*\{\s*gap: var\(--sidebar-leading-gap\);\s*padding-left: var\(--sidebar-leading-inset\);\s*padding-right: var\(--sidebar-leading-inset\);\s*\}/s);
+    expect(css).toMatch(/\.theme-light \.context-bar-track\s*\{\s*background: var\(--surface-active\);\s*\}/s);
+    expect(css).toMatch(
+      /\.theme-light \.project-session-list\s*\{[^}]*gap: var\(--sidebar-selection-gap\)[^}]*padding: 0 var\(--sidebar-selection-inset\) 2px/s,
+    );
+    expect(css).toMatch(/\.theme-light \.session-item\.nested\s*\{[^}]*width: 100%[^}]*padding-left: 20px/s);
+  });
+
+  it("uses one neutral hover and selection surface across navigation and settings", () => {
+    expect(css).toContain(".theme-light .settings-tab:hover,");
+    expect(css).toContain(".theme-light .settings-tab.active,");
+    expect(css).toContain(".theme-light .session-item.nested:hover,");
+    expect(css).toContain(".theme-light .sidebar-user:hover,");
+    expect(css).toContain(".theme-light .project-node-row:hover .project-node-toggle,");
+    expect(css).toContain("background: var(--interaction-hover-surface);");
+    expect(css).toContain("background: var(--interaction-selected-surface);");
+    expect(css).toContain(".theme-light .settings-oauth-option:has(input:checked)");
+  });
+
+  it("routes right-pane interactions through the shared neutral contract", () => {
+    expect(css).toContain(".theme-light .inspector .right-pane-mode-tabs button:hover,");
+    expect(css).toContain(".theme-light .inspector .change-tree-file:hover,");
+    expect(css).toContain(".theme-light .inspector .right-pane-mode-tabs button.selected,");
+    expect(css).toContain(".theme-light .inspector .change-tree-file.selected");
+    expect(css).toContain(".theme-light .inspector .inspector-header-actions .icon-button:focus-visible");
+    expect(css).toMatch(
+      /\.theme-light \.inspector \.right-pane-mode-tabs button\.selected,[\s\S]*background: var\(--interaction-selected-surface\)/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.inspector \.right-pane-mode-tabs button:hover,[\s\S]*background: var\(--interaction-hover-surface\)/s,
+    );
+  });
+
+  it("styles change summaries as light Codex cards", () => {
+    expect(css).toContain(".theme-light .change-summary");
+    expect(css).toContain("border-color: #dedede");
+    expect(css).toContain("background: #f6f6f6");
+    expect(css).toContain(".theme-light .change-summary-review");
+    expect(css).toContain("background: #ffffff");
+    expect(css).toContain(".theme-light .change-summary-file:hover");
+    expect(css).toContain("background: #f0f0f0");
+    expect(css).toContain(".theme-light .change-summary-files.is-single-file .change-summary-file");
+    expect(css).toContain("width: 100%");
+    expect(css).toContain("background: #ffffff");
+    expect(css).toContain("max-width: 100%");
   });
 });

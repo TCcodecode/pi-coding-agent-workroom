@@ -25,6 +25,11 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --sidebar-leading-inset: 8px;
+  --sidebar-leading-gap: 6px;
+  --sidebar-leading-icon-slot: 16px;
+  --sidebar-selection-inset: 8px;
+  --sidebar-selection-gap: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -34,28 +39,45 @@
   --shell-changes-width: clamp(520px, 65vw, 1280px);
   --shell-resizer-width: 4px;
   --topbar-height: 44px;
-  --surface-center: #171717;
-  --surface-sidebar: #242424;
-  --surface-inspector: #2B2B2B;
-  --surface-topbar: #181818;
-  --surface-elevated: #222222;
-  --surface-hover: #303030;
-  --surface-active: #333333;
-  --surface-code: #101010;
-  --border-subtle: #343434;
-  --text-primary-dark: #F1F1F1;
-  --text-secondary-dark: #A6A6A6;
-  --text-muted-dark: #707070;
-  --accent-primary: #E4B961;
+  /* Codex-inspired daylight palette: neutral surfaces, black primary actions. */
+  --interaction-hover-surface: #e9e9e9;
+  --interaction-selected-surface: #e9e9e9;
+  --interaction-focus-ring: 0 0 0 2px rgba(61, 61, 61, .14);
+  --surface-center: #ffffff;
+  --surface-sidebar: #f5f5f5;
+  --surface-inspector: #ffffff;
+  --surface-topbar: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: #f0f0f0;
+  --surface-active: var(--interaction-selected-surface);
+  --surface-code: #f7f7f7;
+  --border-subtle: #e5e5e5;
+  --border-strong: #d1d1d1;
+  --text-primary: #3d3d3d;
+  --text-secondary: #6f6f6f;
+  --text-muted: #929292;
+  /* Kept as aliases for older shared selectors. */
+  --text-primary-dark: var(--text-primary);
+  --text-secondary-dark: var(--text-secondary);
+  --text-muted-dark: var(--text-muted);
+  --accent-primary: #202020;
+  --accent-hover: #000000;
+  --accent-soft: #eeeeee;
+  --success: #21864b;
+  --warning: #f97316;
+  --danger: #c94b42;
+  --info: #4d78b2;
   --control-height: 32px;
   --control-height-compact: 28px;
   --control-radius: 8px;
-  --focus-ring: 0 0 0 2px rgba(228, 185, 97, .28);
+  --focus-ring: 0 0 0 1px rgba(255, 255, 255, .12), 0 4px 16px rgba(0, 0, 0, .32);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .08);
+  --shadow-elevated: 0 22px 60px rgba(0, 0, 0, .12);
   --transition-fast: 120ms ease;
   --transition-normal: 180ms ease;
   font-family: var(--font-ui);
-  color: #f1f2f5;
-  background: #0d0e11;
+  color: var(--text-primary);
+  background: var(--surface-center);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -65,7 +87,7 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
 }
-body { margin: 0; min-width: 900px; background: #0d0e11; font-family: var(--font-ui); }
+body { margin: 0; min-width: 900px; background: var(--surface-center); font-family: var(--font-ui); color-scheme: light; }
 button, textarea { font: inherit; }
 button {
   border: 0;
@@ -80,7 +102,7 @@ code, kbd, pre { font-family: var(--font-mono); }
   height: 100%;
   max-height: 100%;
   overflow: hidden;
-  background: #212121;
+  background: var(--surface-center);
 }
 .app-shell.chat-only { grid-template-columns: var(--sidebar-width, 260px) 5px minmax(0, 1fr); }
 .app-shell.with-inspector { grid-template-columns: var(--sidebar-width, 260px) 5px minmax(0, 1fr) 5px var(--right-panel-width, 300px); }
@@ -196,7 +218,7 @@ code, kbd, pre { font-family: var(--font-mono); }
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: var(--sidebar-leading-gap);
   width: 100%;
   min-height: 40px;
   padding: 8px 10px;
@@ -294,7 +316,7 @@ code, kbd, pre { font-family: var(--font-mono); }
 .project-node-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sidebar-leading-gap);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -357,12 +379,12 @@ code, kbd, pre { font-family: var(--font-mono); }
   border-radius: 50%;
   background: #5a5a5a;
 }
-.session-item.nested.active .session-dot { background: #e4b961; }
 .session-dot.is-running {
-  background: #6b8afd;
-  box-shadow: 0 0 0 2px rgba(107, 138, 253, 0.25);
+  background: #4d6787;
+  box-shadow: 0 0 0 2px rgba(77, 103, 135, 0.25);
 }
 .session-dot.is-waiting { background: #e4b961; }
+.session-dot.is-completed { background: #7dccad; }
 .session-dot.is-error { background: #e8a09a; }
 .session-item-text {
   display: flex;
@@ -478,7 +500,7 @@ code, kbd, pre { font-family: var(--font-mono); }
 .session-item-main {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sidebar-leading-gap);
   min-width: 0;
   flex: 1;
   padding: 0;
@@ -672,6 +694,30 @@ code, kbd, pre { font-family: var(--font-mono); }
   font-size: 11px;
 }
 .sidebar-user svg { color: #8f8f8f; flex-shrink: 0; }
+.sidebar-user-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared leading geometry for actions and project rows. Keep text starts on one grid. */
+.sidebar-leading-control {
+  gap: var(--sidebar-leading-gap);
+  padding-left: var(--sidebar-leading-inset);
+  padding-right: var(--sidebar-leading-inset);
+}
+.sidebar-leading-control > svg,
+.sidebar-leading-control > .project-folder-icon {
+  width: var(--sidebar-leading-icon-slot);
+  height: var(--sidebar-leading-icon-slot);
+  flex: 0 0 var(--sidebar-leading-icon-slot);
+}
 
 .inspector-muted { padding: 12px 10px; color: #8f8f8f; font-size: 12px; }
 
@@ -834,10 +880,11 @@ code, kbd, pre { font-family: var(--font-mono); }
   align-self: center;
 }
 .session-tab-dot.is-running {
-  background: #6b8afd;
-  box-shadow: 0 0 0 2px rgba(107, 138, 253, 0.25);
+  background: #4d6787;
+  box-shadow: 0 0 0 2px rgba(77, 103, 135, 0.25);
 }
 .session-tab-dot.is-waiting { background: #e4b961; }
+.session-tab-dot.is-completed { background: #7dccad; }
 .session-tab-dot.is-error { background: #e8a09a; }
 /* Two-line stack: project on top, session title below */
 .session-tab-text {
@@ -1280,10 +1327,11 @@ code, kbd, pre { font-family: var(--font-mono); }
 .right-pane-mode-tabs button.selected { color: #e0b461; background: #29261d; }
 .session-summary { display: flex; align-items: center; gap: 10px; padding: 14px 17px 8px; }
 .status-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #5b6170; }
-.status-dot.running { background: #dbb56d; box-shadow: 0 0 6px #dbb56d66; }
-.status-dot.completed, .status-dot.idle { background: #6d9e7b; }
-.status-dot.error { background: #e0736c; }
-.status-dot.awaiting_approval { background: #8cb1d4; }
+.status-dot.running { background: #4d6787; box-shadow: 0 0 0 2px rgba(77, 103, 135, 0.25); }
+.status-dot.completed { background: #7dccad; }
+.status-dot.idle { background: #5b6170; }
+.status-dot.error { background: #e8a09a; }
+.status-dot.awaiting_approval { background: #e4b961; }
 .session-summary-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .session-summary-text strong { overflow: hidden; color: #e6e8ee; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .session-summary-text small { overflow: hidden; color: #717681; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1423,6 +1471,12 @@ code, kbd, pre { font-family: var(--font-mono); }
 .skill-group { padding: 6px 0 8px; border-bottom: 1px solid #1d2026; }
 .skill-group:last-child { border-bottom: 0; }
 .skill-group-heading { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+/* Checkbox: no browser outline; focused state uses a soft shadow, never a thick gray border. */
+input[type="checkbox"] { outline: 0; }
+input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 2px rgba(160, 170, 190, .16), 0 2px 8px rgba(0, 0, 0, .28);
+  border-radius: 4px;
+}
 .skill-group-heading input[type="checkbox"] { flex: none; accent-color: #e0b461; }
 .skill-group-name { color: #c7cad1; font-size: 10px; font-weight: 600; }
 .skill-group-heading small { margin-left: auto; color: #686d79; font-size: 9px; }
@@ -2922,10 +2976,10 @@ body { min-width: 1040px; }
 .sidebar-brand .brand-title { font-size: 15px; line-height: 20px; }
 .sidebar-search { margin: 0 0 8px; padding: 0 8px; min-height: 32px; }
 .sidebar-nav { gap: 4px; margin-bottom: 16px; }
-.sidebar-new-session { min-height: 34px; padding: 0 10px; }
+.sidebar-new-session { min-height: 34px; }
 .sidebar-section-head { min-height: 28px; padding: 0 var(--sidebar-action-right-inset); }
 .project-tree { gap: 4px; padding: 0 var(--sidebar-action-right-inset) 16px 0; }
-.project-node-toggle { min-height: 32px; padding: 0 8px; }
+.project-node-toggle { min-height: 32px; }
 .project-session-list { gap: 0; margin: 0 0 8px 20px; padding: 0; }
 .session-item.nested { min-height: 28px; padding: 0 8px; }
 .session-title { font-size: 12px; line-height: 16px; }
@@ -3493,7 +3547,7 @@ select:focus-visible,
 .http-create-dialog-close:hover { color: #f1f2f5; background: #292c34; }
 .http-create-dialog-field { display: grid; gap: 6px; color: #9da1aa; font-size: 10px; font-weight: 600; }
 .http-create-dialog-field input { width: 100%; min-height: 32px; padding: 0 9px; border: 1px solid #34363c; border-radius: 6px; outline: 0; color: #e8e9ed; background: #121418; font-size: 12px; }
-.http-create-dialog-field input:focus { border-color: #a47f43; box-shadow: 0 0 0 2px rgba(164, 127, 67, .18); }
+.http-create-dialog-field input:focus { border-color: #a47f43; box-shadow: 0 1px 8px rgba(0, 0, 0, .30); }
 .http-create-dialog-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .http-create-dialog-actions button { min-height: 29px; padding: 0 10px; border: 1px solid #34363c; border-radius: 7px; color: #aeb2bc; background: #222429; font-size: 11px; font-weight: 600; }
 .http-create-dialog-actions button:hover { border-color: #525660; color: #e6e7ea; background: #2a2c32; }
@@ -3565,3 +3619,2010 @@ select:focus-visible,
 .http-tree-root-row.is-selected,
 .http-environment-row.is-active,
 .http-run-row.is-selected { color: var(--accent-primary); background: var(--surface-active); }
+
+/* -------------------------------------------------------------------------
+   Default light theme
+   -------------------------------------------------------------------------
+   The original UI predates semantic color tokens and has many local dark
+   values. This layer keeps those component contracts intact while giving the
+   complete workspace one Codex-inspired daylight surface system.
+*/
+.theme-light,
+.http-workbench-shell.theme-light {
+  color: var(--text-primary);
+  color-scheme: light;
+  --focus-ring: 0 0 0 1px rgba(32, 32, 32, .16), 0 4px 14px rgba(0, 0, 0, .14);
+}
+
+.theme-light ::selection,
+.http-workbench-shell.theme-light ::selection {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, .10);
+}
+
+.theme-light .app-shell,
+.theme-light .main-column,
+.theme-light .timeline-wrap,
+.theme-light .chat-column,
+.theme-light .composer-dock {
+  background: var(--surface-center);
+}
+
+.theme-light .app-shell,
+.theme-light .sidebar,
+.theme-light .main-column,
+.theme-light .inspector,
+.theme-light .topbar,
+.theme-light .composer-card,
+.theme-light .session-tab,
+.theme-light .command-palette,
+.theme-light .session-picker,
+.theme-light .tree-dialog,
+.theme-light .help-dialog,
+.theme-light .trust-dialog,
+.theme-light .settings-dialog,
+.theme-light .ui-alert-dialog,
+.theme-light .session-context-menu {
+  transition:
+    background-color var(--transition-normal),
+    border-color var(--transition-normal),
+    color var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.theme-light .panel-resizer:hover,
+.theme-light .panel-resizer:active,
+.theme-light .http-chat-resizer:hover,
+.theme-light .http-chat-resizer:active,
+.theme-light .http-chat-resizer:focus-visible {
+  background: #d0d2cc;
+  box-shadow: inset 1px 0 #b7bab2;
+}
+
+/* Shell and left rail */
+.theme-light .sidebar {
+  background: var(--surface-sidebar);
+  color: var(--text-primary);
+}
+.theme-light .sidebar-search {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  background: #f6f6f3;
+}
+.theme-light .sidebar-search:focus-within {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  box-shadow: var(--focus-ring);
+}
+.theme-light .sidebar-search input,
+.theme-light .sidebar-search input::placeholder {
+  color: var(--text-primary);
+}
+.theme-light .sidebar-search input::placeholder { color: var(--text-muted); }
+.theme-light .sidebar-search-clear,
+.theme-light .sidebar-nav-shortcut,
+.theme-light .sidebar-section-head,
+.theme-light .sidebar-empty,
+.theme-light .project-session-empty,
+.theme-light .session-meta,
+.theme-light .sidebar-user-meta small,
+.theme-light .inspector-muted {
+  color: var(--text-muted);
+}
+.theme-light .sidebar-search-clear:hover,
+.theme-light .sidebar-hidden-toggle:hover,
+.theme-light .sidebar-icon-btn:hover,
+.theme-light .sidebar-user:hover,
+.theme-light .sidebar-new-session:hover,
+.theme-light .sidebar-new-session:focus-visible,
+.theme-light .project-node-toggle:hover,
+.theme-light .session-older-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.theme-light .sidebar-new-session,
+.theme-light .project-node-toggle,
+.theme-light .brand-title,
+.theme-light .sidebar-user,
+.theme-light .session-item.nested,
+.theme-light .session-item,
+.theme-light .session-item-main {
+  color: var(--text-primary);
+}
+.theme-light .sidebar-new-session svg,
+.theme-light .sidebar-icon-btn,
+.theme-light .sidebar-user svg,
+.theme-light .project-folder-icon,
+.theme-light .session-context-item svg {
+  color: var(--text-secondary);
+}
+.theme-light .sidebar-new-session:hover svg,
+.theme-light .sidebar-new-session:focus-visible svg,
+.theme-light .sidebar-icon-btn:hover,
+.theme-light .sidebar-user:hover svg {
+  color: var(--accent-primary);
+}
+.theme-light .sidebar-hidden-toggle,
+.theme-light .session-older-toggle {
+  color: var(--text-secondary);
+}
+.theme-light .project-node.active .project-node-toggle,
+.theme-light .session-item.nested.active .session-meta,
+.theme-light .session-item.nested.active .session-dot {
+  color: var(--accent-primary);
+}
+.theme-light .session-item:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .session-item.active { color: var(--text-primary); background: var(--surface-active); }
+.theme-light .session-dot { background: #a3a59e; }
+.theme-light .session-dot.is-running { background: #4d6787; box-shadow: 0 0 0 2px rgba(77, 103, 135, .18); }
+.theme-light .session-dot.is-waiting { background: var(--warning); }
+.theme-light .session-dot.is-completed { background: #7dccad; }
+.theme-light .session-dot.is-error { background: var(--danger); }
+.theme-light .sidebar-bottom { border-top-color: var(--border-subtle); }
+
+.theme-light .project-picker-item {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  box-shadow: 0 1px 1px rgba(38, 39, 34, .03);
+}
+.theme-light .project-picker-item:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.theme-light .project-picker-item small { color: var(--text-secondary); }
+.theme-light .project-picker-new,
+.theme-light .welcome-primary {
+  color: #fffaf0;
+  background: var(--accent-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+}
+.theme-light .project-picker-new:hover,
+.theme-light .welcome-primary:hover { background: var(--accent-hover); }
+
+/* Top bar and session tabs */
+.theme-light .main-column { background: var(--surface-center); }
+.theme-light .topbar {
+  border-bottom-color: var(--border-subtle);
+  background: var(--surface-topbar);
+}
+.theme-light .topbar-button,
+.theme-light .icon-button,
+.theme-light .breadcrumb,
+.theme-light .breadcrumb-button {
+  color: var(--text-secondary);
+}
+.theme-light .topbar-button:hover,
+.theme-light .icon-button:hover,
+.theme-light .breadcrumb-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.theme-light .topbar-button.active,
+.theme-light .mode-pill.selected {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+.theme-light .mode-switcher {
+  border-color: var(--border-subtle);
+  background: var(--surface-code);
+}
+.theme-light .mode-switcher button { color: var(--text-secondary); }
+.theme-light .mode-switcher button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .mode-switcher button.is-active { color: #fffaf0; background: var(--accent-primary); }
+.theme-light .topbar-kbd {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  background: #f0f1ee;
+}
+.theme-light .topbar-button:hover .topbar-kbd {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+}
+.theme-light .header-model {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.theme-light .header-model:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.theme-light .muted-separator,
+.theme-light .muted { color: var(--text-muted); }
+.theme-light .session-tab { color: var(--text-secondary); }
+.theme-light .session-tab:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .session-tab.active {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  box-shadow: inset 0 -2px 0 var(--accent-primary), 0 -1px 0 var(--border-subtle);
+}
+.theme-light .session-tab.is-pinned,
+.theme-light .session-tab.is-pinned:hover,
+.theme-light .session-tab.is-pinned.active {
+  color: #714c10;
+  background: linear-gradient(180deg, #fbf3e4 0%, #f4e6cd 100%);
+}
+.theme-light .session-tab.is-pinned.active {
+  box-shadow: inset 0 -2px 0 var(--accent-primary), 0 0 12px rgba(0, 0, 0, .06);
+}
+.theme-light .session-tab-project,
+.theme-light .session-tab-kbd,
+.theme-light .session-tab-pin,
+.theme-light .session-tab-close { color: var(--text-muted); }
+.theme-light .session-tab.active .session-tab-project,
+.theme-light .session-tab.active .session-tab-kbd,
+.theme-light .session-tab:hover .session-tab-pin,
+.theme-light .session-tab.active .session-tab-pin { color: var(--text-secondary); }
+.theme-light .session-tab-pin:hover,
+.theme-light .session-tab-close:hover { color: var(--accent-hover); background: var(--accent-soft); }
+.theme-light .session-tab-close:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .session-tab.is-pinned .session-tab-kbd,
+.theme-light .session-tab.is-pinned.active .session-tab-kbd,
+.theme-light .session-tab-pin.is-pinned { color: var(--accent-primary); }
+.theme-light .session-tab-pin.is-pinned {
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, .16));
+}
+.theme-light .session-tab-dot { background: #a3a59e; }
+.theme-light .session-tab-dot.is-running { background: #4d6787; box-shadow: 0 0 0 2px rgba(77, 103, 135, .18); }
+.theme-light .session-tab-dot.is-waiting { background: var(--warning); }
+.theme-light .session-tab-dot.is-completed { background: #7dccad; }
+.theme-light .session-tab-dot.is-error { background: var(--danger); }
+
+/* Empty state, composer and menus */
+.theme-light .welcome-orb {
+  border-color: #dfc99d;
+  color: var(--accent-primary);
+  background: linear-gradient(135deg, #fff9ed, #f4e7cf);
+  box-shadow: 0 0 40px rgba(0, 0, 0, .06);
+}
+.theme-light .eyebrow { color: var(--accent-primary); }
+.theme-light .welcome-block h1 { color: var(--text-primary); }
+.theme-light .welcome-copy { color: var(--text-secondary); }
+.theme-light .quick-actions button {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, .78);
+  box-shadow: 0 2px 8px rgba(38, 39, 34, .04);
+}
+.theme-light .quick-actions button:hover { border-color: #d5b982; background: #fffaf0; }
+.theme-light .quick-actions span { color: var(--accent-primary); }
+.theme-light .quick-actions small { color: var(--text-secondary); }
+.theme-light .composer-queue,
+.theme-light .composer-card,
+.theme-light .composer-menu-popover,
+.theme-light .at-picker,
+.theme-light .command-picker {
+  border-color: var(--border-subtle);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-soft);
+}
+.theme-light .composer-card {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 12px 36px rgba(38, 39, 34, .10);
+}
+.theme-light .composer-card:focus-within { border-color: #c69b52; box-shadow: var(--focus-ring), 0 12px 36px rgba(38, 39, 34, .10); }
+.theme-light .composer-queue-header,
+.theme-light .composer-hints,
+.theme-light .at-picker-label,
+.theme-light .at-picker-meta,
+.theme-light .at-picker-empty { color: var(--text-secondary); }
+.theme-light .composer-queue-item,
+.theme-light .composer-queue-action,
+.theme-light .ctrl-box,
+.theme-light .composer-menu-control,
+.theme-light .composer-context-control,
+.theme-light .model-status {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: #f7f7f4;
+}
+.theme-light .composer-queue-message,
+.theme-light .composer-menu-trigger,
+.theme-light .composer-context-workspace,
+.theme-light .composer-card textarea,
+.theme-light .model-status-name { color: var(--text-primary); }
+.theme-light .composer-queue-editor,
+.theme-light .index-search-input,
+.theme-light .settings-provider-key-field input,
+.theme-light .settings-oauth-prompt > input,
+.theme-light .http-create-dialog-field input {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: #f4f5f2;
+}
+.theme-light .composer-queue-editor:focus,
+.theme-light .ctrl-box:focus-within,
+.theme-light .composer-menu-control:focus-within,
+.theme-light .settings-provider-key-field input:focus,
+.theme-light .settings-oauth-prompt > input:focus,
+.theme-light .http-create-dialog-field input:focus,
+.theme-light .index-search-input:focus { border-color: #c69b52; box-shadow: var(--focus-ring); }
+.theme-light .composer-card textarea::placeholder,
+.theme-light .composer-hints { color: var(--text-muted); }
+.theme-light .composer-menu-option,
+.theme-light .at-picker-item,
+.theme-light .command-picker button { color: var(--text-primary); }
+.theme-light .composer-menu-option:hover,
+.theme-light .composer-menu-option[aria-selected="true"],
+.theme-light .at-picker-item:hover,
+.theme-light .command-picker button:hover,
+.theme-light .command-picker button.highlighted,
+.theme-light .command-picker button[aria-selected="true"] {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.theme-light .composer-menu-option-action { border-top-color: var(--border-subtle); }
+.theme-light .composer-context-sep { color: var(--text-muted); }
+.theme-light .composer-context-branch { color: var(--success); }
+.theme-light .composer-menu-option-action,
+.theme-light .composer-menu-control,
+.theme-light .ctrl-box-empty { color: var(--text-secondary); }
+.theme-light .model-status-effort,
+.theme-light .composer-queue-count {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+.theme-light .send-button {
+  color: #fffaf0;
+  background: var(--accent-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+}
+.theme-light .send-button:hover { background: var(--accent-hover); }
+.theme-light .send-button.stop { color: #fff8f5; background: #c35d53; }
+
+/* Inspector and supporting status data */
+.theme-light .inspector {
+  border-left-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-inspector);
+}
+.theme-light .inspector-header {
+  border-bottom-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-topbar);
+}
+.theme-light .changes-inspector .inspector-header-actions .icon-button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--text-secondary);
+}
+.theme-light .changes-inspector .inspector-header-actions .icon-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* Optional motion switch: keep layout and accessibility intact while removing movement. */
+html.motion-disabled *,
+html.motion-disabled *::before,
+html.motion-disabled *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
+.settings-motion-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px 0 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--surface-code);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.settings-motion-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.settings-motion-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color var(--transition-fast);
+}
+.settings-motion-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+  transform: translateX(0);
+  transition: transform var(--transition-fast);
+}
+.settings-motion-toggle.is-on .settings-motion-track {
+  background: var(--accent-primary);
+}
+.settings-motion-toggle.is-on .settings-motion-thumb {
+  transform: translateX(14px);
+}
+
+@keyframes light-inspector-enter {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.theme-light .changes-inspector {
+  animation: light-inspector-enter 180ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.theme-light .right-pane-mode-tabs button,
+.theme-light .inspector-tabs button,
+.theme-light .inspector-label,
+.theme-light .inspector-section-heading,
+.theme-light .inspector-row,
+.theme-light .inspector-field-label,
+.theme-light .todo-progress,
+.theme-light .context-bar-label,
+.theme-light .context-bar-cost,
+.theme-light .session-summary-text small,
+.theme-light .session-usage-line { color: var(--text-secondary); }
+.theme-light .right-pane-mode-tabs button:hover,
+.theme-light .inspector-section-heading:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .right-pane-mode-tabs button.selected,
+.theme-light .inspector-tabs button.selected { color: var(--accent-primary); background: var(--accent-soft); }
+.theme-light .inspector-tabs,
+.theme-light .inspector-footer-actions,
+.theme-light .inspector-footer-actions .inspector-footer,
+.theme-light .inspector-footer { border-color: var(--border-subtle); }
+.theme-light .session-summary-text strong,
+.theme-light .inspector-row strong,
+.theme-light .inspector-field-value,
+.theme-light .todo-row,
+.theme-light .resource-row strong,
+.theme-light .mcp-server-text strong,
+.theme-light .package-name,
+.theme-light .skill-group-name,
+.theme-light .tool-toggle-text strong { color: var(--text-primary); }
+.theme-light .section-chevron,
+.theme-light .todo-mark,
+.theme-light .todo-priority,
+.theme-light .section-count,
+.theme-light .mcp-status-icon.not-connected,
+.theme-light .mcp-status-icon.disabled,
+.theme-light .package-summary,
+.theme-light .skill-group-heading small,
+.theme-light .tool-toggle-text small { color: var(--text-muted); }
+.theme-light .section-count,
+.theme-light .tab-badge { background: var(--surface-active); color: var(--text-secondary); }
+.theme-light .inspector-tabs button.selected { box-shadow: inset 0 -2px 0 var(--accent-primary); }
+.theme-light .tab-badge.error { color: var(--danger); background: #fae9e6; box-shadow: none; }
+.theme-light .status-dot { background: #a3a59e; }
+.theme-light .status-dot.running { background: var(--warning); box-shadow: 0 0 6px rgba(168, 110, 25, .36); }
+.theme-light .status-dot.completed,
+.theme-light .status-dot.idle { background: var(--success); }
+.theme-light .context-bar-fill,
+.theme-light .ext-dot.ok { background: var(--success); }
+.theme-light .resource-row em,
+.theme-light .mcp-status-icon.connected,
+.theme-light .mcp-status-label.connected,
+.theme-light .package-row em.status-enabled,
+.theme-light .todo-row.status-completed .todo-mark { color: var(--success); }
+.theme-light .status-dot.error,
+.theme-light .context-bar-fill.danger,
+.theme-light .resource-icon.failed,
+.theme-light .mcp-status-icon.failed,
+.theme-light .mcp-status-label.failed,
+.theme-light .ext-dot.fail { background: var(--danger); color: var(--danger); }
+.theme-light .status-dot.awaiting_approval,
+.theme-light .todo-active,
+.theme-light .todo-row.status-in_progress .todo-mark,
+.theme-light .mcp-status-icon.cached,
+.theme-light .mcp-status-label.cached { color: var(--info); background-color: var(--info); }
+.theme-light .resource-icon,
+.theme-light .mcp-status-icon.connected { color: var(--success); }
+.theme-light .resource-icon.purple { color: #8066b2; }
+.theme-light .resource-icon.amber,
+.theme-light .mcp-status-icon.needs-auth,
+.theme-light .mcp-status-label.needs-auth { color: var(--warning); }
+.theme-light .package-group,
+.theme-light .skill-group,
+.theme-light .tool-toggle-row,
+.theme-light .diff-row { border-bottom-color: var(--border-subtle); }
+.theme-light .skill-group-heading input[type="checkbox"],
+.theme-light .skill-toggle-row input[type="checkbox"],
+.theme-light .tool-toggle-row input[type="checkbox"],
+.theme-light .change-reviewed-toggle input { accent-color: var(--accent-primary); }
+.theme-light .diff-row-heading,
+.theme-light .change-row { color: var(--text-secondary); }
+.theme-light .diff-patch,
+.theme-light .tool-body code,
+.theme-light .tool-body pre { color: #40443f; background: var(--surface-code); }
+.theme-light .diff-badge { color: #fffaf0; background: var(--accent-primary); }
+.theme-light .diff-badge.added { color: #fff; background: var(--success); }
+.theme-light .diff-badge.deleted { color: #fff; background: var(--danger); }
+.theme-light .diff-badge.renamed { color: #fff; background: #8066b2; }
+.theme-light .approval-card { border-color: #e6c7be; background: #fff5f1; }
+.theme-light .approval-card-title { color: #9d4c41; }
+.theme-light .approval-card-title span { color: #fff; background: var(--danger); }
+.theme-light .approval-card code { color: #77483f; }
+.theme-light .approval-actions button { color: #9d4c41; background: #fbe7e2; }
+.theme-light .approval-actions button:hover { color: #7e3931; background: #f4d5ce; }
+
+/* Timeline, markdown and change review */
+.theme-light .timeline-empty,
+.theme-light .timeline-status,
+.theme-light .activity-status,
+.theme-light .activity-more,
+.theme-light .tool-sep,
+.theme-light .change-inspector-section-heading,
+.theme-light .change-inspector-empty,
+.theme-light .change-reviewed-toggle { color: var(--text-secondary); }
+.theme-light .timeline-item-heading,
+.theme-light .activity-heading,
+.theme-light .activity-line,
+.theme-light .thinking-inline,
+.theme-light .tool-inline-preview { color: var(--text-secondary); }
+.theme-light .activity-heading:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .timeline-icon { color: var(--accent-primary); }
+.theme-light .timeline-icon.user { color: var(--info); }
+.theme-light .timeline-icon.thinking { color: #8066b2; }
+.theme-light .timeline-icon.error,
+.theme-light .timeline-icon.approval,
+.theme-light .activity-status.failed,
+.theme-light .message-error { color: var(--danger); }
+.theme-light .message-content { color: var(--text-primary); }
+.theme-light .markdown h1,
+.theme-light .markdown h2,
+.theme-light .markdown h3,
+.theme-light .markdown h4,
+.theme-light .markdown h5,
+.theme-light .markdown h6 { color: var(--text-primary); }
+.theme-light .markdown :not(pre) > code { color: #8a5e17; background: #f5ead7; }
+.theme-light .markdown pre { color: #40443f; background: var(--surface-code); }
+.theme-light .markdown blockquote { border-left-color: #c7c9c1; color: var(--text-secondary); }
+.theme-light .markdown a { color: var(--info); }
+.theme-light .markdown th,
+.theme-light .markdown td { border-color: var(--border-subtle); }
+.theme-light .markdown th { background: var(--surface-active); }
+.theme-light .markdown hr,
+.theme-light .turn + .turn { border-color: var(--border-subtle); }
+.theme-light .timeline-item.message-item.user .message-content { color: #24333e; background: #e2edf4; }
+.theme-light .timeline-item.message-item.thinking .message-content { color: #73756f; }
+.theme-light .change-summary { border-color: var(--border-subtle); background: var(--surface-elevated); box-shadow: 0 3px 12px rgba(38, 39, 34, .05); }
+.theme-light .change-summary-icon { color: var(--text-secondary); background: var(--surface-code); }
+.theme-light .change-summary-title strong { color: var(--text-primary); }
+.theme-light .change-additions { color: #19824c; }
+.theme-light .change-deletions { color: #c8473e; }
+.theme-light .change-summary-review,
+.theme-light .change-undo-button { border-color: #dfc28d; color: var(--accent-hover); background: var(--accent-soft); }
+.theme-light .change-summary-review:hover,
+.theme-light .change-undo-button:hover { border-color: #c9a45f; color: #724a0b; background: #f6e5c5; }
+.theme-light .change-summary-files,
+.theme-light .change-summary-file,
+.theme-light .change-summary-more,
+.theme-light .change-inspector-diff { border-color: var(--border-subtle); }
+.theme-light .change-summary-file:hover,
+.theme-light .change-summary-more:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .change-summary-path,
+.theme-light .change-diff-file-title,
+.theme-light .change-selected-file-title { color: var(--text-primary); }
+.theme-light .change-diff-code,
+.theme-light .change-tree { border-color: var(--border-subtle); background: var(--surface-code); }
+.theme-light .change-diff-code { color: #4b4e49; }
+.theme-light .change-diff-line.added { color: #1a7647; background: rgba(47, 139, 89, .12); }
+.theme-light .change-diff-line.removed { color: #b33d36; background: rgba(197, 84, 73, .12); }
+.theme-light .change-tree-folder-button,
+.theme-light .change-tree-file { color: var(--text-secondary); }
+.theme-light .change-tree-folder-button:hover,
+.theme-light .change-tree-file:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .change-tree-file.selected { color: var(--accent-hover); background: var(--accent-soft); }
+.theme-light .change-tree-file.reviewed { color: var(--success); }
+.theme-light .change-tree-file > svg,
+.theme-light .change-tree-folder-button > svg { color: var(--text-muted); }
+.theme-light .change-tree-file.selected > svg,
+.theme-light .change-selected-file-title > svg { color: var(--accent-primary); }
+.theme-light .change-collapse-button { border-color: var(--border-subtle); color: var(--text-secondary); background: var(--surface-code); }
+.theme-light .change-collapse-button:hover { border-color: var(--border-strong); color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .mcp-tag { color: var(--info); background: #e8f0f8; }
+
+/* Menus, alerts, command palette, help, trust and settings */
+.theme-light .session-context-menu,
+.theme-light .command-palette,
+.theme-light .session-picker,
+.theme-light .tree-dialog,
+.theme-light .help-dialog,
+.theme-light .settings-dialog,
+.theme-light .ui-alert-dialog,
+.theme-light .trust-dialog,
+.theme-light .http-create-dialog {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+.theme-light .session-context-item,
+.theme-light .palette-list button,
+.theme-light .session-picker-list button,
+.theme-light .tree-node button,
+.theme-light .help-action,
+.theme-light .settings-field-meta label,
+.theme-light .settings-provider-title strong,
+.theme-light .settings-connected-item,
+.theme-light .settings-provider-btn,
+.theme-light .trust-btn,
+.theme-light .ui-alert-dialog-cancel { color: var(--text-primary); }
+.theme-light .session-context-item[data-highlighted],
+.theme-light .session-context-item:hover,
+.theme-light .palette-list button:hover,
+.theme-light .palette-list button.highlighted,
+.theme-light .session-picker-list button:hover,
+.theme-light .tree-node button:hover,
+.theme-light .tree-node button.active,
+.theme-light .help-row:hover,
+.theme-light .settings-connected-item:hover,
+.theme-light .settings-connected-item.active,
+.theme-light .ui-alert-dialog-cancel:hover,
+.theme-light .trust-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .session-context-item.danger { color: var(--danger); }
+.theme-light .session-context-item.danger[data-highlighted],
+.theme-light .session-context-item.danger:hover { background: #fae9e6; }
+.theme-light .session-context-separator,
+.theme-light .palette-footer,
+.theme-light .help-header,
+.theme-light .help-section + .help-section,
+.theme-light .help-footer,
+.theme-light .settings-tabs,
+.theme-light .settings-heading,
+.theme-light .settings-footer,
+.theme-light .tree-hint { border-color: var(--border-subtle); }
+.theme-light .palette-backdrop,
+.theme-light .ui-dialog-overlay,
+.theme-light .http-create-dialog-backdrop { background: rgba(34, 35, 31, .34); backdrop-filter: blur(6px); }
+.theme-light .command-palette input,
+.theme-light .session-picker input { color: var(--text-primary); border-bottom-color: var(--border-subtle); }
+.theme-light .palette-empty,
+.theme-light .session-picker-empty,
+.theme-light .tree-empty,
+.theme-light .tree-error,
+.theme-light .tree-hint,
+.theme-light .palette-list small,
+.theme-light .palette-list em,
+.theme-light .session-picker-copy small,
+.theme-light .help-header p,
+.theme-light .help-footer,
+.theme-light .help-tip p,
+.theme-light .settings-subtitle,
+.theme-light .settings-footer,
+.theme-light .settings-providers-lead,
+.theme-light .settings-providers-status,
+.theme-light .settings-provider-note,
+.theme-light .settings-provider-source,
+.theme-light .settings-provider-id,
+.theme-light .trust-note { color: var(--text-secondary); }
+.theme-light .tree-error,
+.theme-light .settings-providers-error { color: var(--danger); }
+.theme-light .palette-list button.highlighted,
+.theme-light .command-picker-name,
+.theme-light .tree-node button.active { color: var(--accent-primary); }
+.theme-light .palette-footer,
+.theme-light .help-footer,
+.theme-light .settings-footer { background: #fafaf8; }
+.theme-light .help-header strong,
+.theme-light .settings-heading strong,
+.theme-light .trust-title,
+.theme-light .ui-alert-dialog-title,
+.theme-light .http-create-dialog-heading h2 { color: var(--text-primary); }
+.theme-light .help-section-heading,
+.theme-light .help-tip-label,
+.theme-light .settings-section-label,
+.theme-light .help-section-heading span:last-child { color: var(--text-secondary); }
+.theme-light .help-keys kbd,
+.theme-light .help-footer kbd { border-color: var(--border-subtle); color: var(--text-primary); background: var(--surface-code); }
+.theme-light .help-diagnostics .diagnostic-row { color: var(--text-secondary); }
+.theme-light .help-diagnostics .diagnostic-row strong { color: var(--text-primary); }
+.theme-light .help-diagnostics pre { color: var(--danger); background: #fae9e6; }
+.theme-light .settings-tab { color: var(--text-secondary); }
+.theme-light .settings-tab:hover { color: var(--text-primary); }
+.theme-light .settings-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.theme-light .settings-provider-detail,
+.theme-light .settings-connected-item,
+.theme-light .settings-oauth-panel,
+.theme-light .settings-oauth-option { border-color: var(--border-subtle); background: #f7f7f4; }
+.theme-light .settings-provider-btn { border-color: var(--border-subtle); background: var(--surface-code); }
+.theme-light .settings-provider-btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); }
+.theme-light .settings-provider-btn.primary { color: #fffaf0; border-color: var(--accent-primary); background: var(--accent-primary); }
+.theme-light .settings-provider-btn.primary:hover { background: var(--accent-hover); }
+.theme-light .settings-provider-btn.danger { color: var(--danger); border-color: #e6c7be; background: #fff5f1; }
+.theme-light .settings-provider-key-field span,
+.theme-light .settings-oauth-heading > span:first-child,
+.theme-light .settings-oauth-option-label small { color: var(--text-secondary); }
+.theme-light .settings-oauth-event-icon { color: var(--text-secondary); }
+.theme-light .settings-oauth-event.success .settings-oauth-event-icon { color: var(--success); }
+.theme-light .settings-oauth-event.error .settings-oauth-event-icon { color: var(--danger); }
+.theme-light .settings-oauth-event-text { color: var(--text-primary); }
+.theme-light .settings-oauth-event-text strong { color: var(--text-primary); }
+.theme-light .settings-oauth-link-btn,
+.theme-light .settings-oauth-state { color: var(--accent-primary); }
+.theme-light .settings-oauth-prompt,
+.theme-light .settings-provider-oauth-stack { border-top-color: var(--border-subtle); }
+.theme-light .settings-oauth-prompt-message { color: var(--text-primary); }
+.theme-light .settings-oauth-option:hover { background: var(--surface-hover); }
+.theme-light .settings-oauth-option input { accent-color: var(--accent-primary); }
+.theme-light .ui-alert-dialog-desc { color: var(--text-secondary); }
+.theme-light .ui-alert-dialog-cancel { border-color: var(--border-subtle); background: var(--surface-code); }
+.theme-light .ui-alert-dialog-action.danger { color: #fff; border-color: var(--danger); background: var(--danger); }
+.theme-light .ui-alert-dialog-action.danger:hover { background: #a7443b; }
+.theme-light .trust-backdrop { background: rgba(34, 35, 31, .42); }
+.theme-light .trust-dialog { background: linear-gradient(180deg, #fffdf8 0%, #f7f5ef 100%); }
+.theme-light .trust-icon { border-color: var(--border-strong); color: var(--text-primary); background: linear-gradient(135deg, #ffffff, #eeeeee); box-shadow: 0 0 40px rgba(0, 0, 0, .06); }
+.theme-light .trust-copy { color: var(--text-secondary); }
+.theme-light .trust-path { border-color: var(--border-subtle); background: var(--surface-code); }
+.theme-light .trust-path-icon,
+.theme-light .trust-path code { color: var(--text-secondary); }
+.theme-light .trust-btn { border-color: var(--border-subtle); background: var(--surface-code); }
+.theme-light .trust-btn.primary { color: #ffffff; border-color: #202020; background: #202020; }
+.theme-light .trust-btn.primary:hover { background: #000000; }
+
+/* Light-mode motion: keep state feedback visible without dark glows. */
+.theme-light .session-dot.is-running,
+.theme-light .session-tab-dot.is-running,
+.theme-light .status-dot.running,
+.theme-light .tool-item.running .timeline-icon {
+  animation: light-status-pulse 1.35s ease-in-out infinite;
+}
+.theme-light .http-response-drawer { animation-name: light-response-enter; }
+@keyframes light-status-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0)); }
+  50% { opacity: .68; filter: drop-shadow(0 0 4px rgba(0, 0, 0, .16)); }
+}
+
+/* Review is neutral at rest; feedback appears only on hover/press. */
+.theme-light .change-summary-review {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  background: #ffffff;
+}
+.theme-light .change-summary-review:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.theme-light .change-summary-review:active {
+  background: var(--surface-active);
+}
+
+/* Final visual pass: quieter chat surfaces and Codex-like control geometry. */
+.theme-light .sidebar-search { background: #f9f9f9; }
+
+.theme-light .project-node.active .project-node-toggle {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.theme-light .timeline-item.message-item.user .message-content {
+  color: #3f3f3f;
+  background: #f1f1f1;
+  border: 0;
+  box-shadow: none;
+}
+
+.theme-light .markdown :not(pre) > code {
+  color: #555555;
+  background: #f2f2f2;
+}
+
+.theme-light .composer-card {
+  border-color: var(--border-subtle);
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .08);
+}
+
+.theme-light .composer-card:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring), 0 6px 22px rgba(0, 0, 0, .08);
+}
+
+.theme-light .send-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .16);
+}
+
+.theme-light .send-button:hover {
+  box-shadow: 0 3px 9px rgba(0, 0, 0, .20);
+}
+
+.theme-light .send-button:active {
+  box-shadow: none;
+}
+
+.theme-light .index-btn,
+.theme-light .index-search-btn,
+.theme-light .settings-provider-btn,
+.theme-light .trust-btn,
+.http-workbench-shell.theme-light .http-navigator-actions button,
+.http-workbench-shell.theme-light .http-editor-actions button,
+.http-workbench-shell.theme-light .http-chat-new-button,
+.http-workbench-shell.theme-light .http-create-dialog-actions button {
+  box-shadow: none;
+}
+
+.theme-light .index-btn:disabled,
+.theme-light .index-search-btn:disabled,
+.theme-light .settings-provider-btn:disabled,
+.http-workbench-shell.theme-light button:disabled {
+  color: #a3a3a3;
+  border-color: #ededed;
+  background: #f7f7f7;
+}
+
+/* Change summary card — first pass: Codex daylight surface hierarchy. */
+.theme-light .change-summary {
+  border-color: #dedede;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .06);
+}
+
+.theme-light .change-summary-header {
+  padding: 13px 14px;
+  background: #ffffff;
+}
+
+.theme-light .change-summary-icon {
+  color: #666666;
+  background: #f6f6f6;
+}
+
+.theme-light .change-summary-title strong {
+  color: #3d3d3d;
+}
+
+/* Change summary card — second pass: stats, actions, and file rows. */
+.theme-light .change-additions {
+  color: #168a4a;
+}
+
+.theme-light .change-deletions {
+  color: #cf2f2f;
+}
+
+.theme-light .change-summary-review,
+.theme-light .change-undo-button {
+  border-color: #e1e1e1;
+  border-radius: 9px;
+  color: #3d3d3d;
+  background: #e7e7e7;
+}
+
+.theme-light .change-summary-review:hover,
+.theme-light .change-undo-button:hover {
+  border-color: #d5d5d5;
+  color: #202020;
+  background: #dddddd;
+}
+
+.theme-light .change-summary-review:active,
+.theme-light .change-undo-button:active {
+  background: #d5d5d5;
+}
+
+.theme-light .change-summary-files {
+  border-top-color: #e5e5e5;
+  background: #ffffff;
+}
+
+.theme-light .change-summary-files.is-single-file .change-summary-file {
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+}
+
+.theme-light .change-summary-files.is-single-file .change-summary-file:hover {
+  width: 100%;
+  background: #f0f0f0;
+}
+
+.theme-light .change-summary-file {
+  border-bottom-color: #ededed;
+  width: 100%;
+  max-width: 100%;
+  color: var(--text-primary);
+  background: #ffffff;
+}
+
+.theme-light .change-summary-file:hover {
+  color: var(--text-primary);
+  background: #f0f0f0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.theme-light .change-summary-file:active {
+  background: #e7e7e7;
+}
+
+.theme-light .change-summary-file:focus-visible {
+  width: 100%;
+  max-width: 100%;
+}
+
+.theme-light .change-summary-path {
+  color: #454545;
+}
+
+.theme-light .change-summary-more {
+  border-top-color: #e5e5e5;
+  color: var(--text-secondary);
+  background: #f7f7f7;
+}
+
+.theme-light .change-summary-more:hover {
+  color: var(--text-primary);
+  background: #eeeeee;
+}
+
+/* Change summary card — third pass: restrained interaction feedback. */
+.theme-light .change-summary,
+.theme-light .change-summary-review,
+.theme-light .change-undo-button,
+.theme-light .change-summary-file,
+.theme-light .change-summary-more {
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-light .change-summary-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.theme-light .change-summary-review svg {
+  color: #555555;
+}
+
+.theme-light .change-summary-review:focus-visible,
+.theme-light .change-undo-button:focus-visible,
+.theme-light .change-summary-file:focus-visible,
+.theme-light .change-summary-more:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-light .change-summary,
+  .theme-light .change-summary-review,
+  .theme-light .change-undo-button,
+  .theme-light .change-summary-file,
+  .theme-light .change-summary-more {
+    transition: none;
+  }
+}
+@keyframes light-response-enter {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* HTTP Workbench */
+.http-workbench-shell.theme-light {
+  color: var(--text-primary);
+  background: var(--surface-center);
+}
+.http-workbench-shell.theme-light .http-navigator,
+.http-workbench-shell.theme-light .http-empty-project-rail {
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+  background: var(--surface-sidebar);
+}
+.http-workbench-shell.theme-light .http-workbench-brand-name { color: var(--text-primary); }
+.http-workbench-shell.theme-light .http-navigator-heading,
+.http-workbench-shell.theme-light .http-section-label,
+.http-workbench-shell.theme-light .http-chat-eyebrow { color: var(--text-secondary); }
+.http-workbench-shell.theme-light .http-navigator-heading,
+.http-workbench-shell.theme-light .http-editor-header,
+.http-workbench-shell.theme-light .http-chat-header,
+.http-workbench-shell.theme-light .http-chat-context,
+.http-workbench-shell.theme-light .http-results-tabs,
+.http-workbench-shell.theme-light .http-results-panel,
+.http-workbench-shell.theme-light .http-run-list { border-color: var(--border-subtle); }
+.http-workbench-shell.theme-light .http-project-picker,
+.http-workbench-shell.theme-light .http-project-picker button,
+.http-workbench-shell.theme-light .http-tree-row,
+.http-workbench-shell.theme-light .http-tree-root-row,
+.http-workbench-shell.theme-light .http-environment-row,
+.http-workbench-shell.theme-light .http-run-row,
+.http-workbench-shell.theme-light .http-chat-collapse-button,
+.http-workbench-shell.theme-light .http-chat-collapsed button { color: var(--text-secondary); }
+.http-workbench-shell.theme-light .http-project-picker button:hover,
+.http-workbench-shell.theme-light .http-tree-row:hover,
+.http-workbench-shell.theme-light .http-tree-root-row:hover,
+.http-workbench-shell.theme-light .http-environment-row:hover,
+.http-workbench-shell.theme-light .http-chat-collapse-button:hover,
+.http-workbench-shell.theme-light .http-chat-collapsed button:hover,
+.http-workbench-shell.theme-light .http-run-row:hover { color: var(--text-primary); background: var(--surface-hover); }
+.http-workbench-shell.theme-light .http-project-picker button.is-active,
+.http-workbench-shell.theme-light .http-tree-row.is-selected,
+.http-workbench-shell.theme-light .http-tree-root-row.is-selected,
+.http-workbench-shell.theme-light .http-environment-row.is-active,
+.http-workbench-shell.theme-light .http-run-row.is-selected {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+.http-workbench-shell.theme-light .http-navigator-actions,
+.http-workbench-shell.theme-light .http-environments-footer {
+  border-color: var(--border-subtle);
+  background: transparent;
+}
+.http-workbench-shell.theme-light .http-navigator-actions button,
+.http-workbench-shell.theme-light .http-editor-actions button,
+.http-workbench-shell.theme-light .http-chat-new-button,
+.http-workbench-shell.theme-light .http-create-dialog-actions button {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-code);
+}
+.http-workbench-shell.theme-light .http-navigator-actions button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-editor-actions button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-chat-new-button:hover,
+.http-workbench-shell.theme-light .http-create-dialog-actions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.http-workbench-shell.theme-light .http-tree-disclosure,
+.http-workbench-shell.theme-light .http-tree-disclosure-spacer,
+.http-workbench-shell.theme-light .http-tree-count,
+.http-workbench-shell.theme-light .http-tree-empty,
+.http-workbench-shell.theme-light .http-section-label { color: var(--text-muted); }
+.http-workbench-shell.theme-light .http-tree-disclosure:hover,
+.http-workbench-shell.theme-light .http-section-label button:hover { color: var(--accent-primary); background: var(--accent-soft); }
+.http-workbench-shell.theme-light .http-tree-count,
+.http-workbench-shell.theme-light .http-chat-context span,
+.http-workbench-shell.theme-light .http-environment-select,
+.http-workbench-shell.theme-light .http-editor-actions button,
+.http-workbench-shell.theme-light .http-chat-new-button,
+.http-workbench-shell.theme-light .http-create-dialog-actions button,
+.http-workbench-shell.theme-light .http-request-result {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  background: var(--surface-elevated);
+}
+.http-workbench-shell.theme-light .http-editor-column { background: var(--surface-center); }
+.http-workbench-shell.theme-light .http-editor-header,
+.http-workbench-shell.theme-light .http-results-panel { background: var(--surface-topbar); }
+.http-workbench-shell.theme-light .http-breadcrumb,
+.http-workbench-shell.theme-light .http-chat-header,
+.http-workbench-shell.theme-light .http-results-tabs,
+.http-workbench-shell.theme-light .http-request-result-heading,
+.http-workbench-shell.theme-light .http-request-result strong,
+.http-workbench-shell.theme-light .http-chat-header h2,
+.http-workbench-shell.theme-light .http-empty-state h1,
+.http-workbench-shell.theme-light .http-folder-overview h2 { color: var(--text-primary); }
+.http-workbench-shell.theme-light .http-environment-select select,
+.http-workbench-shell.theme-light .http-editor-actions button,
+.http-workbench-shell.theme-light .http-chat-new-button,
+.http-workbench-shell.theme-light .http-create-dialog-actions button { color: var(--text-primary); }
+.http-workbench-shell.theme-light .http-environment-select select:disabled,
+.http-workbench-shell.theme-light .http-results-tabs span:last-child,
+.http-workbench-shell.theme-light .http-run-result-meta,
+.http-workbench-shell.theme-light .http-run-row-main small,
+.http-workbench-shell.theme-light .http-results-empty,
+.http-workbench-shell.theme-light .http-empty-state,
+.http-workbench-shell.theme-light .http-folder-overview,
+.http-workbench-shell.theme-light .http-folder-overview p,
+.http-workbench-shell.theme-light .http-chat-empty { color: var(--text-secondary); }
+.http-workbench-shell.theme-light .http-editor,
+.http-workbench-shell.theme-light .http-code-editor,
+.http-workbench-shell.theme-light .http-code-highlight,
+.http-workbench-shell.theme-light .http-response-drawer pre {
+  color: #30332f;
+  background: var(--surface-code);
+}
+.http-workbench-shell.theme-light .http-code-gutter { border-right-color: var(--border-subtle); color: var(--text-muted); background: #e8eae6; }
+.http-workbench-shell.theme-light .http-code-input { caret-color: var(--accent-primary); }
+.http-workbench-shell.theme-light .http-code-input::selection { background: rgba(0, 0, 0, .10); }
+.http-workbench-shell.theme-light .http-code-editor:focus-within,
+.http-workbench-shell.theme-light .http-editor:focus { box-shadow: inset 0 0 0 1px rgba(32, 32, 32, .30); }
+.http-workbench-shell.theme-light .http-code-heading { color: #8a5e17; }
+.http-workbench-shell.theme-light .http-code-comment { color: #777b74; }
+.http-workbench-shell.theme-light .http-code-method { color: #23794c; }
+.http-workbench-shell.theme-light .http-code-url,
+.http-workbench-shell.theme-light .http-code-key { color: #356da4; }
+.http-workbench-shell.theme-light .http-code-variable { color: #9a6515; }
+.http-workbench-shell.theme-light .http-code-header { color: #7754a4; }
+.http-workbench-shell.theme-light .http-code-string { color: #327c4d; }
+.http-workbench-shell.theme-light .http-code-response-link,
+.http-workbench-shell.theme-light .http-code-response-inlay > button:first-child { color: #3f77b7; }
+.http-workbench-shell.theme-light .http-code-run-request { color: var(--success); }
+.http-workbench-shell.theme-light .http-code-run-request:hover:not(:disabled) { color: #1c7045; background: rgba(47, 139, 89, .12); }
+.http-workbench-shell.theme-light .http-code-response-inlay > button:first-child.is-failed,
+.http-workbench-shell.theme-light .http-response-drawer pre.is-error,
+.http-workbench-shell.theme-light .http-request-result-body.is-error { color: var(--danger); }
+.http-workbench-shell.theme-light .http-code-response-inlay > button:first-child span,
+.http-workbench-shell.theme-light .http-code-response-delete,
+.http-workbench-shell.theme-light .http-response-drawer-header small { color: var(--text-muted); }
+.http-workbench-shell.theme-light .http-response-drawer {
+  border-left-color: var(--border-subtle);
+  background: var(--surface-elevated);
+  box-shadow: -16px 0 30px rgba(38, 39, 34, .12);
+}
+.http-workbench-shell.theme-light .http-response-drawer-header { border-bottom-color: var(--border-subtle); color: var(--text-primary); }
+.http-workbench-shell.theme-light .http-response-drawer-header span.is-passed,
+.http-workbench-shell.theme-light .http-run-status.passed,
+.http-workbench-shell.theme-light .http-request-result-state { color: var(--success); background: rgba(47, 139, 89, .12); }
+.http-workbench-shell.theme-light .http-response-drawer-header span.is-failed,
+.http-workbench-shell.theme-light .http-run-status.failed { color: var(--danger); background: rgba(197, 84, 73, .12); }
+.http-workbench-shell.theme-light .http-response-drawer-header button:hover,
+.http-workbench-shell.theme-light .http-response-copy:hover { color: var(--accent-hover); background: var(--accent-soft); }
+.http-workbench-shell.theme-light .http-run-bulk-delete,
+.http-workbench-shell.theme-light .http-delete-button { border-color: #e6c7be; color: var(--danger); background: #fff5f1; }
+.http-workbench-shell.theme-light .http-run-bulk-delete:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-delete-button:hover:not(:disabled) { border-color: #d99d93; color: #9e4038; background: #fbe7e2; }
+.http-workbench-shell.theme-light .http-run-button,
+.http-workbench-shell.theme-light .http-overview-actions button,
+.http-workbench-shell.theme-light .http-create-dialog-actions .http-run-button,
+.http-workbench-shell.theme-light .mode-switcher button.is-active {
+  border-color: var(--accent-primary);
+  color: #fffaf0;
+  background: var(--accent-primary);
+}
+.http-workbench-shell.theme-light .http-run-button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-overview-actions button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-create-dialog-actions .http-run-button:hover,
+.http-workbench-shell.theme-light .mode-switcher button.is-active:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+.http-workbench-shell.theme-light .http-workbench-message { border-color: #dfc28d; color: #7b5411; background: #fff7e8; box-shadow: var(--shadow-soft); }
+.http-workbench-shell.theme-light .http-create-dialog-close { color: var(--text-secondary); }
+.http-workbench-shell.theme-light .http-create-dialog-close:hover { color: var(--text-primary); background: var(--surface-hover); }
+.http-workbench-shell.theme-light .http-chat-context span { color: var(--text-secondary); background: var(--surface-code); }
+.http-workbench-shell.theme-light .http-chat-empty svg,
+.http-workbench-shell.theme-light .http-empty-state svg,
+.http-workbench-shell.theme-light .http-folder-overview svg { color: var(--accent-primary); }
+.http-workbench-shell.theme-light .http-request-result-body { color: var(--text-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-light .session-dot.is-running,
+  .theme-light .session-tab-dot.is-running,
+  .theme-light .status-dot.running,
+  .theme-light .tool-item.running .timeline-icon { animation: none; }
+}
+
+/* -------------------------------------------------------------------------
+   Neutral Codex daylight refinement
+   -------------------------------------------------------------------------
+   Primary actions are black, navigation is neutral gray, and orange is
+   reserved for permission/warning states. This prevents one accent from
+   leaking into every selected button, tab, and animation.
+*/
+.theme-light button {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.theme-light button:focus-visible,
+.theme-light select:focus-visible,
+.theme-light [role="button"]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.theme-light .project-picker-new,
+.theme-light .welcome-primary,
+.theme-light .send-button,
+.theme-light .settings-provider-btn.primary,
+.theme-light .trust-btn.primary,
+.theme-light .http-run-button,
+.theme-light .http-overview-actions button,
+.theme-light .http-create-dialog-actions .http-run-button {
+  border-color: #202020;
+  color: #ffffff;
+  background: #202020;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+}
+
+.theme-light .project-picker-new:hover,
+.theme-light .welcome-primary:hover,
+.theme-light .send-button:hover,
+.theme-light .settings-provider-btn.primary:hover,
+.theme-light .trust-btn.primary:hover,
+.theme-light .http-run-button:hover:not(:disabled),
+.theme-light .http-overview-actions button:hover:not(:disabled),
+.theme-light .http-create-dialog-actions .http-run-button:hover {
+  border-color: #000000;
+  color: #ffffff;
+  background: #000000;
+}
+
+.theme-light .send-button.stop,
+.theme-light .ui-alert-dialog-action.danger {
+  border-color: var(--danger);
+  color: #ffffff;
+  background: var(--danger);
+}
+
+.theme-light .send-button.stop:hover,
+.theme-light .ui-alert-dialog-action.danger:hover {
+  border-color: #aa3d36;
+  background: #aa3d36;
+}
+
+/* Mode switcher, tabs, and selected navigation use gray rather than amber. */
+.theme-light .mode-switcher button.is-active,
+.http-workbench-shell.theme-light .mode-switcher button.is-active {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-active);
+  box-shadow: none;
+}
+
+.theme-light .mode-switcher button.is-active:hover,
+.http-workbench-shell.theme-light .mode-switcher button.is-active:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: #dedede;
+}
+
+.theme-light .topbar-button.active,
+.theme-light .mode-pill.selected,
+.theme-light .right-pane-mode-tabs button.selected,
+.theme-light .inspector-tabs button.selected,
+.theme-light .settings-tab.active {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.theme-light .settings-tab.active {
+  border-bottom-color: var(--text-primary);
+}
+
+.theme-light .session-tab.active {
+  box-shadow: inset 0 -2px 0 #202020, 0 -1px 0 var(--border-subtle);
+}
+
+.theme-light .session-tab.is-pinned,
+.theme-light .session-tab.is-pinned:hover,
+.theme-light .session-tab.is-pinned.active {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.theme-light .session-tab.is-pinned.active {
+  box-shadow: inset 0 -2px 0 #202020, 0 0 10px rgba(0, 0, 0, .06);
+}
+
+.theme-light .session-tab-pin.is-pinned,
+.theme-light .session-tab.is-pinned .session-tab-kbd,
+.theme-light .session-tab.is-pinned.active .session-tab-kbd {
+  color: var(--text-secondary);
+  filter: none;
+}
+
+.theme-light .inspector-tabs button.selected {
+  box-shadow: inset 0 -2px 0 #202020;
+}
+
+.theme-light .project-node.active .project-node-toggle,
+.theme-light .session-item.nested.active .session-meta,
+.theme-light .tree-node button.active,
+.theme-light .palette-list button.highlighted,
+.theme-light .command-picker-name,
+.theme-light .change-selected-file-title > svg,
+.theme-light .http-folder-overview svg {
+  color: var(--text-primary);
+}
+
+.theme-light .session-item.active,
+.theme-light .tree-node button.active,
+.theme-light .settings-connected-item.active,
+.http-workbench-shell.theme-light .http-project-picker button.is-active,
+.http-workbench-shell.theme-light .http-tree-row.is-selected,
+.http-workbench-shell.theme-light .http-tree-root-row.is-selected,
+.http-workbench-shell.theme-light .http-environment-row.is-active,
+.http-workbench-shell.theme-light .http-run-row.is-selected {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+/* Index controls had old dark literals and must stay light in the inspector. */
+.theme-light .index-btn,
+.theme-light .index-search-btn {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: #f7f7f7;
+}
+
+.theme-light .index-btn:hover,
+.theme-light .index-search-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.theme-light .index-btn:active,
+.theme-light .index-search-btn:active:not(:disabled) {
+  background: var(--surface-active);
+}
+
+.theme-light .index-search-input {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: #ffffff;
+}
+
+.theme-light .index-search-input:focus {
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring);
+}
+
+.theme-light .index-search-input::placeholder,
+.theme-light .index-result-detail small { color: var(--text-muted); }
+.theme-light .index-result-row:hover { background: var(--surface-hover); }
+.theme-light .index-result-row.selected { background: var(--surface-active); }
+.theme-light .index-result-detail strong { color: var(--text-primary); }
+.theme-light .index-badge.ready { color: #17643b; background: #e7f4eb; }
+.theme-light .index-badge.indexing { color: #a34e0b; background: #fff0e5; }
+.theme-light .index-badge.idle { color: var(--text-secondary); background: var(--surface-active); }
+.theme-light .index-badge.error { color: #a83b34; background: #fbe9e7; }
+.theme-light .index-error { color: var(--danger); }
+
+/* Secondary controls are quiet outlined controls, never black blocks. */
+.theme-light .quick-actions button:hover,
+.theme-light .composer-queue-action:hover:not(:disabled),
+.theme-light .ctrl-box:hover,
+.theme-light .composer-menu-control:hover,
+.theme-light .composer-context-control:hover,
+.theme-light .settings-provider-btn:hover:not(:disabled),
+.theme-light .trust-btn:hover,
+.http-workbench-shell.theme-light .http-navigator-actions button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-editor-actions button:hover:not(:disabled),
+.http-workbench-shell.theme-light .http-chat-new-button:hover,
+.http-workbench-shell.theme-light .http-create-dialog-actions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.theme-light .quick-actions button:hover { box-shadow: none; }
+.theme-light .quick-actions span,
+.theme-light .eyebrow,
+.theme-light .welcome-orb { color: var(--text-primary); }
+.theme-light .quick-actions button:hover { border-color: var(--border-strong); background: #ffffff; }
+.theme-light .welcome-orb {
+  border-color: var(--border-strong);
+  background: linear-gradient(135deg, #ffffff, #eeeeee);
+  box-shadow: 0 0 40px rgba(0, 0, 0, .06);
+}
+
+.theme-light .model-status-effort,
+.theme-light .composer-queue-count,
+.theme-light .change-tree-file.selected,
+.theme-light .change-summary-review,
+.theme-light .change-undo-button,
+.http-workbench-shell.theme-light .http-section-label button:hover,
+.http-workbench-shell.theme-light .http-response-copy:hover {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.theme-light .change-summary-review:hover,
+.theme-light .change-undo-button:hover,
+.http-workbench-shell.theme-light .http-section-label button:hover,
+.http-workbench-shell.theme-light .http-response-copy:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: #dedede;
+}
+
+.theme-light .diff-badge { color: #ffffff; background: #555555; }
+.theme-light .diff-badge.added { background: var(--success); }
+.theme-light .diff-badge.deleted { background: var(--danger); }
+
+/* Permission and warning states retain a single, intentional orange. */
+.theme-light .session-dot.is-waiting,
+.theme-light .session-tab-dot.is-waiting,
+.theme-light .status-dot.running,
+.theme-light .resource-icon.amber,
+.theme-light .mcp-status-icon.needs-auth,
+.theme-light .mcp-status-label.needs-auth {
+  color: var(--warning);
+}
+
+.theme-light .status-dot.running,
+.theme-light .session-dot.is-waiting,
+.theme-light .session-tab-dot.is-waiting {
+  background-color: var(--warning);
+  box-shadow: 0 0 6px rgba(249, 115, 22, .24);
+}
+
+@keyframes light-status-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0)); }
+  50% { opacity: .68; filter: drop-shadow(0 0 4px rgba(0, 0, 0, .16)); }
+}
+
+/* Review is compact and neutral at rest; feedback appears only on hover/press. */
+.theme-light .change-summary-review {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-color: var(--border-subtle);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: #ffffff;
+  font-size: 12px;
+}
+.theme-light .change-summary-review:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.theme-light .change-summary-review:active {
+  background: var(--surface-active);
+}
+.theme-light .change-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.theme-light .change-summary-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 4px;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+}
+.theme-light .change-summary-undo:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* Sidebar hierarchy: projects hover as one row; only the open session stays selected. */
+.theme-light .project-node-row {
+  min-height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.theme-light .project-node-row:hover {
+  color: var(--text-primary);
+  background: #e9e9e9;
+}
+.theme-light .project-node-row:hover .project-node-toggle,
+.theme-light .project-node-row:hover .sidebar-icon-btn {
+  color: inherit;
+  background: transparent;
+}
+.theme-light .project-node.active .project-node-toggle {
+  color: var(--text-primary);
+  background: transparent;
+}
+.theme-light .project-node.active .project-node-row {
+  background: transparent;
+}
+.theme-light .session-item.nested.active {
+  color: var(--text-primary);
+  background: #e9e9e9;
+}
+.theme-light .session-item.nested.active .session-item-main {
+  color: inherit;
+  background: transparent;
+}
+.theme-light .project-session-list {
+  margin-left: 0;
+  margin-top: 4px;
+  gap: var(--sidebar-selection-gap);
+  padding: 0 var(--sidebar-selection-inset) 2px;
+}
+.theme-light .session-item.nested {
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 20px;
+}
+
+/* Daylight mode selection uses the shared soft-yellow accent. */
+.theme-light .mode-switcher button.is-active,
+.http-workbench-shell.theme-light .mode-switcher button.is-active {
+  border-color: transparent;
+  color: #3d3d3d;
+  background: #ffea88;
+  box-shadow: none;
+}
+
+.theme-light .mode-switcher button.is-active:hover,
+.http-workbench-shell.theme-light .mode-switcher button.is-active:hover {
+  border-color: transparent;
+  color: #3d3d3d;
+  background: #ffea88;
+}
+
+.theme-light .mode-switcher button,
+.http-workbench-shell.theme-light .mode-switcher button {
+  font-weight: 500;
+}
+
+/* Context usage keeps a light track in daylight mode; only the used portion is colored. */
+.theme-light .context-bar-track {
+  background: var(--surface-active);
+}
+
+/* Unified status-dot palette — match session status dots (running/completed/error/waiting). */
+.theme-light .status-dot.running { background: #4d6787; box-shadow: 0 0 0 2px rgba(77, 103, 135, .18); }
+.theme-light .status-dot.completed { background: #7dccad; }
+.theme-light .status-dot.idle { background: #a3a59e; }
+.theme-light .status-dot.error { background: #e8a09a; }
+.theme-light .status-dot.awaiting_approval { background: #e4b961; }
+
+/* Light dialogs use a hairline edge and quiet elevation. */
+.theme-light .command-palette,
+.theme-light .session-picker,
+.theme-light .tree-dialog,
+.theme-light .help-dialog,
+.theme-light .trust-dialog,
+.theme-light .settings-dialog,
+.theme-light .ui-alert-dialog,
+.theme-light .http-create-dialog {
+  border-width: 1px;
+  border-color: #e5e5e5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+}
+
+/* Every project row owns one consistent hover surface. */
+.theme-light .project-node-row:hover {
+  color: var(--text-primary);
+  background: #e9e9e9;
+}
+.theme-light .project-node-row:hover .project-node-toggle,
+.theme-light .project-node-row:hover .sidebar-icon-btn {
+  color: inherit;
+  background: transparent;
+}
+
+/* Project and session hover/active feedback share one light surface. */
+.theme-light .session-item.nested:hover,
+.theme-light .session-item.nested.active {
+  color: var(--text-primary);
+  background: #e9e9e9;
+}
+.theme-light .session-item.nested:hover .session-item-main,
+.theme-light .session-item.nested.active .session-item-main {
+  color: inherit;
+  background: transparent;
+}
+
+.theme-light .sidebar-user-label {
+  color: #3d3d3d;
+  font-weight: 400;
+}
+
+.theme-light .project-node-name {
+  font-weight: 400;
+}
+
+.theme-light .sidebar-section-head {
+  color: #7d7d7d;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.theme-light .sidebar-new-session {
+  font-weight: 400;
+}
+
+/* Composer guidance is quiet black text in daylight mode. */
+.theme-light .composer-hints {
+  color: #3d3d3d;
+  font-weight: 400;
+}
+
+/* Let the toolbar sit a little closer to the card's lower edge. */
+.theme-light .composer-card {
+  padding-bottom: 8px;
+}
+
+/* Composer helper controls sit directly on the card surface in daylight mode.
+   Keep hover and keyboard focus feedback without restoring button chrome. */
+.theme-light .composer-card .ctrl-box,
+.theme-light .composer-card .composer-menu-control,
+.theme-light .composer-card .composer-context-control {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.theme-light .composer-card .ctrl-box:hover,
+.theme-light .composer-card .composer-menu-control:hover,
+.theme-light .composer-card .composer-context-control:hover {
+  border-color: transparent;
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  box-shadow: none;
+}
+
+.theme-light .composer-card .ctrl-box:focus-within,
+.theme-light .composer-card .composer-menu-control:focus-within,
+.theme-light .composer-card .composer-context-control:focus-within {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: var(--focus-ring);
+}
+
+/* Topbar utility actions are icon-led in daylight mode, without gray button chrome. */
+.theme-light .topbar-button,
+.theme-light .topbar-button:hover,
+.theme-light .topbar-button.active,
+.theme-light .topbar-button.active:hover {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 4px;
+  border-color: transparent;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.theme-light .topbar-button:hover,
+.theme-light .topbar-button.active,
+.theme-light .topbar-button.active:hover {
+  color: var(--text-primary);
+}
+
+.theme-light .topbar-button:active,
+.theme-light .topbar-button:focus,
+.theme-light .topbar-button:focus-visible,
+.theme-light .topbar-button.active:active,
+.theme-light .topbar-button.active:focus,
+.theme-light .topbar-button.active:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.theme-light .topbar-button .topbar-kbd,
+.theme-light .topbar-button:hover .topbar-kbd,
+.theme-light .topbar-button.active .topbar-kbd,
+.theme-light .topbar-button.active:hover .topbar-kbd {
+  border-color: transparent;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+/* The open right panel is the one intentional selected state in the topbar. */
+.theme-light .topbar-button.active,
+.theme-light .topbar-button.active:hover,
+.theme-light .topbar-button.active:active,
+.theme-light .topbar-button.active:focus,
+.theme-light .topbar-button.active:focus-visible {
+  color: var(--text-primary);
+  background: #e9e9e9;
+  box-shadow: none;
+  transform: none;
+}
+
+/* One neutral interaction language for selectable daylight surfaces. */
+.theme-light {
+  --interaction-hover-surface: var(--interaction-selected-surface);
+  --focus-ring: var(--interaction-focus-ring);
+}
+
+.theme-light .project-node-row:hover,
+.theme-light .project-node-row:hover .project-node-toggle,
+.theme-light .project-node-row:hover .sidebar-icon-btn,
+.theme-light .project-node-toggle:hover,
+.theme-light .session-item.nested:hover,
+.theme-light .session-item.active:hover,
+.theme-light .sidebar-user:hover,
+.theme-light .sidebar-new-session:hover,
+.theme-light .sidebar-new-session:focus-visible,
+.theme-light .sidebar-icon-btn:hover,
+.theme-light .sidebar-hidden-toggle:hover,
+.theme-light .session-older-toggle:hover,
+.theme-light .settings-tab:hover,
+.theme-light .settings-connected-item:hover,
+.theme-light .settings-oauth-option:hover,
+.theme-light .topbar-button:hover,
+.theme-light .right-pane-mode-tabs button:hover,
+.theme-light .inspector-tabs button:hover,
+.theme-light .tree-node button:hover,
+.theme-light .palette-list button:hover,
+.theme-light .palette-list button.highlighted,
+.theme-light .session-picker-list button:hover,
+.theme-light .session-context-item:hover,
+.theme-light .session-context-item[data-highlighted],
+.theme-light .command-picker button:hover,
+.theme-light .command-picker button.highlighted,
+.theme-light .command-picker button[aria-selected="true"],
+.theme-light .help-row:hover {
+  color: var(--text-primary);
+  background: var(--interaction-hover-surface);
+}
+
+.theme-light .session-item.nested.active,
+.theme-light .session-item.active,
+.theme-light .settings-tab.active,
+.theme-light .settings-connected-item.active,
+.theme-light .settings-oauth-option:has(input:checked),
+.theme-light .topbar-button.active,
+.theme-light .right-pane-mode-tabs button.selected,
+.theme-light .inspector-tabs button.selected,
+.theme-light .tree-node button.active,
+.theme-light .palette-list button.highlighted,
+.theme-light .session-picker-list button[aria-selected="true"],
+.theme-light .command-picker button[aria-selected="true"] {
+  color: var(--text-primary);
+  background: var(--interaction-selected-surface);
+}
+
+.theme-light .settings-tab.active,
+.theme-light .settings-connected-item.active,
+.theme-light .settings-oauth-option:has(input:checked),
+.theme-light .inspector-tabs button.selected {
+  border-color: transparent;
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+
+/*
+ * iTerm2-style tab rail
+ *
+ * The gray is one continuous, recessed track. A selected tab is a white
+ * surface sitting two pixels inside it — not a separate card with an outer
+ * halo. Keeping these layers separate is what makes the silhouette read as a
+ * native segmented control when adjacent tabs touch.
+ */
+.theme-light .session-tab-bar {
+  min-height: 30px;
+}
+
+.theme-light .session-tab-scroll {
+  box-sizing: border-box;
+  min-height: 30px;
+  height: 30px;
+  gap: 0;
+  padding: 2px;
+  border-radius: 15px;
+  background: #e6e6e6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+
+.theme-light .session-tab.session-tab--stacked {
+  box-sizing: border-box;
+  min-width: 160px;
+  max-width: none;
+  height: 26px;
+  min-height: 26px;
+  flex: 1 1 0;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: #454545;
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-light .session-tab.session-tab--stacked:hover {
+  color: #303030;
+  background: rgba(255, 255, 255, .28);
+}
+
+.theme-light .session-tab.session-tab--stacked.active,
+.theme-light .session-tab.session-tab--stacked.is-pinned.active {
+  z-index: 1;
+  border-color: #d7d7d7;
+  color: #3d3d3d;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .045);
+}
+
+.theme-light .session-tab.session-tab--stacked.active:hover,
+.theme-light .session-tab.session-tab--stacked.is-pinned.active:hover {
+  background: #ffffff;
+}
+
+.theme-light .session-tab.session-tab--stacked.is-pinned,
+.theme-light .session-tab.session-tab--stacked.is-pinned:hover {
+  color: #454545;
+  background: transparent;
+}
+
+.theme-light .session-tab.session-tab--stacked.is-pinned.active,
+.theme-light .session-tab.session-tab--stacked.is-pinned.active:hover {
+  color: #3d3d3d;
+  background: #ffffff;
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-main {
+  height: 24px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 32px;
+  border-radius: inherit;
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-text {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-project {
+  display: none;
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-title {
+  font-size: var(--text-ui);
+  font-weight: 400;
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-kbd {
+  color: #5b5b5b;
+  font-size: var(--text-ui);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Status remains discoverable without moving the centered label. */
+.theme-light .session-tab.session-tab--stacked .session-tab-dot {
+  position: absolute;
+  left: 12px;
+}
+
+/* Pin and close remain available on hover without changing the resting shape. */
+.theme-light .session-tab.session-tab--stacked .session-tab-pin,
+.theme-light .session-tab.session-tab--stacked .session-tab-close {
+  position: absolute;
+  top: 1px;
+  z-index: 2;
+  margin: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.theme-light .session-tab.session-tab--stacked .session-tab-pin { left: 3px; }
+.theme-light .session-tab.session-tab--stacked .session-tab-close { right: 3px; }
+
+.theme-light .session-tab.session-tab--stacked:hover .session-tab-pin,
+.theme-light .session-tab.session-tab--stacked:hover .session-tab-close,
+.theme-light .session-tab.session-tab--stacked:focus-within .session-tab-pin,
+.theme-light .session-tab.session-tab--stacked:focus-within .session-tab-close {
+  opacity: 1;
+}
+
+/* Preserve a visible keyboard focus signal without turning it into a persistent outline. */
+.theme-light .session-tab.session-tab--stacked:has(.session-tab-main:focus-visible) {
+  box-shadow: 0 0 0 2px rgba(61, 61, 61, .22);
+}
+
+/*
+ * Right-pane interaction contract
+ *
+ * Inspector and Changes used to keep their own hover/selected palette. That
+ * made the same pointer action look different depending on which right-pane
+ * tab happened to be open. All neutral interaction feedback now comes from
+ * the shared daylight tokens; status colors remain owned by their status
+ * classes below/alongside these surfaces.
+ */
+.theme-light .inspector .right-pane-mode-tabs button,
+.theme-light .inspector .inspector-tabs button,
+.theme-light .inspector .inspector-section-heading,
+.theme-light .inspector .session-balance-line,
+.theme-light .inspector .index-btn,
+.theme-light .inspector .index-search-btn,
+.theme-light .inspector .index-result-row,
+.theme-light .inspector .tool-toggle-row,
+.theme-light .inspector .skill-group-heading,
+.theme-light .inspector .skill-toggle-row,
+.theme-light .inspector .diff-row-heading,
+.theme-light .inspector .change-selected-file-title,
+.theme-light .inspector .change-collapse-button,
+.theme-light .inspector .change-tree-folder-button,
+.theme-light .inspector .change-tree-file,
+.theme-light .inspector .inspector-header-actions .icon-button {
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-light .inspector .right-pane-mode-tabs button:hover,
+.theme-light .inspector .inspector-tabs button:hover,
+.theme-light .inspector .inspector-section-heading:hover,
+.theme-light .inspector .session-balance-line:hover,
+.theme-light .inspector .index-btn:hover,
+.theme-light .inspector .index-search-btn:hover:not(:disabled),
+.theme-light .inspector .index-result-row:hover,
+.theme-light .inspector .tool-toggle-row:hover,
+.theme-light .inspector .skill-group-heading:hover,
+.theme-light .inspector .skill-toggle-row:hover,
+.theme-light .inspector .diff-row-heading:hover,
+.theme-light .inspector .change-selected-file-title:hover,
+.theme-light .inspector .change-collapse-button:hover,
+.theme-light .inspector .change-tree-folder-button:hover,
+.theme-light .inspector .change-tree-file:hover,
+.theme-light .inspector .inspector-header-actions .icon-button:hover {
+  background: var(--interaction-hover-surface);
+}
+
+.theme-light .inspector .right-pane-mode-tabs button:hover,
+.theme-light .inspector .inspector-tabs button:hover,
+.theme-light .inspector .inspector-section-heading:hover,
+.theme-light .inspector .session-balance-line:hover,
+.theme-light .inspector .index-btn:hover,
+.theme-light .inspector .index-search-btn:hover:not(:disabled),
+.theme-light .inspector .index-result-row:hover,
+.theme-light .inspector .tool-toggle-row:hover,
+.theme-light .inspector .skill-group-heading:hover,
+.theme-light .inspector .skill-toggle-row:hover,
+.theme-light .inspector .diff-row-heading:hover,
+.theme-light .inspector .change-selected-file-title:hover,
+.theme-light .inspector .change-collapse-button:hover,
+.theme-light .inspector .inspector-header-actions .icon-button:hover {
+  color: var(--text-primary);
+}
+
+.theme-light .inspector .right-pane-mode-tabs button.selected,
+.theme-light .inspector .inspector-tabs button.selected,
+.theme-light .inspector .index-result-row.selected,
+.theme-light .inspector .change-tree-file.selected {
+  color: var(--text-primary);
+  background: var(--interaction-selected-surface);
+  box-shadow: none;
+}
+
+/* A reviewed file keeps its semantic green text while sharing the same row. */
+.theme-light .inspector .change-tree-file.reviewed.selected {
+  color: var(--success);
+}
+
+/* Keep right-pane hover surfaces inset and rounded like sidebar selections. */
+.theme-light .inspector .inspector-section-heading,
+.theme-light .inspector .tool-toggle-row,
+.theme-light .inspector .skill-group-heading,
+.theme-light .inspector .skill-toggle-row {
+  border-radius: var(--radius-sm);
+}
+
+.theme-light .inspector .inspector-section-heading:hover,
+.theme-light .inspector .tool-toggle-row:hover,
+.theme-light .inspector .skill-group-heading:hover,
+.theme-light .inspector .skill-toggle-row:hover {
+  color: var(--text-primary);
+}
+
+.theme-light .inspector .right-pane-mode-tabs button:focus-visible,
+.theme-light .inspector .inspector-tabs button:focus-visible,
+.theme-light .inspector .inspector-section-heading:focus-visible,
+.theme-light .inspector .session-balance-line:focus-visible,
+.theme-light .inspector .index-btn:focus-visible,
+.theme-light .inspector .index-search-btn:focus-visible,
+.theme-light .inspector .index-result-row:focus-visible,
+.theme-light .inspector .tool-toggle-row:focus-within,
+.theme-light .inspector .skill-group-heading:focus-within,
+.theme-light .inspector .skill-toggle-row:focus-within,
+.theme-light .inspector .diff-row-heading:focus-visible,
+.theme-light .inspector .change-selected-file-title:focus-visible,
+.theme-light .inspector .change-collapse-button:focus-visible,
+.theme-light .inspector .change-tree-folder-button:focus-visible,
+.theme-light .inspector .change-tree-file:focus-visible,
+.theme-light .inspector .inspector-header-actions .icon-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

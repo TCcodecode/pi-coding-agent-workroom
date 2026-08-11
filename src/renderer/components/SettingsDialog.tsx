@@ -21,6 +21,8 @@ export function SettingsDialog({
   thinkingLevel,
   onModelSelect,
   onThinkingLevel,
+  motionEnabled = true,
+  onMotionEnabledChange,
   onClose,
   listProviders,
   loginWithApiKey,
@@ -41,6 +43,8 @@ export function SettingsDialog({
   thinkingLevel: ThinkingLevel;
   onModelSelect: (model: string) => void;
   onThinkingLevel: (level: ThinkingLevel) => void;
+  motionEnabled?: boolean;
+  onMotionEnabledChange?: (enabled: boolean) => void;
   onClose: () => void;
   listProviders?: () => Promise<ProviderAuthStatus[]>;
   loginWithApiKey?: (providerId: string, apiKey: string) => Promise<{ name: string }>;
@@ -341,6 +345,28 @@ export function SettingsDialog({
                     current={model}
                     onSelect={onModelSelect}
                   />
+                </div>
+              </section>
+              <section className="settings-section">
+                <div className="settings-section-label">Interface</div>
+                <div className="settings-field">
+                  <div className="settings-field-meta">
+                    <label>Interface motion</label>
+                    <span>Enable panel transitions, hover feedback, and other subtle animations</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`settings-motion-toggle ${motionEnabled ? "is-on" : ""}`}
+                    role="switch"
+                    aria-label="Interface motion"
+                    aria-checked={motionEnabled}
+                    onClick={() => onMotionEnabledChange?.(!motionEnabled)}
+                  >
+                    <span className="settings-motion-track" aria-hidden="true">
+                      <span className="settings-motion-thumb" />
+                    </span>
+                    <span>{motionEnabled ? "On" : "Off"}</span>
+                  </button>
                 </div>
               </section>
             </>

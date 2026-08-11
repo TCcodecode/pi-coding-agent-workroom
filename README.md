@@ -126,6 +126,26 @@ PI Desk 的桌面层尽量保持小而明确的权限边界：
 
 PI Desk 不复制一份新的会话数据库来替代 Pi。关闭应用后，Pi 的会话文件仍然是可恢复的事实来源。
 
+## 下载与安装
+
+正式安装包发布在 [GitHub Releases](https://github.com/TCcodecode/pi-desk/releases)：
+
+- macOS：下载对应架构的 `.dmg`，拖动 `Pi Desk.app` 到 Applications。
+- Windows：运行 `.exe` 安装包；不想安装时可使用 `.zip` 便携版。
+- Linux：优先使用 `.AppImage`，Debian/Ubuntu 可使用 `.deb`。
+
+当前 macOS 版本暂时没有 Apple Developer ID 签名。首次打开时请在 Finder 中对
+`Pi Desk.app` 使用“右键 → 打开”，或到“系统设置 → 隐私与安全性 → 仍要打开”
+确认一次。若仍显示 app“已损坏”，先确认下载文件的 SHA256 与 Release 中的
+`SHA256SUMS` 一致，再执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Pi Desk.app"
+```
+
+这只移除该应用的下载隔离标记；不要为了安装 Pi Desk 全局关闭 Gatekeeper。
+获得 Developer ID 证书并完成公证后，macOS 会恢复普通双击启动流程。
+
 ## 从源码运行
 
 当前项目以源码运行和本地开发为主：
@@ -139,6 +159,10 @@ npm run dev
 
 ```bash
 npm run build       # 构建 main / preload / renderer
+npm run dist        # 构建当前平台安装包（不发布）
+npm run dist:mac    # macOS DMG + ZIP
+npm run dist:win    # Windows NSIS + ZIP
+npm run dist:linux  # Linux AppImage + deb + tar.gz
 npm run preview     # 预览构建产物
 npm test            # 运行 Vitest 测试
 npm run typecheck   # TypeScript 类型检查

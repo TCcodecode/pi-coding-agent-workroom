@@ -7,9 +7,21 @@ export interface TimelineProps {
   items: TimelineItem[];
   sessionStatus?: SessionStatus;
   onReviewChanges?: (path?: string) => void;
+  reviewOpen?: boolean;
+  selectedReviewPath?: string;
+  onCloseReview?: () => void;
+  onUndoChanges?: (paths: string[]) => void | Promise<void>;
 }
 
-export function Timeline({ items, sessionStatus, onReviewChanges }: TimelineProps) {
+export function Timeline({
+  items,
+  sessionStatus,
+  onReviewChanges,
+  reviewOpen = false,
+  selectedReviewPath,
+  onCloseReview,
+  onUndoChanges,
+}: TimelineProps) {
   if (items.length === 0) {
     return <div className="timeline-empty"><div className="empty-glyph"><AppIcon name="messageSquare" size="lg" /></div><p>Pi is ready when you are.</p></div>;
   }
@@ -24,6 +36,10 @@ export function Timeline({ items, sessionStatus, onReviewChanges }: TimelineProp
           isCurrentTurn={index === turns.length - 1}
           sessionStatus={sessionStatus}
           onReviewChanges={onReviewChanges}
+          reviewOpen={reviewOpen}
+          selectedReviewPath={selectedReviewPath}
+          onCloseReview={onCloseReview}
+          onUndoChanges={onUndoChanges}
         />
       ))}
     </div>
@@ -58,11 +74,19 @@ function Turn({
   isCurrentTurn,
   sessionStatus,
   onReviewChanges,
+  reviewOpen,
+  selectedReviewPath,
+  onCloseReview,
+  onUndoChanges,
 }: {
   items: TimelineItem[];
   isCurrentTurn: boolean;
   sessionStatus?: SessionStatus;
   onReviewChanges?: (path?: string) => void;
+  reviewOpen: boolean;
+  selectedReviewPath?: string;
+  onCloseReview?: () => void;
+  onUndoChanges?: (paths: string[]) => void | Promise<void>;
 }) {
   const prompts = items.filter((item) => item.kind === "user");
   const textItems = items.filter((item) => item.kind !== "user" && item.kind !== "thinking" && item.kind !== "tool");
@@ -79,7 +103,17 @@ function Turn({
       {prompts.map((item) => <TimelineItemView key={item.id} item={item} />)}
       {activityItems.length > 0 && <ActivityBlock key="activity" items={activityItems} live={live} />}
       {textItems.map((item) => <TimelineItemView key={item.id} item={item} />)}
-      {changes && <ChangeSummary key="changes" changes={changes} onReviewChanges={onReviewChanges} />}
+      {changes && (
+        <ChangeSummary
+          key="changes"
+          changes={changes}
+          onReviewChanges={onReviewChanges}
+          reviewOpen={reviewOpen}
+          selectedReviewPath={selectedReviewPath}
+          onCloseReview={onCloseReview}
+          onUndoChanges={onUndoChanges}
+        />
+      )}
     </div>
   );
 }
@@ -225,11 +259,29 @@ export function collectFileChanges(items: TimelineItem[]): FileChangeSummary[] {
   return [...changes.values()];
 }
 
-function ChangeSummary({ changes, onReviewChanges }: { changes: FileChangeTotals; onReviewChanges?: (path?: string) => void }) {
+function ChangeSummary({
+  changes,
+  onReviewChanges,
+  reviewOpen,
+  selectedReviewPath,
+  onCloseReview,
+  onUndoChanges,
+}: {
+  changes: FileChangeTotals;
+  onReviewChanges?: (path?: string) => void;
+  reviewOpen: boolean;
+  selectedReviewPath?: string;
+  onCloseReview?: () => void;
+  onUndoChanges?: (paths: string[]) => void | Promise<void>;
+}) {
   const [showMore, setShowMore] = useState(false);
   const fileLabel = `${changes.files.length} ${changes.files.length === 1 ? "file" : "files"}`;
   const visibleFiles = showMore ? changes.files : changes.files.slice(0, 3);
   const hasMore = changes.files.length > 3;
+  const openOrClose = (path?: string) => {
+    if (reviewOpen && (!path || selectedReviewPath === path)) onCloseReview?.();
+    else onReviewChanges?.(path);
+  };
 
   return (
     <section className="change-summary" aria-label="File changes">
@@ -244,24 +296,39 @@ function ChangeSummary({ changes, onReviewChanges }: { changes: FileChangeTotals
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="change-summary-review"
-          aria-label="Review file changes"
-          onClick={() => onReviewChanges?.(changes.files[0]?.path)}
-        >
-          <AppIcon name="panelRight" size="xs" />
-          Review
-        </button>
+        <div className="change-summary-actions">
+          {changes.files.length > 1 && onUndoChanges && (
+            <button
+              type="button"
+              className="change-summary-undo"
+              aria-label="Undo file changes"
+              title="Undo file changes"
+              onClick={() => void onUndoChanges(changes.files.map((change) => change.path))}
+            >
+              <span>Undo</span>
+              <AppIcon name="undo" size="xs" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="change-summary-review"
+            aria-label="Review file changes"
+            title="Review file changes"
+            onClick={() => openOrClose(changes.files[0]?.path)}
+          >
+            <AppIcon name="panelRight" size="xs" />
+            Review
+          </button>
+        </div>
       </div>
-      <div className="change-summary-files">
+      <div className={`change-summary-files ${changes.files.length === 1 ? "is-single-file" : ""}`}>
         {visibleFiles.map((change) => (
           <button
             type="button"
             className="change-summary-file"
             key={change.path}
             aria-label={`Review ${change.path}`}
-            onClick={() => onReviewChanges?.(change.path)}
+            onClick={() => openOrClose(change.path)}
           >
             <span className="change-summary-path">{change.path}</span>
             <span className="change-summary-file-stats">

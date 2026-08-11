@@ -4,6 +4,34 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260810-001] rg_pattern_starts_with_option
+
+**Logged**: 2026-08-10T19:47:30+08:00
+**Priority**: low
+**Status**: pending
+**Area**: config
+
+### Summary
+An `rg` summary command treated a pattern beginning with `--` as a command-line option.
+
+### Error
+```text
+rg: unrecognized flag --surface-center|--surface-sidebar|--surface-inspector|--surface-topbar|--surface-code|--accent-primary|light-status-pulse|http-workbench-shell.theme-light
+```
+
+### Context
+- The command was a read-only final summary check after the implementation and build had already passed.
+- No project files or source data were affected.
+
+### Suggested Fix
+Use `rg -- "pattern"` whenever a search expression may begin with a hyphen.
+
+### Metadata
+- Reproducible: yes
+- Related Files: none
+
+---
+
 ## [ERR-20260809-003] verification_orchestration_variable
 
 **Logged**: 2026-08-09T13:23:00+08:00
@@ -195,5 +223,94 @@ Validate JavaScript tool-call object syntax before invoking the command.
 ### Metadata
 - Reproducible: no
 - Related Files: none
+
+---
+
+## [ERR-20260810-002] light_theme_audit_regex
+
+**Logged**: 2026-08-10T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: frontend
+
+### Summary
+The first audit search for legacy light-theme colors failed because a complex regular expression had an unmatched group.
+
+### Error
+```text
+rg: regex parse error: unopened group
+```
+
+### Context
+- The audit was read-only and no source files were affected.
+- The command combined multiple alternations and escaped parentheses in one pattern.
+
+### Suggested Fix
+Prefer several fixed-string `rg` checks or a simpler pattern when auditing CSS color literals.
+
+### Metadata
+- Reproducible: no
+- Related Files: src/renderer/styles.css
+
+---
+
+## [ERR-20260811-001] full_test_stale_focus_ring_expectation
+
+**Logged**: 2026-08-11T01:09:19Z
+**Priority**: low
+**Status**: pending
+**Area**: frontend
+
+### Summary
+The full test suite has one stale focus-ring assertion after the light-theme token changed.
+
+### Error
+```text
+src/renderer/interaction.test.ts expects --focus-ring: 0 0 0 2px rgba(32, 32, 32, .18),
+but src/renderer/styles.css defines the current light-theme focus ring.
+```
+
+### Context
+- `npm test -- --run` completed with 405 passing tests and this one unrelated failure.
+- The focus-ring CSS and its assertion were already modified before the tab repair.
+
+### Suggested Fix
+Update the interaction test to assert the approved current focus-ring token, or restore the token if the previous visual contract remains intended.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/renderer/interaction.test.ts, src/renderer/styles.css
+
+---
+
+## [ERR-20260811-002] web_result_wrapper_assumption
+
+**Logged**: 2026-08-11T01:21:05Z
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+The web research wrapper assumed every tool result exposed a `content` array.
+
+### Error
+```text
+TypeError: r.content is not iterable
+```
+
+### Context
+- A combined web and image search returned a different result shape.
+- The search itself was not the failure; only result rendering failed.
+
+### Suggested Fix
+Serialize or forward the returned value directly unless its wrapper shape is known.
+
+### Metadata
+- Reproducible: yes
+- Related Files: none
+
+### Resolution
+- **Resolved**: 2026-08-11T01:21:05Z
+- **Notes**: Subsequent research uses the tool result directly.
 
 ---

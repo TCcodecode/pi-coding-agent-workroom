@@ -75,14 +75,9 @@ function IconButton({
 function sessionStatusClass(status: SessionStatus | undefined): string {
   if (status === "running") return "is-running";
   if (status === "awaiting_approval") return "is-waiting";
+  if (status === "completed") return "is-completed";
   if (status === "error") return "is-error";
   return "";
-}
-
-function shortModelLabel(model?: string): string {
-  if (!model?.trim()) return "No model";
-  const parts = model.split("/");
-  return parts[parts.length - 1] || model;
 }
 
 type PendingDelete = {
@@ -99,8 +94,6 @@ export function SessionSidebar({
   activeSessionId,
   activeSessionStatus,
   liveSessions = [],
-  model,
-  thinkingLevel,
   onAddProject,
   onRequestNewSession,
   onNewSession,
@@ -300,9 +293,6 @@ export function SessionSidebar({
     });
   }, [projects, q, sessionsByProject, hiddenPaths, showHidden]);
 
-  const settingsPrimary = shortModelLabel(model);
-  const settingsSecondary = thinkingLevel ? String(thinkingLevel) : "providers · appearance";
-
   return (
     <aside className="sidebar" aria-label="Sidebar">
       <div className="sidebar-top">
@@ -336,13 +326,13 @@ export function SessionSidebar({
       <div className="sidebar-nav">
         <button
           type="button"
-          className="sidebar-new-session"
+          className="sidebar-new-session sidebar-leading-control"
           onClick={onRequestNewSession}
-          title="Start a new session — pick a project in the chat box"
+          title="Start a new task — pick a project in the chat box"
         >
           <AppIcon name="plus" size="sm" />
-          <span>New session</span>
-          <ShortcutKeys className="sidebar-nav-shortcut" compact keys={["mod", "N"]} label="New session" />
+          <span>New task</span>
+          <ShortcutKeys className="sidebar-nav-shortcut" compact keys={["mod", "N"]} label="New task" />
         </button>
       </div>
 
@@ -385,11 +375,11 @@ export function SessionSidebar({
                       <ContextMenu.Trigger asChild>
                         <button
                           type="button"
-                          className="project-node-toggle"
+                          className="project-node-toggle sidebar-leading-control"
                           aria-current={active ? "true" : undefined}
                           aria-expanded={open}
                           aria-label={`Select project ${project.name}`}
-                          title={`${project.path}\nClick to set as New session target`}
+                          title={`${project.path}\nClick to set as New task target`}
                           onClick={() => {
                             onSelectProject(project.id);
                             setProjectExpanded(project.id, !open);
@@ -417,7 +407,7 @@ export function SessionSidebar({
                               onNewSession(project.id);
                             }}
                           >
-                            New session here
+                            New task here
                           </ContextMenu.Item>
                           <ContextMenu.Item
                             className="session-context-item"
@@ -443,8 +433,8 @@ export function SessionSidebar({
                       </ContextMenu.Portal>
                     </ContextMenu.Root>
                     <IconButton
-                      label={`New session in ${project.name}`}
-                      title={`New session in ${project.name}`}
+                      label={`New task in ${project.name}`}
+                      title={`New task in ${project.name}`}
                       accent
                       onClick={(event) => {
                         event.stopPropagation();
@@ -643,10 +633,7 @@ export function SessionSidebar({
 
       <div className="sidebar-bottom">
         <button type="button" className="sidebar-user" onClick={onOpenSettings} aria-label="Settings">
-          <div className="sidebar-user-meta">
-            <strong>{settingsPrimary}</strong>
-            <small>{settingsSecondary}</small>
-          </div>
+          <span className="sidebar-user-label">Settings</span>
           <AppIcon name="settings" size="sm" />
         </button>
       </div>

@@ -9,7 +9,7 @@ describe("PI Desk interaction language", () => {
     expect(css).toContain("--control-height: 32px");
     expect(css).toContain("--control-height-compact: 28px");
     expect(css).toContain("--control-radius: 8px");
-    expect(css).toContain("--focus-ring: 0 0 0 2px rgba(228, 185, 97, .28)");
+    expect(css).toContain("--focus-ring: 0 0 0 1px rgba(255, 255, 255, .12), 0 4px 16px rgba(0, 0, 0, .32)");
     expect(css).toContain("--transition-fast: 120ms ease");
     expect(css).toContain("--transition-normal: 180ms ease");
   });
@@ -39,6 +39,25 @@ describe("PI Desk interaction language", () => {
     );
     expect(css).toMatch(
       /\.composer-card \.ctrl-box:hover,[\s\S]*\.composer-card \.composer-context-control:hover\s*\{[^}]*background: #292a2d/s,
+    );
+  });
+
+  it("uses an inset white capsule instead of an underline or outer halo for the active session tab", () => {
+    expect(css).toMatch(
+      /\.theme-light \.session-tab\.session-tab--stacked\.active,[\s\S]*?border-color: #d7d7d7[\s\S]*?background: #ffffff[\s\S]*?box-shadow: 0 1px 2px rgba\(0, 0, 0, \.045\)/,
+    );
+    expect(css).not.toContain("0 0 0 3px rgba(0, 0, 0, .08)");
+  });
+
+  it("uses one shared recessed rail for compact, single-line session tabs", () => {
+    expect(css).toMatch(
+      /\.theme-light \.session-tab-scroll\s*\{[^}]*height: 30px[^}]*padding: 2px[^}]*border-radius: 15px[^}]*background: #e6e6e6/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.session-tab\.session-tab--stacked\s*\{[^}]*min-height: 26px[^}]*border-radius: 13px[^}]*background: transparent/s,
+    );
+    expect(css).toMatch(
+      /\.theme-light \.session-tab\.session-tab--stacked \.session-tab-project\s*\{\s*display: none/s,
     );
   });
 });

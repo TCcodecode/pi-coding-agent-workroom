@@ -18,6 +18,7 @@ import type { InspectorTab } from "./components/ResourceInspector";
 import type { LiveSessionSummary, PiEvent, PiSnapshot, SessionStatus } from "../shared/protocol";
 import {
   closeTab as closeTabInList,
+  dedupeTabs,
   displayTabTitle,
   ensureInWorkingSet,
   findRestorableTab,
@@ -65,8 +66,11 @@ const SESSION_SCOPED_EVENT_TYPES = new Set<PiEvent["type"]>([
 
 type RightPane = "inspector" | "changes";
 
-function canBePreview(hasConversation: boolean, status?: SessionStatus): boolean {
-  return !hasConversation && status !== "running" && status !== "awaiting_approval";
+function canBePreview(status?: SessionStatus): boolean {
+  // A session's persisted history is not evidence that the user has started
+  // using it in this working set. Only an active turn makes it non-preview;
+  // sending a message promotes it explicitly through promoteTab().
+  return status !== "running" && status !== "awaiting_approval";
 }
 
 function readPanelWidth(key: string, fallback: number): number {
@@ -91,6 +95,13 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("pi.motionEnabled") !== "false";
+    } catch {
+      return true;
+    }
+  });
   const [rightPane, setRightPane] = useState<RightPane>("inspector");
   const [selectedChangePath, setSelectedChangePath] = useState<string | undefined>();
   const [inspectorWidth, setInspectorWidth] = useState(() => readPanelWidth("pi.inspectorWidth", 300));
@@ -115,6 +126,16 @@ export function App() {
       return "pi";
     }
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pi.motionEnabled", String(motionEnabled));
+    } catch {
+      // Ignore storage failures in restricted/test environments.
+    }
+    document.documentElement.classList.toggle("motion-disabled", !motionEnabled);
+    return () => document.documentElement.classList.remove("motion-disabled");
+  }, [motionEnabled]);
   const [openTabs, setOpenTabs] = useState<SessionTab[]>(() => loadOpenTabs().tabs);
   const [activeTabId, setActiveTabId] = useState<string | undefined>(() => loadOpenTabs().activeTabId);
   const [liveSessions, setLiveSessions] = useState<LiveSessionSummary[]>([]);
@@ -126,6 +147,9 @@ export function App() {
   const activeTabIdRef = useRef(activeTabId);
   const liveSessionsRef = useRef(liveSessions);
   const committedTabIdsRef = useRef(new Set<string>());
+  // Each async activation gets a generation. A slower, older request must
+  // never replace the session that the user selected more recently.
+  const tabActivationRef = useRef(0);
   const requestNewSessionRef = useRef<() => void>(() => undefined);
   openTabsRef.current = openTabs;
   activeTabIdRef.current = activeTabId;
@@ -145,6 +169,17 @@ export function App() {
     try {
       const sessionKey = activeTabIdRef.current;
       await api.undoFileChange(path, sessionKey ? { sessionKey } : undefined);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  }, [api]);
+
+  const undoChanges = useCallback(async (paths: string[]) => {
+    if (!api?.undoFileChange) return;
+    try {
+      const sessionKey = activeTabIdRef.current;
+      const options = sessionKey ? { sessionKey } : undefined;
+      for (const path of paths) await api.undoFileChange(path, options);
     } catch (error) {
       pushError(error instanceof Error ? error.message : String(error));
     }
@@ -190,6 +225,23 @@ export function App() {
     saveOpenTabs(openTabs, activeTabId);
   }, [openTabs, activeTabId]);
 
+  // HMR and older app versions can leave duplicate entries in the in-memory
+  // list even though new storage loads are clean. Repair it once on mount too.
+  useEffect(() => {
+    setOpenTabs((tabs) => {
+      const deduped = dedupeTabs(tabs, activeTabIdRef.current);
+      const nextActiveTabId = deduped.some((tab) => tab.id === activeTabIdRef.current)
+        ? activeTabIdRef.current
+        : deduped[0]?.id;
+      openTabsRef.current = deduped;
+      if (nextActiveTabId !== activeTabIdRef.current) {
+        activeTabIdRef.current = nextActiveTabId;
+        setActiveTabId(nextActiveTabId);
+      }
+      return deduped;
+    });
+  }, []);
+
   // If runtime already has a session but tabs are empty (e.g. tests / cold path), seed a tab.
   useEffect(() => {
     const session = state.session;
@@ -199,18 +251,14 @@ export function App() {
       state.activeProjectId ??
       session.cwd;
     if (!projectId) return;
-    const hasConversation = state.timeline.some((item) => item.kind === "user");
     const next = upsertTab([], {
       sessionId: session.sessionId,
       sessionFile: session.sessionFile,
       projectId,
       title: session.name || "Untitled",
       status: session.status,
-      isPreview: canBePreview(hasConversation, session.status),
+      isPreview: canBePreview(session.status),
     });
-    if (!canBePreview(hasConversation, session.status)) {
-      committedTabIdsRef.current.add(next.activeTabId);
-    }
     setOpenTabs(next.tabs);
     setActiveTabId(next.activeTabId);
   }, [state.session.sessionId, state.session.sessionFile, state.session.name, state.session.status, state.session.cwd, state.timeline, state.projects, state.activeProjectId]);
@@ -227,7 +275,7 @@ export function App() {
       committedTabIdsRef.current.add(sessionKey);
     }
     setOpenTabs((tabs) => {
-      const patched = tabs.map((tab) =>
+      const patched = dedupeTabs(tabs.map((tab) =>
         tab.id === sessionKey
           ? {
               ...tab,
@@ -238,7 +286,7 @@ export function App() {
                   : tab.isPreview,
             }
           : tab,
-      );
+      ), sessionKey);
       openTabsRef.current = patched;
       return patched;
     });
@@ -290,7 +338,7 @@ export function App() {
           patchTabStatus(key, "error");
         } else if (event.type === "session_name_changed") {
           setOpenTabs((tabs) => {
-            const patched = tabs.map((tab) =>
+            const patched = dedupeTabs(tabs.map((tab) =>
               tab.id === key
                 ? {
                     ...tab,
@@ -299,7 +347,7 @@ export function App() {
                     sessionFile: event.payload.sessionFile || tab.sessionFile,
                   }
                 : tab,
-            );
+            ), key);
             openTabsRef.current = patched;
             return patched;
           });
@@ -351,10 +399,6 @@ export function App() {
             });
             if (!active) return;
             applySnapshot(snap);
-            const restoredHasConversation = snap.timeline.some((item) => item.kind === "user");
-            if (!canBePreview(restoredHasConversation, snap.session.status)) {
-              committedTabIdsRef.current.add(sessionKey);
-            }
             const next = ensureInWorkingSet(
               saved.tabs.length ? saved.tabs : [],
               {
@@ -364,10 +408,7 @@ export function App() {
                 projectId: project.id,
                 title: snap.session.name || preferred.title || "Untitled",
                 status: snap.session.status,
-                isPreview: canBePreview(
-                  snap.timeline.some((item) => item.kind === "user"),
-                  snap.session.status,
-                ),
+                isPreview: canBePreview(snap.session.status),
               },
               sessionKey,
             );
@@ -424,8 +465,7 @@ export function App() {
   };
 
   /** Write live session metadata onto the active tab and keep the ref in sync (avoids losing tabs on switch). */
-  const commitActiveTabMeta = useCallback(() => {
-    const tabId = activeTabIdRef.current;
+  const commitActiveTabMeta = useCallback((tabId = activeTabIdRef.current) => {
     if (!tabId) return openTabsRef.current;
     const session = useAppStore.getState().session;
     if (!session.sessionId && !session.sessionFile) return openTabsRef.current;
@@ -449,9 +489,10 @@ export function App() {
         isPreview: committed ? false : true,
       };
     });
-    openTabsRef.current = committed;
-    setOpenTabs(committed);
-    return committed;
+    const deduped = dedupeTabs(committed, tabId);
+    openTabsRef.current = deduped;
+    setOpenTabs(deduped);
+    return deduped;
   }, []);
 
   /** True when a brand-new tab slot can be admitted (or an existing identity will only focus). */
@@ -475,6 +516,7 @@ export function App() {
    */
   const syncTabFromSession = useCallback(
     (snapshot: PiSnapshot, projectId: string, titleHint?: string) => {
+      tabActivationRef.current += 1;
       const session = snapshot.session;
       const result = ensureInWorkingSet(
         openTabsRef.current,
@@ -484,10 +526,7 @@ export function App() {
           projectId,
           title: displayTabTitle(session.name || titleHint, "Untitled"),
           status: session.status,
-          isPreview: canBePreview(
-            snapshot.timeline.some((item) => item.kind === "user"),
-            session.status,
-          ),
+          isPreview: canBePreview(session.status),
         },
         activeTabIdRef.current,
       );
@@ -499,11 +538,7 @@ export function App() {
       setOpenTabs(result.tabs);
       setActiveTabId(result.activeTabId);
       activeTabIdRef.current = result.activeTabId;
-      if (
-        snapshot.timeline.some((item) => item.kind === "user") ||
-        session.status === "running" ||
-        session.status === "awaiting_approval"
-      ) {
+      if (session.status === "running" || session.status === "awaiting_approval") {
         committedTabIdsRef.current.add(result.activeTabId);
       }
       return result.activeTabId;
@@ -520,7 +555,7 @@ export function App() {
     setOpenTabs((tabs) => {
       const current = tabs.find((item) => item.id === tabId);
       if (!current) return tabs;
-      const patched = tabs.map((item) => {
+      const patched = dedupeTabs(tabs.map((item) => {
         if (item.id !== tabId) return item;
         return {
           ...item,
@@ -530,7 +565,7 @@ export function App() {
           title: resolvedTitle || displayTabTitle(item.title),
           status: session.status ?? item.status,
         };
-      });
+      }), tabId);
       openTabsRef.current = patched;
       return patched;
     });
@@ -581,8 +616,10 @@ export function App() {
       const tabsAfterCommit = commitActiveTabMeta();
       const tab = tabsAfterCommit.find((item) => item.id === tabId);
       if (!tab) return;
+      const activation = ++tabActivationRef.current;
+      const previousActiveTabId = activeTabIdRef.current;
       if (
-        tab.id === activeTabIdRef.current &&
+        tab.id === previousActiveTabId &&
         tab.sessionId &&
         tab.sessionId === useAppStore.getState().session.sessionId
       ) {
@@ -593,6 +630,10 @@ export function App() {
         activeTabIdRef.current = tabId;
         return;
       }
+      // Give the click immediate selected feedback. Metadata was committed
+      // above while activeTabIdRef still identified the outgoing tab.
+      setActiveTabId(tabId);
+      activeTabIdRef.current = tabId;
       try {
         // Multi-runtime: never abort the previous tab's agent on switch.
         const project = useAppStore.getState().projects?.find((item) => item.id === tab.projectId);
@@ -621,12 +662,13 @@ export function App() {
         } else {
           snap = await api?.startSession({ cwd, sessionKey: tabId });
         }
+        if (activation !== tabActivationRef.current) return;
         applySnapshot(snap);
 
         setActiveTabId(tabId);
         activeTabIdRef.current = tabId;
         const state = useAppStore.getState();
-        const patched = tabsAfterCommit.map((item) => {
+        const patched = dedupeTabs(openTabsRef.current.map((item) => {
           if (item.id !== tabId) return item;
           const status = state.session.status ?? item.status;
           const committed =
@@ -642,7 +684,7 @@ export function App() {
             status,
             isPreview: committed ? false : true,
           };
-        });
+        }), tabId);
         const touched = touchTab(patched, tabId);
         openTabsRef.current = touched;
         setOpenTabs(touched);
@@ -651,6 +693,13 @@ export function App() {
           setLiveSessions(await api.listLiveSessions());
         }
       } catch (error) {
+        if (activation === tabActivationRef.current && activeTabIdRef.current === tabId) {
+          const fallbackTabId = tabsAfterCommit.some((item) => item.id === previousActiveTabId)
+            ? previousActiveTabId
+            : undefined;
+          setActiveTabId(fallbackTabId);
+          activeTabIdRef.current = fallbackTabId;
+        }
         pushError(error instanceof Error ? error.message : String(error));
       }
     },
@@ -660,16 +709,21 @@ export function App() {
   const handleCloseTab = useCallback(
     async (tabId: string) => {
       const wasActive = activeTabIdRef.current === tabId;
+      if (wasActive) tabActivationRef.current += 1;
       const result = closeTabInList(openTabsRef.current, tabId, activeTabIdRef.current);
       openTabsRef.current = result.tabs;
       setOpenTabs(result.tabs);
       setActiveTabId(result.activeTabId);
-      activeTabIdRef.current = result.activeTabId;
       if (!wasActive) return;
       if (result.activeTabId) {
+        // Keep the outgoing identity until activateTab has had a chance to
+        // commit it. The closed tab is already absent, so that commit is a
+        // no-op instead of copying its metadata onto the neighbor.
+        activeTabIdRef.current = tabId;
         await activateTab(result.activeTabId);
         return;
       }
+      activeTabIdRef.current = undefined;
       // No tabs left — clear main UI only. Do not abort/dispose solely because the
       // working set is empty (Phase B keeps host runtime alive; Phase A still has
       // a single runtime so the agent may keep occupying it until next start).
@@ -701,6 +755,7 @@ export function App() {
 
       const tabsBefore = commitActiveTabMeta();
       const previousActiveId = activeTabIdRef.current;
+      if (previousActiveId && ids.has(previousActiveId)) tabActivationRef.current += 1;
       const remaining = tabsBefore.filter((tab) => !ids.has(tab.id));
       let nextActiveId = previousActiveId && !ids.has(previousActiveId) ? previousActiveId : undefined;
       if (!nextActiveId && preferredTabId && remaining.some((tab) => tab.id === preferredTabId)) {
@@ -913,6 +968,7 @@ export function App() {
       }
       // Save current conversation onto its tab before opening a new one.
       commitActiveTabMeta();
+      const navigation = ++tabActivationRef.current;
       if (!canAdmitTab({})) {
         pushError("Working set full (9 pinned). Unpin a tab to open another.");
         return;
@@ -940,9 +996,13 @@ export function App() {
       setActiveTabId(reserved.activeTabId);
       activeTabIdRef.current = reserved.activeTabId;
 
-      applySnapshot(await api?.startSession({ cwd: project.path, sessionKey }));
+      const started = await api?.startSession({ cwd: project.path, sessionKey });
+      if (navigation !== tabActivationRef.current) return;
+      applySnapshot(started);
       await api?.newSession({ sessionKey });
+      if (navigation !== tabActivationRef.current) return;
       const snap = await api?.getSnapshot();
+      if (navigation !== tabActivationRef.current) return;
       applySnapshot(snap);
       if (snap) {
         // Patch the reserved tab in place (keep same sessionKey / tab id).
@@ -998,6 +1058,7 @@ export function App() {
         return;
       }
       commitActiveTabMeta();
+      const navigation = ++tabActivationRef.current;
       const catalogSession = useAppStore.getState().sessions.find(
         (item) => item.sessionFile === sessionPath,
       );
@@ -1035,7 +1096,7 @@ export function App() {
           projectId: project?.id ?? projectId,
           title: displayTabTitle(catalogSession?.name, "Session"),
           status: catalogSession?.status,
-          isPreview: canBePreview(false, catalogSession?.status),
+          isPreview: canBePreview(catalogSession?.status),
         },
         activeTabIdRef.current,
       );
@@ -1055,6 +1116,7 @@ export function App() {
       }
 
       const snap = await api?.startSession({ cwd, sessionPath, sessionKey });
+      if (navigation !== tabActivationRef.current) return;
       applySnapshot(snap);
       if (snap) {
         const title =
@@ -1066,7 +1128,7 @@ export function App() {
           sessionFile: snap.session.sessionFile ?? sessionPath,
           title: displayTabTitle(title, "Session"),
           status: snap.session.status,
-          isPreview: canBePreview(false, snap.session.status),
+          isPreview: canBePreview(snap.session.status),
         });
         if (
           snap.session.status === "running" ||
@@ -1092,9 +1154,13 @@ export function App() {
       const list = await api.listSessions(cwd);
       useAppStore.setState({ sessions: list });
     }
-    setOpenTabs((tabs) =>
-      tabs.map((tab) => (tab.sessionFile === sessionPath ? { ...tab, title: result.name } : tab)),
-    );
+    setOpenTabs((tabs) => {
+      const patched = tabs.map((tab) =>
+        tab.sessionFile === sessionPath ? { ...tab, title: result.name } : tab,
+      );
+      openTabsRef.current = patched;
+      return patched;
+    });
     return result.name;
   };
 
@@ -1113,7 +1179,11 @@ export function App() {
       }
       if (tab) await handleCloseTab(tab.id);
       else {
-        setOpenTabs((tabs) => tabs.filter((item) => item.sessionFile !== sessionPath));
+        setOpenTabs((tabs) => {
+          const remaining = tabs.filter((item) => item.sessionFile !== sessionPath);
+          openTabsRef.current = remaining;
+          return remaining;
+        });
       }
     } catch (error) {
       pushError(error instanceof Error ? error.message : String(error));
@@ -1284,7 +1354,15 @@ export function App() {
     <div className="http-agent-chat-shell">
       <div className="http-agent-timeline">
         {state.timeline.length > 0 ? (
-          <Timeline items={state.timeline} sessionStatus={state.session.status} onReviewChanges={openChanges} />
+          <Timeline
+            items={state.timeline}
+            sessionStatus={state.session.status}
+            onReviewChanges={openChanges}
+            reviewOpen={inspectorOpen && rightPane === "changes"}
+            selectedReviewPath={selectedChangePath}
+            onCloseReview={() => setInspectorOpen(false)}
+            onUndoChanges={undoChanges}
+          />
         ) : (
           <div className="http-chat-empty"><AppIcon name="messageSquare" size="lg" /><p>Ask the Agent to create, review, or explain a test in this Project.</p></div>
         )}
@@ -1339,7 +1417,7 @@ export function App() {
 
   return (
     <main
-      className={`app-shell ${inspectorOpen ? "with-inspector" : "chat-only"} ${inspectorOpen && rightPane === "changes" ? "changes-open" : ""}`}
+      className={`app-shell theme-light ${inspectorOpen ? "with-inspector" : "chat-only"} ${inspectorOpen && rightPane === "changes" ? "changes-open" : ""}`}
       style={{
         "--sidebar-width": `${sidebarWidth}px`,
         "--right-panel-width": `${rightPane === "changes" ? changesWidth : inspectorWidth}px`,
@@ -1423,7 +1501,7 @@ export function App() {
               title="Keyboard shortcuts"
               onClick={() => setHelpOpen(true)}
             >
-              <AppIcon name="circleHelp" size="sm" />
+              <AppIcon name="circleHelp" size="md" />
               <ShortcutKeys className="topbar-kbd" compact keys={["mod", "?"]} />
             </button>
             <button
@@ -1431,7 +1509,7 @@ export function App() {
               aria-label="Toggle inspector"
               onClick={() => (inspectorOpen ? setInspectorOpen(false) : setInspectorOpen(true))}
             >
-              <AppIcon name="panelRight" size="sm" />
+              <AppIcon name="panelRight" size="md" />
               <ShortcutKeys className="topbar-kbd" compact keys={["mod", "B"]} />
             </button>
           </div>
@@ -1448,7 +1526,15 @@ export function App() {
         >
           <div className="chat-column">
             {state.timeline.length > 0 ? (
-              <Timeline items={state.timeline} sessionStatus={state.session.status} onReviewChanges={openChanges} />
+              <Timeline
+                items={state.timeline}
+                sessionStatus={state.session.status}
+                onReviewChanges={openChanges}
+                reviewOpen={inspectorOpen && rightPane === "changes"}
+                selectedReviewPath={selectedChangePath}
+                onCloseReview={() => setInspectorOpen(false)}
+                onUndoChanges={undoChanges}
+              />
             ) : (
               <div className="welcome-block">
                 {!isNewSessionEmpty ? (
@@ -1474,7 +1560,7 @@ export function App() {
                       </button>
                     ) : (
                       <button type="button" className="welcome-primary" onClick={requestNewSession}>
-                        New session
+                        New task
                       </button>
                     )}
                   </>
@@ -1577,6 +1663,8 @@ export function App() {
         thinkingLevel={state.session.thinkingLevel}
         onModelSelect={(model) => void api?.setModel(model)}
         onThinkingLevel={(level) => void api?.setThinkingLevel(level)}
+        motionEnabled={motionEnabled}
+        onMotionEnabledChange={setMotionEnabled}
         onClose={() => setSettingsOpen(false)}
         listProviders={
           api?.listProviders

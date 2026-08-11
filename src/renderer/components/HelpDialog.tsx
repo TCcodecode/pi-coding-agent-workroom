@@ -18,7 +18,7 @@ const SHORTCUT_GROUPS: HelpShortcutGroup[] = [
     label: "Navigation",
     shortcuts: [
       { keys: ["mod", "K"], action: "Open command palette" },
-      { keys: ["mod", "N"], action: "New session" },
+      { keys: ["mod", "N"], action: "New task" },
       { keys: ["mod", "W"], action: "Close current session tab" },
       { keys: ["mod", "B"], action: "Toggle inspector" },
       { keys: ["mod", "?"], action: "Keyboard shortcuts" },

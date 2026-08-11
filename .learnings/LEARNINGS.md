@@ -211,3 +211,95 @@ When a product name is ambiguous, ask for or verify the exact repository URL bef
 - Tags: github, readme, product-identification
 
 ---
+
+## [LRN-20260810-005] correction
+
+**Logged**: 2026-08-10T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: frontend
+
+### Summary
+The first pass on the change-summary file row was inferred from the reference image without verifying the user's current rendered state.
+
+### Details
+The reference image alone does not establish whether the highlighted gray surface is a default single-file state, a hover state, or a layout mismatch in the current app. The implementation should compare the actual rendered card before making further visual claims.
+
+### Suggested Action
+For screenshot-driven UI corrections, capture or inspect the current app state and compare computed layout/selector precedence against the reference before iterating again.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/renderer/components/Timeline.tsx, src/renderer/styles.css
+- Tags: visual-regression, change-summary, screenshot-comparison
+
+---
+
+## [LRN-20260811-006] correction
+
+**Logged**: 2026-08-11T09:29:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+Shared interaction tokens do not guarantee shared hover colors when nested controls and higher-specificity selectors keep their own backgrounds.
+
+### Details
+The project row, its inner project toggle, the session row, and the Settings sidebar action were rendered by different DOM layers. A parent row could use the shared `#e9e9e9` surface while the hovered child still used `var(--surface-hover)` or was forced transparent, producing visibly different hover colors.
+
+### Suggested Action
+When standardizing interactive states, audit the full hover target hierarchy and override both the visual row and its nested interactive child with the same semantic token. Test parent-hover and child-hover paths separately.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/renderer/styles.css, src/renderer/components/SessionSidebar.tsx
+- Tags: design-system, hover-state, specificity, visual-regression
+
+---
+
+## [LRN-20260811-007] correction
+
+**Logged**: 2026-08-11T09:33:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+Selection background geometry must be owned by the list container; full-width child rows combined with ad hoc margins remove the intended inset and row gap.
+
+### Details
+The session list had a zero left margin and nested session rows were forced to `width: 100%`. The row's background therefore filled the whole child list, while its visual indentation existed only as text padding. The result looked like the selected session had no surrounding padding.
+
+### Suggested Action
+Define explicit sidebar selection inset and gap tokens. Let the list container provide horizontal/vertical spacing, and let each row own only its rounded background and content padding. Avoid mixing width, margin, and padding to simulate hierarchy.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/renderer/styles.css, src/renderer/components/SessionSidebar.tsx
+- Tags: layout-contract, selection-surface, spacing, sidebar
+
+---
+
+## [LRN-20260811-008] correction
+
+**Logged**: 2026-08-11T09:42:00+08:00
+**Priority**: high
+**Status**: pending
+**Area**: frontend
+
+### Summary
+The right inspector was visually inconsistent because its legacy tab, tree, and control rules bypassed the global interaction tokens.
+
+### Details
+The right pane combined accent-colored selected tabs, dark-era local hover surfaces, and separate Index/Changes rules. A shared theme token only helps components that explicitly consume it, so the pane needed a scoped interaction contract covering its tabs, rows, tree items, controls, and focus states.
+
+### Suggested Action
+When a whole panel should match global interaction feedback, add a panel-level audit and route every neutral interactive state through the same hover, selected, and focus tokens. Keep semantic status colors separate from the interaction surface.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/renderer/styles.css, src/renderer/theme.test.ts
+- Tags: design-system, right-pane, interaction-contract, specificity
+
+---

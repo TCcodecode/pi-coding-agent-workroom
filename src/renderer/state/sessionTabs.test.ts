@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   closeTab,
+  dedupeTabs,
   displayTabTitle,
   ensureInWorkingSet,
   findRestorableTab,
@@ -153,6 +154,38 @@ describe("sessionTabs", () => {
     expect(findRestorableTab(tabs, "pi", "pi", "/work/pi")).toMatchObject({ id: "pi" });
   });
 
+  test("restores one active tab when persisted entries point to the same session", () => {
+    localStorage.setItem(
+      "pi.openTabs",
+      JSON.stringify({
+        tabs: [
+          { id: "old-key", sessionId: "s1", sessionFile: "/sessions/a.jsonl", projectId: "pi", title: "Untitled", isPreview: false },
+          { id: "active-key", sessionId: "s1", sessionFile: "/sessions/a.jsonl", projectId: "pi", title: "Real task", isPreview: false, lastFocusedAt: 20 },
+        ],
+        activeTabId: "active-key",
+      }),
+    );
+
+    const loaded = loadOpenTabs();
+    expect(loaded.tabs).toHaveLength(1);
+    expect(loaded.tabs[0]).toMatchObject({ id: "active-key", title: "Real task" });
+    expect(loaded.activeTabId).toBe("active-key");
+    localStorage.removeItem("pi.openTabs");
+  });
+
+  test("dedupes transitive session identities without dropping a pinned tab", () => {
+    const tabs: SessionTab[] = [
+      { id: "a", sessionId: "s1", sessionFile: "/sessions/a.jsonl", projectId: "pi", title: "A" },
+      { id: "b", sessionId: "s1", projectId: "pi", title: "B", pinned: true },
+      { id: "c", sessionId: "s2", sessionFile: "/sessions/b.jsonl", projectId: "etf", title: "C" },
+    ];
+
+    const deduped = dedupeTabs(tabs);
+    expect(deduped).toHaveLength(2);
+    expect(deduped[0]).toMatchObject({ id: "b", pinned: true, sessionFile: "/sessions/a.jsonl" });
+    expect(deduped.map((tab) => tab.title)).toEqual(["B", "C"]);
+  });
+
   test("tabShortcutLabel includes modifier", () => {
     expect(tabShortcutLabel(0, "⌘")).toBe("⌘1");
     expect(tabShortcutLabel(2, "Ctrl")).toBe("Ctrl+3");
@@ -298,6 +331,20 @@ describe("working set limit", () => {
     if (!r.ok) return;
     expect(r.tabs).toHaveLength(1);
     expect(r.tabs[0]!.lastFocusedAt).toBe(500);
+  });
+
+  test("normalizes duplicates before deciding whether an incoming tab already exists", () => {
+    const duplicateTabs: SessionTab[] = [
+      { ...tab(1, false, 10), id: "old-key", isPreview: false },
+      { ...tab(1, false, 20), id: "active-key", isPreview: false },
+    ];
+
+    const r = ensureInWorkingSet(duplicateTabs, tab(1, false, 30), "active-key", 30);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tabs).toHaveLength(1);
+    expect(r.activeTabId).toBe("active-key");
+    expect(r.evicted).toBeUndefined();
   });
 
   test("10th unpinned open evicts oldest unpinned by lastFocusedAt", () => {

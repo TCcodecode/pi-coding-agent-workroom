@@ -207,9 +207,11 @@ export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, o
           </button>
         </div>
         {onClose && (
-          <button className="icon-button" onClick={onClose} aria-label="Close changes">
-            <AppIcon name="x" size="sm" />
-          </button>
+          <div className="inspector-header-actions">
+            <button type="button" className="icon-button" onClick={onClose} aria-label="Close changes" title="Close changes">
+              <AppIcon name="x" size="sm" />
+            </button>
+          </div>
         )}
       </div>
 

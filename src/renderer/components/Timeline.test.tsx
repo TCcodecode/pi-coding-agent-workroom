@@ -79,6 +79,46 @@ describe("Timeline", () => {
     expect(within(region).getAllByText("src/App.tsx")).toHaveLength(1);
   });
 
+  test("toggles the Review button and the selected file row", () => {
+    const onReviewChanges = vi.fn();
+    const onCloseReview = vi.fn();
+    const items: TimelineItem[] = [
+      {
+        id: "tool-toggle",
+        kind: "tool",
+        toolCallId: "tool-toggle",
+        toolName: "edit",
+        input: "{}",
+        status: "completed",
+        change: { path: "src/App.tsx", additions: 1, deletions: 0, diff: "@@\n+new" },
+      },
+    ];
+
+    const { rerender } = render(
+      <Timeline items={items} onReviewChanges={onReviewChanges} reviewOpen selectedReviewPath="src/App.tsx" onCloseReview={onCloseReview} />,
+    );
+    const region = screen.getByRole("region", { name: "File changes" });
+    fireEvent.click(within(region).getByRole("button", { name: "Review file changes" }));
+    fireEvent.click(within(region).getByRole("button", { name: "Review src/App.tsx" }));
+    expect(onCloseReview).toHaveBeenCalledTimes(2);
+
+    rerender(<Timeline items={items} onReviewChanges={onReviewChanges} />);
+    fireEvent.click(screen.getByRole("button", { name: "Review src/App.tsx" }));
+    expect(onReviewChanges).toHaveBeenCalledWith("src/App.tsx");
+  });
+
+  test("shows Undo for a multi-file change summary", () => {
+    const onUndoChanges = vi.fn();
+    const items: TimelineItem[] = [
+      { id: "tool-undo-1", kind: "tool", toolCallId: "tool-undo-1", toolName: "edit", input: "{}", status: "completed", change: { path: "src/App.tsx", additions: 1, deletions: 0, diff: "@@\n+new" } },
+      { id: "tool-undo-2", kind: "tool", toolCallId: "tool-undo-2", toolName: "edit", input: "{}", status: "completed", change: { path: "src/styles.css", additions: 2, deletions: 1, diff: "@@\n-old\n+new" } },
+    ];
+
+    render(<Timeline items={items} onUndoChanges={onUndoChanges} />);
+    fireEvent.click(screen.getByRole("button", { name: "Undo file changes" }));
+    expect(onUndoChanges).toHaveBeenCalledWith(["src/App.tsx", "src/styles.css"]);
+  });
+
   test("uses a line icon for the empty state", () => {
     const { container } = render(<Timeline items={[]} />);
 

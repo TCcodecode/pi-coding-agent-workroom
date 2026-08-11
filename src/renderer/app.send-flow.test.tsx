@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "./App";
 import { createInitialState, useAppStore } from "./state/appStore";
-import type { PiApi, PiEvent } from "../shared/protocol";
+import type { PiApi, PiEvent, PiSnapshot } from "../shared/protocol";
 
 function makeFakeApi() {
   const listeners = new Set<(event: PiEvent) => void>();
@@ -219,6 +219,212 @@ describe("Pi Desktop end-to-end send flow", () => {
     delete (window as unknown as { pi?: PiApi }).pi;
   });
 
+  test("restored history stays replaceable until the user sends in this tab", async () => {
+    const { api } = makeFakeApi();
+    const project = { id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() };
+    const historicalTimeline = [
+      { id: "old-user", kind: "user" as const, content: "old prompt", status: "completed" as const },
+    ];
+    vi.mocked(api.startSession).mockImplementation(async ({ cwd, sessionPath, sessionKey }) => ({
+      ...useAppStore.getState(),
+      session: {
+        ...useAppStore.getState().session,
+        sessionId: sessionPath ? "s-history" : "s-new",
+        sessionFile: sessionPath,
+        cwd,
+        name: sessionPath ? "Historical task" : "New task",
+        status: "idle",
+      },
+      timeline: sessionPath ? historicalTimeline : [],
+      projects: [project],
+      activeProjectId: project.id,
+      sessions: [],
+    }));
+    (window as unknown as { pi: PiApi }).pi = api;
+    localStorage.setItem(
+      "pi.openTabs",
+      JSON.stringify({
+        tabs: [
+          {
+            id: "tab-history",
+            sessionId: "s-history",
+            sessionFile: "/tmp/history.jsonl",
+            projectId: project.id,
+            title: "Historical task",
+            isPreview: false,
+          },
+        ],
+        activeTabId: "tab-history",
+      }),
+    );
+    useAppStore.setState({
+      ...createInitialState(),
+      projects: [project],
+      activeProjectId: project.id,
+      sessions: [{
+        sessionId: "s-history",
+        cwd: project.path,
+        name: "Historical task",
+        status: "idle",
+        model: "",
+        thinkingLevel: "medium",
+        messageCount: 1,
+        updatedAt: new Date().toISOString(),
+        sessionFile: "/tmp/history.jsonl",
+      }],
+    });
+
+    render(<App />);
+    await waitFor(() =>
+      expect(api.startSession).toHaveBeenCalledWith({
+        cwd: project.path,
+        sessionPath: "/tmp/history.jsonl",
+        sessionKey: "tab-history",
+      }),
+    );
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem("pi.openTabs") ?? "{}");
+      expect(saved.tabs?.[0]).toMatchObject({ id: "tab-history", isPreview: true });
+    });
+
+    fireEvent.keyDown(window, { key: "n", metaKey: true });
+    await waitFor(() => expect(api.newSession).toHaveBeenCalledWith({ sessionKey: expect.any(String) }));
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem("pi.openTabs") ?? "{}");
+      expect(saved.tabs).toHaveLength(1);
+      expect(saved.tabs[0]?.id).not.toBe("tab-history");
+    });
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
+  test("closing the active tab opens its neighbor without copying the closed session onto it", async () => {
+    const { api } = makeFakeApi();
+    vi.mocked(api.startSession).mockImplementation(async ({ cwd, sessionPath, sessionKey }) => {
+      const isSecond = sessionPath === "/tmp/b.jsonl";
+      return {
+        ...useAppStore.getState(),
+        session: {
+          ...useAppStore.getState().session,
+          sessionId: isSecond ? "s-b" : "s-a",
+          sessionFile: sessionPath,
+          cwd,
+          name: isSecond ? "Second task" : "First task",
+        },
+        projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+        activeProjectId: "/tmp/project",
+        sessions: [],
+      };
+    });
+    (window as unknown as { pi: PiApi }).pi = api;
+    localStorage.setItem(
+      "pi.openTabs",
+      JSON.stringify({
+        tabs: [
+          { id: "tab-a", sessionId: "s-a", sessionFile: "/tmp/a.jsonl", projectId: "/tmp/project", title: "First task", isPreview: false },
+          { id: "tab-b", sessionId: "s-b", sessionFile: "/tmp/b.jsonl", projectId: "/tmp/project", title: "Second task", isPreview: false },
+        ],
+        activeTabId: "tab-a",
+      }),
+    );
+    useAppStore.setState({
+      ...createInitialState(),
+      session: {
+        ...createInitialState().session,
+        sessionId: "s-a",
+        sessionFile: "/tmp/a.jsonl",
+        cwd: "/tmp/project",
+        name: "First task",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close First task" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Close First task" }));
+
+    await waitFor(() =>
+      expect(api.startSession).toHaveBeenCalledWith({
+        cwd: "/tmp/project",
+        sessionPath: "/tmp/b.jsonl",
+        sessionKey: "tab-b",
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("Second task")).toBeInTheDocument());
+    expect(screen.queryByText("First task")).not.toBeInTheDocument();
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
+  test("keeps the most recently selected tab when an earlier switch resolves late", async () => {
+    const { api } = makeFakeApi();
+    const snapshotFor = (sessionId: string, sessionFile: string, name: string): PiSnapshot => ({
+      ...useAppStore.getState(),
+      session: {
+        ...useAppStore.getState().session,
+        sessionId,
+        sessionFile,
+        cwd: "/tmp/project",
+        name,
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+      sessions: [],
+    });
+    let resolveSecond: ((snapshot: PiSnapshot) => void) | undefined;
+    let resolveThird: ((snapshot: PiSnapshot) => void) | undefined;
+    vi.mocked(api.startSession).mockImplementation(({ sessionPath }) => {
+      if (sessionPath === "/tmp/b.jsonl") {
+        return new Promise<PiSnapshot>((resolve) => { resolveSecond = resolve; });
+      }
+      if (sessionPath === "/tmp/c.jsonl") {
+        return new Promise<PiSnapshot>((resolve) => { resolveThird = resolve; });
+      }
+      return Promise.resolve(snapshotFor("s-a", "/tmp/a.jsonl", "First task"));
+    });
+    (window as unknown as { pi: PiApi }).pi = api;
+    localStorage.setItem(
+      "pi.openTabs",
+      JSON.stringify({
+        tabs: [
+          { id: "tab-a", sessionId: "s-a", sessionFile: "/tmp/a.jsonl", projectId: "/tmp/project", title: "First task", isPreview: false },
+          { id: "tab-b", sessionId: "s-b", sessionFile: "/tmp/b.jsonl", projectId: "/tmp/project", title: "Second task", isPreview: false },
+          { id: "tab-c", sessionId: "s-c", sessionFile: "/tmp/c.jsonl", projectId: "/tmp/project", title: "Third task", isPreview: false },
+        ],
+        activeTabId: "tab-a",
+      }),
+    );
+    useAppStore.setState({
+      ...createInitialState(),
+      session: {
+        ...createInitialState().session,
+        sessionId: "s-a",
+        sessionFile: "/tmp/a.jsonl",
+        cwd: "/tmp/project",
+        name: "First task",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Second task")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Second task"));
+    await waitFor(() => expect(resolveSecond).toBeDefined());
+    fireEvent.click(screen.getByText("Third task"));
+    await waitFor(() => expect(resolveThird).toBeDefined());
+
+    await act(async () => { resolveThird?.(snapshotFor("s-c", "/tmp/c.jsonl", "Third task")); });
+    await waitFor(() => expect(useAppStore.getState().session.sessionId).toBe("s-c"));
+    await act(async () => { resolveSecond?.(snapshotFor("s-b", "/tmp/b.jsonl", "Second task")); });
+
+    await waitFor(() => expect(useAppStore.getState().session.sessionId).toBe("s-c"));
+    expect(screen.getByText("Third task").closest('[role="tab"]')).toHaveAttribute("aria-selected", "true");
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
   test("⌘N starts a new session in the active project", async () => {
     const { api } = makeFakeApi();
     (window as unknown as { pi: PiApi }).pi = api;
@@ -320,7 +526,7 @@ describe("Pi Desktop end-to-end send flow", () => {
     await waitFor(() => expect(screen.getByText("First session")).toBeInTheDocument());
     expect(screen.getByRole("searchbox", { name: /search sessions/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select project project" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getAllByRole("button", { name: /new session in project/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /new task in project/i }).length).toBeGreaterThan(0);
 
     delete (window as unknown as { pi?: PiApi }).pi;
   });

@@ -65,6 +65,27 @@ describe("SettingsDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  test("toggles interface motion", () => {
+    const onMotionEnabledChange = vi.fn();
+    render(
+      <SettingsDialog
+        open
+        models={[]}
+        model="auto"
+        thinkingLevel="medium"
+        onModelSelect={vi.fn()}
+        onThinkingLevel={vi.fn()}
+        onMotionEnabledChange={onMotionEnabledChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Interface motion" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(toggle);
+    expect(onMotionEnabledChange).toHaveBeenCalledWith(false);
+  });
+
   test("renders nothing when closed", () => {
     render(
       <SettingsDialog

@@ -70,4 +70,21 @@ describe("ChangeInspector", () => {
     fireEvent.click(file);
     expect(screen.getByLabelText("Diff for src/App.tsx")).toBeInTheDocument();
   });
+
+  test("closes the changes panel from its header", () => {
+    const onClose = vi.fn();
+    render(
+      <ChangeInspector
+        changes={changes}
+        selectedPath="src/App.tsx"
+        onSelect={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenInspector={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close changes" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

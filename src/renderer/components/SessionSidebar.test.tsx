@@ -200,7 +200,7 @@ describe("SessionSidebar", () => {
     expect(screen.queryByText("Other session")).not.toBeInTheDocument();
   });
 
-  test("New session button requests project pick (does not create yet)", async () => {
+  test("New task button requests project pick (does not create yet)", async () => {
     const onRequestNewSession = vi.fn();
     const onNewSession = vi.fn();
     const { container } = renderSidebar({ onRequestNewSession, onNewSession });
@@ -208,6 +208,8 @@ describe("SessionSidebar", () => {
     expect(onRequestNewSession).toHaveBeenCalledTimes(1);
     expect(onNewSession).not.toHaveBeenCalled();
     expect(container.querySelector(".sidebar-nav-shortcut")?.textContent).toMatch(/N/);
+    expect(container.querySelector(".sidebar-new-session")).toHaveClass("sidebar-leading-control");
+    expect(screen.getByRole("button", { name: "Select project p" })).toHaveClass("sidebar-leading-control");
   });
 
   test("clicking a project name sets it active without new session", async () => {
@@ -245,10 +247,12 @@ describe("SessionSidebar", () => {
     expect(screen.getByText("My session")).toBeInTheDocument();
   });
 
-  test("settings footer shows model and thinking level", async () => {
+  test("settings footer shows a compact settings label", async () => {
     renderSidebar();
-    expect(screen.getByText("deepseek-v4")).toBeInTheDocument();
-    expect(screen.getByText("medium")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(screen.queryByText("deepseek-v4")).not.toBeInTheDocument();
+    expect(screen.queryByText("medium")).not.toBeInTheDocument();
   });
 
   test("project context menu can remove from list", async () => {

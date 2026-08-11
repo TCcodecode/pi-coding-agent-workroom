@@ -622,7 +622,7 @@ export function HttpWorkbench({
     : [];
   const brandBar = <WorkspaceBrandBar onModeChange={onModeChange} />;
   return (
-    <main className="http-workbench-shell">
+    <main className="http-workbench-shell theme-light">
       {emptyProject ? (
         <div className="http-empty-project-layout" style={{ gridTemplateColumns: `${navigatorWidth}px minmax(0, 1fr)` }}>
           <aside className="http-empty-project-rail">{brandBar}</aside>

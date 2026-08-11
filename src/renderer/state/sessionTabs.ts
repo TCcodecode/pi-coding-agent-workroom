@@ -44,14 +44,15 @@ export function loadOpenTabs(): { tabs: SessionTab[]; activeTabId?: string } {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { tabs: [] };
     const parsed = JSON.parse(raw) as { tabs?: unknown; activeTabId?: unknown };
+    const savedActiveTabId =
+      typeof parsed.activeTabId === "string" ? parsed.activeTabId : undefined;
     let tabs = Array.isArray(parsed.tabs)
       ? parsed.tabs.filter(isSessionTab)
           .map(normalizeStoredTab)
       : [];
     tabs = migrateLegacyPreviewTabs(tabs);
-    tabs = trimWorkingSet(tabs);
-    let activeTabId =
-      typeof parsed.activeTabId === "string" ? parsed.activeTabId : undefined;
+    tabs = trimWorkingSet(dedupeTabs(tabs, savedActiveTabId));
+    let activeTabId = savedActiveTabId;
     if (activeTabId && !tabs.some((t) => t.id === activeTabId)) {
       activeTabId = tabs[0]?.id;
     }
@@ -62,7 +63,14 @@ export function loadOpenTabs(): { tabs: SessionTab[]; activeTabId?: string } {
 }
 
 export function saveOpenTabs(tabs: SessionTab[], activeTabId?: string): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs, activeTabId }));
+  const deduped = dedupeTabs(tabs, activeTabId);
+  const resolvedActiveTabId = deduped.some((tab) => tab.id === activeTabId)
+    ? activeTabId
+    : deduped[0]?.id;
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ tabs: deduped, activeTabId: resolvedActiveTabId }),
+  );
 }
 
 /** Pick a persisted tab belonging to the project being restored. */
@@ -154,11 +162,99 @@ export function sortTabsPinnedFirst(tabs: SessionTab[]): SessionTab[] {
   return [...pinned, ...unpinned];
 }
 
+function sameSessionIdentity(first: SessionTab, second: SessionTab): boolean {
+  if (first.id === second.id) return true;
+  const firstFile = first.sessionFile?.trim();
+  const secondFile = second.sessionFile?.trim();
+  if (firstFile && firstFile === secondFile) return true;
+  const firstSessionId = first.sessionId.trim();
+  const secondSessionId = second.sessionId.trim();
+  return Boolean(firstSessionId && firstSessionId === secondSessionId);
+}
+
+function isGenericTabTitle(title: string): boolean {
+  const normalized = title.trim().toLowerCase();
+  return !normalized || normalized === "untitled" || normalized === "untitled session" || normalized === "new session";
+}
+
+function preferTab(
+  candidate: SessionTab,
+  current: SessionTab,
+  preferredTabId?: string,
+): boolean {
+  if (candidate.id === preferredTabId) return current.id !== preferredTabId;
+  if (current.id === preferredTabId) return false;
+  if (Boolean(candidate.pinned) !== Boolean(current.pinned)) return Boolean(candidate.pinned);
+  return (candidate.lastFocusedAt ?? 0) > (current.lastFocusedAt ?? 0);
+}
+
+function mergeDuplicateTab(winner: SessionTab, duplicate: SessionTab): SessionTab {
+  const pinned = Boolean(winner.pinned || duplicate.pinned);
+  return {
+    ...winner,
+    sessionId: winner.sessionId || duplicate.sessionId,
+    sessionFile: winner.sessionFile || duplicate.sessionFile,
+    projectId: winner.projectId || duplicate.projectId,
+    title: isGenericTabTitle(winner.title) && !isGenericTabTitle(duplicate.title)
+      ? duplicate.title
+      : winner.title,
+    status: winner.status ?? duplicate.status,
+    pinned: pinned || undefined,
+    // A duplicate that represents an already-used or pinned tab must not make
+    // the surviving tab replaceable as a preview.
+    isPreview: pinned || winner.isPreview === false || duplicate.isPreview === false
+      ? false
+      : winner.isPreview ?? duplicate.isPreview,
+    lastFocusedAt: Math.max(winner.lastFocusedAt ?? 0, duplicate.lastFocusedAt ?? 0) || undefined,
+  };
+}
+
+/**
+ * Restores the one-tab-per-session invariant after legacy storage or an
+ * interrupted async switch. The active tab wins a conflict, then pinned and
+ * most recently focused tabs win. Components are transitive: if A matches B
+ * by file and B matches C by session id, all three collapse to one tab.
+ */
+export function dedupeTabs(tabs: SessionTab[], preferredTabId?: string): SessionTab[] {
+  const remaining = new Set(tabs.map((_, index) => index));
+  const deduped: Array<{ index: number; tab: SessionTab }> = [];
+
+  while (remaining.size > 0) {
+    const firstIndex = remaining.values().next().value as number;
+    const group = new Set<number>([firstIndex]);
+    remaining.delete(firstIndex);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const index of [...remaining]) {
+        if ([...group].some((member) => sameSessionIdentity(tabs[member]!, tabs[index]!))) {
+          group.add(index);
+          remaining.delete(index);
+          expanded = true;
+        }
+      }
+    }
+
+    let winnerIndex = firstIndex;
+    for (const index of group) {
+      if (preferTab(tabs[index]!, tabs[winnerIndex]!, preferredTabId)) winnerIndex = index;
+    }
+    let winner = tabs[winnerIndex]!;
+    for (const index of group) {
+      if (index !== winnerIndex) winner = mergeDuplicateTab(winner, tabs[index]!);
+    }
+    deduped.push({ index: winnerIndex, tab: winner });
+  }
+
+  return sortTabsPinnedFirst(deduped.sort((a, b) => a.index - b.index).map((item) => item.tab));
+}
+
 /**
  * Pin → move to front of strip.
  * Unpin → place after all remaining pinned tabs.
  */
 export function togglePinTab(tabs: SessionTab[], tabId: string): SessionTab[] {
+  tabs = dedupeTabs(tabs, tabId);
   const index = tabs.findIndex((tab) => tab.id === tabId);
   if (index < 0) return tabs;
   const tab = tabs[index]!;
@@ -186,6 +282,7 @@ export function upsertTab(
   tabs: SessionTab[],
   tab: Omit<SessionTab, "id"> & { id?: string },
 ): { tabs: SessionTab[]; activeTabId: string } {
+  tabs = dedupeTabs(tabs);
   const file = tab.sessionFile?.trim() || "";
   const sessionId = tab.sessionId?.trim() || "";
 
@@ -239,9 +336,9 @@ export function touchTab(
   tabId: string,
   at: number = Date.now(),
 ): SessionTab[] {
-  return sortTabsPinnedFirst(tabs.map((tab) =>
+  return dedupeTabs(tabs.map((tab) =>
     tab.id === tabId ? { ...tab, lastFocusedAt: at } : tab,
-  ));
+  ), tabId);
 }
 
 function isPreviewTab(tab: SessionTab): boolean {
@@ -263,7 +360,7 @@ function collapsePreviewTabs(tabs: SessionTab[]): SessionTab[] {
 
 /** Keep ≤ WORKING_SET_LIMIT while preserving tab-strip order. */
 export function trimWorkingSet(tabs: SessionTab[]): SessionTab[] {
-  tabs = collapsePreviewTabs(tabs);
+  tabs = collapsePreviewTabs(dedupeTabs(tabs));
   if (tabs.length <= WORKING_SET_LIMIT) return sortTabsPinnedFirst(tabs);
   const pinned = tabs.filter((t) => t.pinned);
   const unpinned = tabs.filter((t) => !t.pinned);
@@ -284,9 +381,9 @@ export function trimWorkingSet(tabs: SessionTab[]): SessionTab[] {
 
 /** Promote a preview into a regular tab after the user starts using it. */
 export function promotePreviewTab(tabs: SessionTab[], tabId: string): SessionTab[] {
-  return tabs.map((tab) =>
+  return dedupeTabs(tabs.map((tab) =>
     tab.id === tabId && isPreviewTab(tab) ? { ...tab, isPreview: false } : tab,
-  );
+  ), tabId);
 }
 
 /**
@@ -303,6 +400,7 @@ export function ensureInWorkingSet(
   activeTabId?: string,
   now: number = Date.now(),
 ): EnsureInWorkingSetResult {
+  tabs = dedupeTabs(tabs, activeTabId);
   const probe = upsertTab(tabs, { ...incoming });
   const alreadyExisted = probe.tabs.length === tabs.length;
   if (alreadyExisted) {
@@ -373,10 +471,11 @@ export function closeTab(
   tabId: string,
   activeTabId?: string,
 ): { tabs: SessionTab[]; activeTabId?: string } {
-  const index = tabs.findIndex((item) => item.id === tabId);
-  if (index < 0) return { tabs, activeTabId };
+  const orderedTabs = dedupeTabs(tabs, activeTabId);
+  const index = orderedTabs.findIndex((item) => item.id === tabId);
+  if (index < 0) return { tabs: orderedTabs, activeTabId };
 
-  const next = tabs.filter((item) => item.id !== tabId);
+  const next = orderedTabs.filter((item) => item.id !== tabId);
   if (activeTabId !== tabId) {
     return { tabs: next, activeTabId };
   }
@@ -390,7 +489,10 @@ export function patchTab(
   tabId: string,
   patch: Partial<SessionTab>,
 ): SessionTab[] {
-  return tabs.map((item) => (item.id === tabId ? { ...item, ...patch, id: item.id } : item));
+  return dedupeTabs(
+    tabs.map((item) => (item.id === tabId ? { ...item, ...patch, id: item.id } : item)),
+    tabId,
+  );
 }
 
 export function findTabIndex(tabs: SessionTab[], tabId?: string): number {

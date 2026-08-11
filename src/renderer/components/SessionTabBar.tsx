@@ -31,6 +31,7 @@ function projectLabel(projectId: string, projects: ProjectSummary[]): string {
 function statusClass(status: SessionTab["status"]): string {
   if (status === "running") return "is-running";
   if (status === "awaiting_approval") return "is-waiting";
+  if (status === "completed") return "is-completed";
   if (status === "error") return "is-error";
   return "";
 }
@@ -87,7 +88,9 @@ export function SessionTabBar({
                     className="session-tab-main"
                     onClick={() => onActivate(tab.id)}
                   >
-                    <span className={`session-tab-dot ${statusClass(tab.status)}`} aria-hidden />
+                    {statusClass(tab.status) ? (
+                      <span className={`session-tab-dot ${statusClass(tab.status)}`} aria-hidden />
+                    ) : null}
                     <span className="session-tab-text">
                       <span className="session-tab-project">{project || "Project"}</span>
                       <span className="session-tab-title">{title}</span>

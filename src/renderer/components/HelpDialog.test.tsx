@@ -7,7 +7,7 @@ describe("HelpDialog", () => {
     render(<HelpDialog open onClose={() => undefined} />);
     expect(screen.getAllByText("Keyboard shortcuts").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Open command suggestions")).toBeInTheDocument();
-    expect(screen.getByText("New session")).toBeInTheDocument();
+    expect(screen.getByText("New task")).toBeInTheDocument();
     expect(screen.getByText("Toggle inspector")).toBeInTheDocument();
   });
 
