@@ -150,6 +150,15 @@ export interface PiSessionLike {
       },
     ): Promise<unknown>;
     logout?(providerId: string): Promise<void>;
+    login?(
+      providerId: string,
+      type: "api_key" | "oauth",
+      interaction: {
+        prompt: (prompt: { type: string; message?: string; options?: Array<{ id: string; label: string }> }) => Promise<string>;
+        notify: (event: unknown) => void;
+        signal?: AbortSignal;
+      },
+    ): Promise<unknown>;
     refresh?(options?: { allowNetwork?: boolean }): Promise<unknown>;
     isUsingOAuth?(providerId: string): boolean;
   };
@@ -1555,7 +1564,10 @@ export class PiHost {
     if (!providerId.trim()) throw new Error("Provider is required");
     if (!key) throw new Error("API key is required");
 
-    const runtime = await this.createAuthModelRuntime();
+    // Use the live runtime whenever possible. Its credential store is cached,
+    // so mutating a second runtime leaves the current session unaware of the
+    // new auth.json entry until the app is restarted.
+    const runtime = this.liveAuthRuntime() ?? await this.createAuthModelRuntime();
     const provider = runtime.getProvider(providerId);
     if (!provider) throw new Error(`Unknown provider: ${providerId}`);
     const apiKeyAuth = provider.auth?.apiKey as { login?: unknown } | undefined;
@@ -1584,16 +1596,17 @@ export class PiHost {
       },
     });
 
-    await this.syncModelsAfterAuthChange();
+    await this.syncModelsAfterAuthChange({ selectProviderId: providerId });
     return { name: provider.name };
   }
 
   /** Remove a stored auth.json credential (same as /logout). Env vars are left alone. */
   async logoutProvider(providerId: string): Promise<void> {
     if (!providerId.trim()) throw new Error("Provider is required");
-    const runtime = await this.createAuthModelRuntime();
+    const currentProvider = this.activeModelProvider();
+    const runtime = this.liveAuthRuntime() ?? await this.createAuthModelRuntime();
     await runtime.logout(providerId);
-    await this.syncModelsAfterAuthChange();
+    await this.syncModelsAfterAuthChange({ selectFallback: currentProvider === providerId });
   }
 
   /**
@@ -1613,7 +1626,7 @@ export class PiHost {
     this.oauthLogins.set(providerId, record);
 
     try {
-      const runtime = await this.createAuthModelRuntime();
+      const runtime = this.liveAuthRuntime() ?? await this.createAuthModelRuntime();
       const provider = runtime.getProvider(providerId);
       if (!provider) throw new Error(`Unknown provider: ${providerId}`);
       const oauth = provider.auth?.oauth as { login?: (interaction: unknown) => Promise<unknown> } | undefined;
@@ -1631,7 +1644,7 @@ export class PiHost {
           ? String((credential as unknown as { name: unknown }).name)
           : provider.name;
       this.emit("provider_login_event", { providerId, event: { type: "done", name } });
-      await this.syncModelsAfterAuthChange();
+      await this.syncModelsAfterAuthChange({ selectProviderId: providerId });
       return { name };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2426,7 +2439,44 @@ export class PiHost {
     });
   }
 
-  private async syncModelsAfterAuthChange(): Promise<void> {
+  /** The session runtime owns the credential cache used for model availability. */
+  private liveAuthRuntime(): ModelRuntime | undefined {
+    const runtime = this.runtime?.session.modelRuntime;
+    if (!runtime?.getProvider || !runtime.login || !runtime.logout) return undefined;
+    return runtime as unknown as ModelRuntime;
+  }
+
+  private activeModelProvider(): string | undefined {
+    const slot = this.getSlot();
+    const modelKey = slot ? this.modeProfile(slot).modelKey : undefined;
+    return this.runtime?.session.model?.provider || modelKey?.split("/")[0];
+  }
+
+  private async selectAvailableModel(providerId?: string): Promise<void> {
+    const slot = this.getSlot();
+    const session = slot?.runtime.session;
+    const modelRuntime = session?.modelRuntime;
+    if (!slot || !session || !modelRuntime?.getAvailable) return;
+
+    let models: ReadonlyArray<{ provider?: string; id?: string }>;
+    try {
+      models = await modelRuntime.getAvailable(providerId);
+    } catch {
+      return;
+    }
+
+    const selected = models[0];
+    if (!selected?.provider || !selected.id) return;
+    const modelKey = `${selected.provider}/${selected.id}`;
+    if (this.modeProfile(slot).modelKey === modelKey && this.modelName(session) === modelKey) return;
+    await this.setModeProfile(
+      slot.modeState.mode,
+      { ...this.modeProfile(slot), modelKey },
+      { sessionKey: slot.key },
+    );
+  }
+
+  private async syncModelsAfterAuthChange(options: { selectProviderId?: string; selectFallback?: boolean } = {}): Promise<void> {
     const live = this.runtime?.session.modelRuntime;
     if (live?.refresh) {
       try {
@@ -2442,6 +2492,8 @@ export class PiHost {
       }
     }
     await this.refreshAvailableModels();
+    if (options.selectProviderId) await this.selectAvailableModel(options.selectProviderId);
+    else if (options.selectFallback) await this.selectAvailableModel();
   }
 
   private modelName(session: PiSessionLike): string {

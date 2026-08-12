@@ -517,6 +517,56 @@ describe("PiHost", () => {
     }
   });
 
+  test("uses the live runtime for auth changes and switches to the new provider model", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-auth-sync-test-"));
+    try {
+      const fake = createFakeRuntime(cwd);
+      const configured = new Set(["amazon"]);
+      const models = [
+        { provider: "amazon", id: "nova", name: "Amazon Nova" },
+        { provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
+      ];
+      const login = vi.fn(async (providerId: string) => { configured.add(providerId); });
+      const logout = vi.fn(async (providerId: string) => { configured.delete(providerId); });
+      fake.session.model = { provider: "amazon", id: "nova" };
+      fake.session.setModel = async (model: unknown) => {
+        const next = model as { provider?: string; id?: string };
+        fake.session.model = { provider: next.provider, id: next.id };
+        fake.calls.push({ method: "setModel", args: [model] });
+      };
+      fake.session.modelRuntime = {
+        getModels: () => models,
+        getModel: (provider: string, id: string) => models.find((model) => model.provider === provider && model.id === id),
+        getAvailable: async (providerId?: string) => models.filter((model) => configured.has(model.provider) && (!providerId || model.provider === providerId)),
+        getAvailableSnapshot: () => [],
+        hasConfiguredAuth: (providerId: string) => configured.has(providerId),
+        getProvider: (providerId: string) => ({
+          id: providerId,
+          name: providerId === "deepseek" ? "DeepSeek" : "Amazon",
+          auth: { apiKey: { login: async () => ({ type: "api_key", key: "test" }) } },
+        }),
+        login,
+        logout,
+        refresh: vi.fn(async () => undefined),
+      };
+      const authRuntimeFactory = vi.fn(async () => {
+        throw new Error("the dedicated auth runtime should not be used while a session is live");
+      });
+      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, authRuntimeFactory });
+
+      await host.logoutProvider("amazon");
+      await host.loginWithApiKey("deepseek", "sk-test");
+
+      expect(authRuntimeFactory).not.toHaveBeenCalled();
+      expect(logout).toHaveBeenCalledWith("amazon");
+      expect(login).toHaveBeenCalledWith("deepseek", "api_key", expect.any(Object));
+      expect(fake.session.model).toEqual({ provider: "deepseek", id: "deepseek-v4-flash" });
+      expect(host.snapshot().session.modeState?.executeProfile.modelKey).toBe("deepseek/deepseek-v4-flash");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("refreshAvailableModels only returns usable models (not full catalog)", async () => {
     const fake = createFakeRuntime();
     fake.session.modelRuntime = {
