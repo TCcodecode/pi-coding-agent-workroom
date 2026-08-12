@@ -18,6 +18,8 @@ export interface ResourceInspectorProps {
   session: SessionState;
   resources: ResourceSnapshot;
   tools?: ToolOption[];
+  /** Tool names temporarily locked by the current session mode. */
+  lockedToolNames?: string[];
   onToggleTools?: (names: string[]) => void;
   onToggleSkills?: (patterns: string[]) => void;
   onOpenChanges?: () => void;
@@ -493,6 +495,7 @@ export function ResourceInspector({
   session,
   resources,
   tools = [],
+  lockedToolNames = [],
   onToggleTools,
   onToggleSkills,
   onOpenChanges,
@@ -556,6 +559,7 @@ export function ResourceInspector({
   }, [session.status, refreshAccountUsage]);
 
   const activeTools = localTools.filter((tool) => tool.active).length;
+  const lockedTools = new Set(lockedToolNames);
   const envCount = resources.skills.length + resources.extensions.length + resources.packages.length;
   const extensionErrors = resources.extensions.filter((ext) => !ext.loaded).length;
   const skillErrors = resources.skills.filter((skill) => !skill.loaded).length;
@@ -564,7 +568,7 @@ export function ResourceInspector({
   const loadedSkills = resources.skills.filter((skill) => skill.loaded).length;
 
   const toggleTool = (name: string) => {
-    if (!onToggleTools) return;
+    if (!onToggleTools || lockedTools.has(name)) return;
     const next = localTools.map((tool) => (tool.name === name ? { ...tool, active: !tool.active } : tool));
     setLocalTools(next);
     onToggleTools(next.filter((tool) => tool.active).map((tool) => tool.name));
@@ -712,7 +716,7 @@ export function ResourceInspector({
                     type="checkbox"
                     checked={tool.active}
                     onChange={() => toggleTool(tool.name)}
-                    disabled={!onToggleTools}
+                    disabled={!onToggleTools || lockedTools.has(tool.name)}
                   />
                   <span className="tool-toggle-text">
                     <strong>{tool.name}</strong>

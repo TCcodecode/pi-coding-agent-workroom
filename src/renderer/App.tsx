@@ -1383,7 +1383,13 @@ export function App() {
       return;
     }
     void api.setMode(mode, sessionOptions)
-      .then(applyModeState)
+      .then(async (next) => {
+        applyModeState(next);
+        // Mode changes alter the active tool policy as well as the model
+        // profile. Refresh so Inspector never renders stale tool switches.
+        const snapshot = await api.getSnapshot();
+        useAppStore.getState().replaceSnapshot(snapshot);
+      })
       .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
   };
   const changeAgentModel = (model: string): void => {
@@ -1756,7 +1762,14 @@ export function App() {
             session={state.session}
             resources={state.resources}
             tools={state.tools ?? []}
-            onToggleTools={(names) => void api?.setTools(names)}
+            lockedToolNames={activeMode === "plan" ? ["bash", "edit", "write"] : undefined}
+            onToggleTools={(names) => {
+              if (!api) return;
+              void api.setTools(names, sessionOptions)
+                .then(() => api.getSnapshot())
+                .then((snapshot) => useAppStore.getState().replaceSnapshot(snapshot))
+                .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+            }}
             onToggleSkills={(patterns) => void api?.setSkills(patterns)}
             onOpenChanges={() => openChanges()}
             onOpenPlan={planAvailable ? openPlanReview : undefined}

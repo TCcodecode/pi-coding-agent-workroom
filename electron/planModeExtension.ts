@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { AgentMode, PlanArtifactSummary, PlanStatus } from "../src/shared/protocol.js";
-import { PLAN_READ_TOOL_NAMES, PlanModeStore } from "./planMode.js";
+import { isPlanBlockedTool, PlanModeStore } from "./planMode.js";
 
 const statusSchema = Type.Optional(Type.Union([
   Type.Literal("draft"),
@@ -35,7 +35,7 @@ function result(text: string, isError = false) {
 const PLAN_GUIDANCE = `
 # Plan mode
 You are in Plan mode. Inspect and reason about the project, ask clarifying questions, and maintain an implementation plan.
-Project files are read-only in this mode. Do not attempt to use write, edit, bash, MCP, HTTP, todo mutation, or other mutating tools.
+Project files are read-only in this mode. Do not use bash, edit, or write. Connected MCP and other extension tools remain available and keep their own permissions, so use them only when their operation is appropriate for planning.
 Use plan_save to create or update the Markdown plan under .pai/plan. Mark it ready only when the user can review and execute it.
 The plan should include goal, current understanding, decisions, implementation steps, verification, risks/open questions, and an execution handoff.
 `.trim();
@@ -48,10 +48,10 @@ export function registerPlanModeTools(pi: ExtensionAPI, options: PlanModeExtensi
 
   pi.on("tool_call", async (event) => {
     if (options.getMode() !== "plan") return;
-    if ((PLAN_READ_TOOL_NAMES as readonly string[]).includes(event.toolName)) return;
+    if (!isPlanBlockedTool(event.toolName)) return;
     return {
       block: true,
-      reason: "Plan mode is read-only; only project inspection and .pai/plan tools are available.",
+      reason: "Plan mode is read-only; bash, edit, and write are unavailable until you switch to Execute.",
     };
   });
 

@@ -23,6 +23,11 @@ export interface SessionModeState {
   mode: AgentMode;
   planProfile: AgentProfile;
   executeProfile: AgentProfile;
+  /**
+   * The user's normal runtime tool selection. Plan mode derives a temporary
+   * safe set from this instead of overwriting the preference.
+   */
+  executeToolNames?: string[];
   activePlan?: PlanArtifactSummary;
 }
 
@@ -556,7 +561,7 @@ export interface PiApi {
   updatePlan?(planId: string, content: string, revision?: string, opts?: SessionCommandOptions): Promise<PlanArtifactSummary>;
   savePlan?(title: string, content: string, status?: PlanStatus, planId?: string, opts?: SessionCommandOptions): Promise<{ summary: PlanArtifactSummary; content: string }>;
   startExecution?(planId?: string, opts?: SessionCommandOptions): Promise<SessionModeState>;
-  setTools(tools: string[]): Promise<void>;
+  setTools(tools: string[], opts?: SessionCommandOptions): Promise<void>;
   /** Persist skill enable/disable patterns (e.g. ["!superpowers"]) to settings.json and reload. */
   setSkills(patterns: string[]): Promise<void>;
   reload(): Promise<void>;

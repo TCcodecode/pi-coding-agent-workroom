@@ -217,7 +217,7 @@ function registerPiIpc() {
   ipcMain.handle("pi:updatePlan", (_event, planId, content, revision, opts) => piHost.updatePlan(planId, content, revision, opts));
   ipcMain.handle("pi:savePlan", (_event, title, content, status, planId, opts) => piHost.savePlan(title, content, status, planId, opts));
   ipcMain.handle("pi:startExecution", (_event, planId, opts) => piHost.startExecution(planId, opts));
-  ipcMain.handle("pi:setTools", (_event, tools: string[]) => piHost.setTools(tools));
+  ipcMain.handle("pi:setTools", (_event, tools: string[], opts) => piHost.setTools(tools, opts));
   ipcMain.handle("pi:setSkills", (_event, patterns: string[]) => piHost.setSkills(patterns));
   ipcMain.handle("pi:reload", () => piHost.reload());
   ipcMain.handle("pi:executeCommand", (_event, name: string, args?: string) => piHost.executeCommand(name, args));

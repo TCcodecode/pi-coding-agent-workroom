@@ -17,6 +17,12 @@ const PLAN_STATUSES = new Set<PlanStatus>(["draft", "ready", "executing", "super
 
 export const PLAN_TOOL_NAMES = ["plan_save", "plan_list", "plan_read"] as const;
 export const PLAN_READ_TOOL_NAMES = ["read", "grep", "find", "ls", ...PLAN_TOOL_NAMES] as const;
+/** Built-in tools that can mutate the local workspace in this runtime. */
+export const PLAN_BLOCKED_TOOL_NAMES = ["bash", "edit", "write"] as const;
+
+export function isPlanBlockedTool(name: string): boolean {
+  return (PLAN_BLOCKED_TOOL_NAMES as readonly string[]).includes(name);
+}
 
 type StoredMode = SessionModeState;
 

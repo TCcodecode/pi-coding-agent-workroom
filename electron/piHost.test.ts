@@ -11,6 +11,8 @@ function createFakeRuntime(cwd = "/tmp/project") {
   let streaming = false;
   let steeringQueue: string[] = [];
   let followUpQueue: string[] = [];
+  const toolNames = ["read", "grep", "find", "ls", "write", "edit", "bash", "plan_save", "plan_list", "plan_read", "mcp_search"];
+  let activeToolNames = [...toolNames];
   const session: PiSessionLike & {
     getLastAssistantText?: () => string;
     setSessionName?: (name: string) => void;
@@ -35,8 +37,8 @@ function createFakeRuntime(cwd = "/tmp/project") {
     thinkingLevel: "medium",
     get isStreaming() { return streaming; },
     get messages() { return []; },
-    getActiveToolNames: () => ["read", "bash"],
-    getAllTools: () => ["read", "grep", "find", "ls", "write", "edit", "bash", "plan_save", "plan_list", "plan_read"].map((name) => ({ name })),
+    getActiveToolNames: () => activeToolNames,
+    getAllTools: () => toolNames.map((name) => ({ name })),
     getSessionStats: () => ({ sessionFile: "/tmp/session.jsonl", sessionId: "session-1", userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }),
     getContextUsage: () => undefined,
     subscribe: (listener: (event: unknown) => void) => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -54,7 +56,7 @@ function createFakeRuntime(cwd = "/tmp/project") {
     getFollowUpMessages: () => followUpQueue,
     abort: async () => { calls.push({ method: "abort", args: [] }); },
     setThinkingLevel: (level: string) => { calls.push({ method: "setThinkingLevel", args: [level] }); },
-    setActiveToolsByName: (tools: string[]) => { calls.push({ method: "setActiveToolsByName", args: [tools] }); },
+    setActiveToolsByName: (tools: string[]) => { activeToolNames = [...tools]; calls.push({ method: "setActiveToolsByName", args: [tools] }); },
     compact: async (instructions?: string) => { calls.push({ method: "compact", args: [instructions] }); return {}; },
     reload: async () => { calls.push({ method: "reload", args: [] }); },
     getLastAssistantText: () => "",
@@ -114,11 +116,32 @@ describe("PiHost", () => {
 
       expect(mode.mode).toBe("plan");
       expect(fake.calls.map((call) => call.method)).toEqual(["setThinkingLevel", "setActiveToolsByName"]);
-      expect(fake.calls[1]?.args[0]).toEqual(["read", "grep", "find", "ls", "plan_save", "plan_list", "plan_read"]);
+      expect(fake.calls[1]?.args[0]).toEqual(["read", "grep", "find", "ls", "plan_save", "plan_list", "plan_read", "mcp_search"]);
       expect(host.snapshot().session.modeState?.mode).toBe("plan");
       const stored = JSON.parse(readFileSync(join(cwd, ".pai/session-modes.json"), "utf8"));
       expect(stored.sessions["session-1"]?.mode).toBe("plan");
       expect(stored.sessions["file:/tmp/session.jsonl"]).toBeUndefined();
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("temporarily locks local write tools in Plan without losing Execute or MCP selection", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-mode-tools-test-"));
+    try {
+      const fake = createFakeRuntime(cwd);
+      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+      host.setTools(["read", "bash", "edit", "write", "mcp_search"]);
+      await host.setMode("plan");
+      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "plan_save", "plan_list", "plan_read"]);
+
+      // Plan permits choosing connected tools but cannot turn local write back on.
+      host.setTools(["read", "mcp_search", "bash"]);
+      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "plan_save", "plan_list", "plan_read"]);
+
+      await host.setMode("execute");
+      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "bash", "edit", "write"]);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

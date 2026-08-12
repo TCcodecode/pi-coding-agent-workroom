@@ -30,7 +30,9 @@ describe("plan mode extension", () => {
 
     const toolCall = pi.on.mock.calls.find(([event]) => event === "tool_call")?.[1] as (event: { toolName: string }) => Promise<{ block?: boolean } | undefined>;
     expect(await toolCall({ toolName: "write" })).toMatchObject({ block: true });
+    expect(await toolCall({ toolName: "bash" })).toMatchObject({ block: true });
     expect(await toolCall({ toolName: "read" })).toBeUndefined();
+    expect(await toolCall({ toolName: "mcp_search" })).toBeUndefined();
 
     const saved = await tools.get("plan_save")!.execute("call-1", {
       title: "Test plan",

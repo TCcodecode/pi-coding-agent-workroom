@@ -75,7 +75,7 @@ import {
 import { createFileChangeSummary, createFileChangeSummaryFromPatch, filePathFromToolArgs, filePathFromToolInput } from "./fileChanges.js";
 import { HttpWorkbenchStore } from "./httpWorkbench.js";
 import { registerHttpWorkbenchTools } from "./httpWorkbenchExtension.js";
-import { PLAN_READ_TOOL_NAMES, PlanModeStore, defaultModeState } from "./planMode.js";
+import { isPlanBlockedTool, PLAN_TOOL_NAMES, PlanModeStore, defaultModeState } from "./planMode.js";
 import { registerPlanModeTools } from "./planModeExtension.js";
 
 export interface PiSessionLike {
@@ -632,6 +632,36 @@ export class PiHost {
     return session.sessionId || slot.key;
   }
 
+  private allToolNames(session: PiSessionLike): string[] {
+    return typeof session.getAllTools === "function"
+      ? (session.getAllTools() as Array<{ name?: string }>).map((tool) => tool.name).filter((name): name is string => Boolean(name))
+      : [];
+  }
+
+  private executeToolNames(slot: RuntimeSlot, allTools = this.allToolNames(slot.runtime.session)): string[] {
+    const known = new Set(allTools);
+    const saved = slot.modeState.executeToolNames ?? slot.runtime.session.getActiveToolNames();
+    return [...new Set(saved)].filter((name) => known.has(name));
+  }
+
+  /**
+   * Plan mode is a temporary local-workspace safety layer.  It must not erase
+   * the user's normal tool choices or blanket-disable MCP/extension tools.
+   */
+  private applyToolPolicy(slot: RuntimeSlot): void {
+    const session = slot.runtime.session;
+    const allTools = this.allToolNames(session);
+    if (allTools.length === 0 || typeof session.setActiveToolsByName !== "function") return;
+    const executeToolNames = this.executeToolNames(slot, allTools);
+    if (!slot.modeState.executeToolNames) {
+      slot.modeState = { ...slot.modeState, executeToolNames };
+    }
+    const activeTools = slot.modeState.mode === "plan"
+      ? [...new Set([...executeToolNames.filter((name) => !isPlanBlockedTool(name)), ...PLAN_TOOL_NAMES])]
+      : executeToolNames;
+    session.setActiveToolsByName(activeTools.filter((name) => allTools.includes(name)));
+  }
+
   private async applyModeRuntime(slot: RuntimeSlot, options: { persist: boolean }): Promise<void> {
     const session = slot.runtime.session;
     const profile = this.modeProfile(slot);
@@ -641,13 +671,7 @@ export class PiHost {
       if (model) await session.setModel(model);
     }
     if (typeof session.setThinkingLevel === "function") session.setThinkingLevel(profile.thinkingLevel);
-    const allTools = typeof session.getAllTools === "function"
-      ? (session.getAllTools() as Array<{ name?: string }>).map((tool) => tool.name).filter((name): name is string => Boolean(name))
-      : [];
-    const activeTools = slot.modeState.mode === "plan"
-      ? allTools.filter((name) => (PLAN_READ_TOOL_NAMES as readonly string[]).includes(name))
-      : allTools;
-    if (typeof session.setActiveToolsByName === "function" && allTools.length > 0) session.setActiveToolsByName(activeTools);
+    this.applyToolPolicy(slot);
     this.planModes.set(session.sessionId, slot.modeState.mode);
     if (options.persist) slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
   }
@@ -674,7 +698,12 @@ export class PiHost {
   async setMode(mode: AgentMode, opts?: SessionCommandOptions): Promise<SessionModeState> {
     const slot = this.requireSlot(opts?.sessionKey);
     if (slot.runtime.session.isStreaming) throw new Error("Stop the current turn before changing mode");
-    slot.modeState = { ...slot.modeState, mode };
+    // Capture the currently enabled tools immediately before entering Plan.
+    // They are restored exactly when returning to Execute.
+    const executeToolNames = mode === "plan" && slot.modeState.mode !== "plan"
+      ? this.executeToolNames(slot)
+      : slot.modeState.executeToolNames;
+    slot.modeState = { ...slot.modeState, mode, executeToolNames };
     await this.applyModeRuntime(slot, { persist: true });
     this.emit("mode_changed", slot.modeState, undefined, slot.key);
     this.emitPlanArtifactChanged(slot);
@@ -757,8 +786,21 @@ export class PiHost {
     return slot.modeState;
   }
 
-  setTools(tools: string[]): void {
-    this.requireSession().setActiveToolsByName(tools);
+  setTools(tools: string[], opts?: SessionCommandOptions): void {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const allTools = this.allToolNames(slot.runtime.session);
+    const known = new Set(allTools);
+    const requested = [...new Set(tools)].filter((name) => known.has(name));
+    const previous = this.executeToolNames(slot, allTools);
+    // While Plan is active, local write tools stay locked. Keep their Execute
+    // preference untouched while allowing the user to tune MCP/extensions.
+    const executeToolNames = slot.modeState.mode === "plan"
+      ? [...new Set([...requested.filter((name) => !isPlanBlockedTool(name)), ...previous.filter(isPlanBlockedTool)])]
+      : requested;
+    slot.modeState = { ...slot.modeState, executeToolNames };
+    this.applyToolPolicy(slot);
+    slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
+    this.emit("mode_changed", slot.modeState, undefined, slot.key);
   }
 
   async setSkills(patterns: string[]): Promise<void> {
