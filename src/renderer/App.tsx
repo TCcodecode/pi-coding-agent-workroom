@@ -565,6 +565,21 @@ export function App() {
     [],
   );
 
+  const findLiveSessionForTab = useCallback(
+    (tab: SessionTab, live = liveSessionsRef.current): LiveSessionSummary | undefined => {
+      if (tab.id) {
+        const byKey = live.find((item) => item.sessionKey === tab.id);
+        if (byKey) return byKey;
+      }
+      if (tab.sessionFile) {
+        const byFile = live.find((item) => item.sessionFile === tab.sessionFile);
+        if (byFile) return byFile;
+      }
+      return undefined;
+    },
+    [],
+  );
+
   // Keep active tab title/status aligned with live session (never shrink the tab list).
   useEffect(() => {
     const tabId = activeTabIdRef.current;
@@ -637,8 +652,10 @@ export function App() {
       if (!tab) return;
       const activation = ++tabActivationRef.current;
       const previousActiveTabId = activeTabIdRef.current;
+      const liveHit = findLiveSessionForTab(tab);
       if (
         tab.id === previousActiveTabId &&
+        liveHit &&
         tab.sessionId &&
         tab.sessionId === useAppStore.getState().session.sessionId
       ) {
@@ -666,16 +683,15 @@ export function App() {
           sessionPath = list.find((item) => item.sessionId === tab.sessionId)?.sessionFile;
         }
 
-        const live = liveSessionsRef.current;
-        const liveHit =
-          live.find((item) => item.sessionKey === tabId) ??
+        const nextLiveHit =
+          liveHit ??
           (sessionPath
-            ? live.find((item) => item.sessionFile === sessionPath)
+            ? findLiveSessionForTab({ ...tab, sessionFile: sessionPath })
             : undefined);
 
         let snap: PiSnapshot | undefined;
-        if (liveHit && api?.focusSession) {
-          snap = await api.focusSession(liveHit.sessionKey);
+        if (nextLiveHit && api?.focusSession) {
+          snap = await api.focusSession(nextLiveHit.sessionKey);
         } else if (sessionPath) {
           snap = await api?.startSession({ cwd, sessionPath, sessionKey: tabId });
         } else {
@@ -722,8 +738,21 @@ export function App() {
         pushError(error instanceof Error ? error.message : String(error));
       }
     },
-    [api, commitActiveTabMeta],
+    [api, commitActiveTabMeta, findLiveSessionForTab],
   );
+
+  const ensureActiveTabRuntime = useCallback(async (): Promise<string | undefined> => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return undefined;
+    const tab = openTabsRef.current.find((item) => item.id === tabId);
+    if (!tab) return undefined;
+    if (findLiveSessionForTab(tab)) return tabId;
+    await activateTab(tabId);
+    const refreshed = openTabsRef.current.find((item) => item.id === tabId);
+    if (refreshed && findLiveSessionForTab(refreshed)) return tabId;
+    if (activeTabIdRef.current === tabId && useAppStore.getState().session.sessionId) return tabId;
+    throw new Error("当前会话尚未成功启动，请先激活该标签页后再试。");
+  }, [activateTab, findLiveSessionForTab]);
 
   const handleCloseTab = useCallback(
     async (tabId: string) => {
@@ -1363,8 +1392,6 @@ export function App() {
   const planAvailable = activeMode === "plan" || Boolean(modeState.activePlan);
   const planWorkspaceEditable = activeMode === "plan";
   const sidebarCollapsedBeforePlanRef = useRef(sidebarCollapsed);
-  const activeProfile: AgentProfile = activeMode === "plan" ? modeState.planProfile : modeState.executeProfile;
-  const sessionOptions = activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined;
   const applyModeState = (next: SessionModeState): void => {
     useAppStore.setState((current) => ({
       session: {
@@ -1377,35 +1404,56 @@ export function App() {
       },
     }));
   };
+  const currentModeState = (): SessionModeState => {
+    const session = useAppStore.getState().session;
+    return session.modeState ?? {
+      mode: "execute",
+      planProfile: { thinkingLevel: session.thinkingLevel },
+      executeProfile: { modelKey: session.model || undefined, thinkingLevel: session.thinkingLevel },
+    };
+  };
   const changeAgentMode = (mode: AgentMode): void => {
     if (!api?.setMode) {
       pushError("当前 Pi Desk 进程尚未加载 Plan/Execute 切换接口，请完全重启应用后再试。");
       return;
     }
-    void api.setMode(mode, sessionOptions)
-      .then(async (next) => {
-        applyModeState(next);
-        // Mode changes alter the active tool policy as well as the model
-        // profile. Refresh so Inspector never renders stale tool switches.
-        const snapshot = await api.getSnapshot();
-        useAppStore.getState().replaceSnapshot(snapshot);
-      })
-      .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+    const setMode = api.setMode;
+    void (async () => {
+      const sessionKey = await ensureActiveTabRuntime();
+      const next = await setMode(mode, sessionKey ? { sessionKey } : undefined);
+      applyModeState(next);
+      // Mode changes alter the active tool policy as well as the model
+      // profile. Refresh so Inspector never renders stale tool switches.
+      const snapshot = await api.getSnapshot();
+      useAppStore.getState().replaceSnapshot(snapshot);
+    })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
   };
   const changeAgentModel = (model: string): void => {
     if (api?.setModeProfile) {
-      void api.setModeProfile(activeMode, { ...activeProfile, modelKey: model }, sessionOptions)
-        .then(applyModeState)
-        .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+      const setModeProfile = api.setModeProfile;
+      void (async () => {
+        const sessionKey = await ensureActiveTabRuntime();
+        const nextModeState = currentModeState();
+        const mode = nextModeState.mode;
+        const profile = mode === "plan" ? nextModeState.planProfile : nextModeState.executeProfile;
+        const next = await setModeProfile(mode, { ...profile, modelKey: model }, sessionKey ? { sessionKey } : undefined);
+        applyModeState(next);
+      })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
     } else {
       pushError("当前 Pi Desk 进程尚未加载模式配置接口，请完全重启应用后再试。");
     }
   };
   const changeAgentThinking = (thinkingLevel: AgentProfile["thinkingLevel"]): void => {
     if (api?.setModeProfile) {
-      void api.setModeProfile(activeMode, { ...activeProfile, thinkingLevel }, sessionOptions)
-        .then(applyModeState)
-        .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+      const setModeProfile = api.setModeProfile;
+      void (async () => {
+        const sessionKey = await ensureActiveTabRuntime();
+        const nextModeState = currentModeState();
+        const mode = nextModeState.mode;
+        const profile = mode === "plan" ? nextModeState.planProfile : nextModeState.executeProfile;
+        const next = await setModeProfile(mode, { ...profile, thinkingLevel }, sessionKey ? { sessionKey } : undefined);
+        applyModeState(next);
+      })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
     } else {
       pushError("当前 Pi Desk 进程尚未加载模式配置接口，请完全重启应用后再试。");
     }
@@ -1765,10 +1813,12 @@ export function App() {
             lockedToolNames={activeMode === "plan" ? ["bash", "edit", "write"] : undefined}
             onToggleTools={(names) => {
               if (!api) return;
-              void api.setTools(names, sessionOptions)
-                .then(() => api.getSnapshot())
-                .then((snapshot) => useAppStore.getState().replaceSnapshot(snapshot))
-                .catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+              void (async () => {
+                const sessionKey = await ensureActiveTabRuntime();
+                await api.setTools(names, sessionKey ? { sessionKey } : undefined);
+                const snapshot = await api.getSnapshot();
+                useAppStore.getState().replaceSnapshot(snapshot);
+              })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
             }}
             onToggleSkills={(patterns) => void api?.setSkills(patterns)}
             onOpenChanges={() => openChanges()}

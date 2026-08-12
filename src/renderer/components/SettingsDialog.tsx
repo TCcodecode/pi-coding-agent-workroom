@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   McpConfigView,
-  McpStatusSnapshotView,
   ModelOption,
   ProviderAuthStatus,
   ProviderLoginEvent,
@@ -222,6 +221,27 @@ export function SettingsDialog({
     () => providers.filter((provider) => provider.configured),
     [providers],
   );
+  const availableModels = useMemo(
+    () => models.filter((item) => item.available),
+    [models],
+  );
+
+  useEffect(() => {
+    if (!open || availableModels.length === 0) return;
+    const currentModelAvailable = availableModels.some((item) => item.id === model);
+    const currentProviderId = model.includes("/") ? model.split("/", 1)[0] : "";
+    const preferredFromSelectedProvider = selectedId
+      ? availableModels.find((item) => item.provider === selectedId)?.id
+      : undefined;
+    const nextModel =
+      preferredFromSelectedProvider && (currentProviderId !== selectedId || !currentModelAvailable)
+        ? preferredFromSelectedProvider
+        : !currentModelAvailable
+          ? availableModels[0]?.id
+          : undefined;
+
+    if (nextModel && nextModel !== model) onModelSelect(nextModel);
+  }, [availableModels, model, onModelSelect, open, selectedId]);
 
   const connectProvider = async () => {
     if (!loginWithApiKey || !selected) return;

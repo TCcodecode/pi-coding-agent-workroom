@@ -65,6 +65,60 @@ describe("SettingsDialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  test("syncs the model when the selected provider changes", async () => {
+    const onModelSelect = vi.fn();
+    const providerRows: ProviderAuthStatus[] = [
+      { ...sampleProviders[0] },
+      { ...sampleProviders[1], configured: true, source: "stored", canLogout: true },
+    ];
+
+    render(
+      <SettingsDialog
+        open
+        models={[
+          { id: "deepseek/chat", provider: "deepseek", label: "DeepSeek Chat", available: true, thinkingLevels: ["medium"] },
+          { id: "openai/gpt-5", provider: "openai", label: "GPT-5", available: true, thinkingLevels: ["medium"] },
+        ]}
+        model="deepseek/chat"
+        thinkingLevel="medium"
+        onModelSelect={onModelSelect}
+        onThinkingLevel={vi.fn()}
+        onClose={vi.fn()}
+        listProviders={vi.fn(async () => providerRows)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /providers/i }));
+    const select = await screen.findByRole("combobox", { name: /select provider/i });
+    fireEvent.change(select, { target: { value: "openai" } });
+
+    await waitFor(() => {
+      expect(onModelSelect).toHaveBeenCalledWith("openai/gpt-5");
+    });
+  });
+
+  test("repairs an invalid current model when available models refresh", async () => {
+    const onModelSelect = vi.fn();
+
+    render(
+      <SettingsDialog
+        open
+        models={[
+          { id: "deepseek/chat", provider: "deepseek", label: "DeepSeek Chat", available: true, thinkingLevels: ["medium"] },
+        ]}
+        model="amazon/nova-pro"
+        thinkingLevel="medium"
+        onModelSelect={onModelSelect}
+        onThinkingLevel={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onModelSelect).toHaveBeenCalledWith("deepseek/chat");
+    });
+  });
+
   test("toggles interface motion", () => {
     const onMotionEnabledChange = vi.fn();
     render(
