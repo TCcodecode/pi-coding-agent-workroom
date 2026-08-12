@@ -9,6 +9,7 @@ import {
   type SessionTab,
 } from "../state/sessionTabs";
 import { AppIcon } from "./icons";
+import { ShortcutKeys } from "./ShortcutKeys";
 
 export interface SessionTabBarProps {
   tabs: SessionTab[];
@@ -20,6 +21,7 @@ export interface SessionTabBarProps {
   onCloseOthers?: (tabId: string) => void;
   onCloseToRight?: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
+  hideShortcuts?: boolean;
 }
 
 function projectLabel(projectId: string, projects: ProjectSummary[]): string {
@@ -46,6 +48,7 @@ export function SessionTabBar({
   onCloseOthers,
   onCloseToRight,
   onTogglePin,
+  hideShortcuts = false,
 }: SessionTabBarProps) {
   const mod = modKeyLabel();
   const orderedTabs = sortTabsPinnedFirst(tabs);
@@ -60,10 +63,25 @@ export function SessionTabBar({
           const title = displayTabTitle(tab.title);
           const project = projectLabel(tab.projectId, projects);
           const switchShortcut = tabShortcutLabel(index, mod);
+          const status = statusClass(tab.status);
           const pinLabel = tab.pinned ? `Unpin “${title}”` : `Pin “${title}”`;
           const pinControlLabel = isSingleTab ? `${pinLabel} · Shortcut: ${pinShortcut}` : pinLabel;
           const hasOtherTabs = orderedTabs.length > 1;
           const hasTabsToRight = index < orderedTabs.length - 1;
+          const pinControl = (
+            <button
+              type="button"
+              className={`session-tab-pin ${tab.pinned ? "is-pinned" : ""}`}
+              aria-label={pinControlLabel}
+              title={pinControlLabel}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTogglePin(tab.id);
+              }}
+            >
+              <AppIcon name="pin" size="md" fill={tab.pinned ? "currentColor" : "none"} />
+            </button>
+          );
           return (
             <ContextMenu.Root key={tab.id}>
               <ContextMenu.Trigger asChild>
@@ -76,39 +94,43 @@ export function SessionTabBar({
                     .filter(Boolean)
                     .join(" · ")}
                 >
-                  <button
-                    type="button"
-                    className={`session-tab-pin ${tab.pinned ? "is-pinned" : ""}`}
-                    aria-label={pinControlLabel}
-                    title={pinControlLabel}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onTogglePin(tab.id);
-                    }}
-                  >
-                    <AppIcon name="pin" size="md" fill={tab.pinned ? "currentColor" : "none"} />
-                  </button>
-                  {isSingleTab ? (
-                    <span className="session-tab-pin-kbd" title={`Pin or unpin tab: ${pinShortcut}`}>
-                      {pinShortcut}
-                    </span>
+                  {isSingleTab && status ? (
+                    <span className={`session-tab-dot ${status}`} aria-hidden />
                   ) : null}
+                  {isSingleTab ? (
+                    <span className={`session-tab-pin-control shortcut-action-container ${hideShortcuts ? "is-icon-only" : ""}`}>
+                      {pinControl}
+                      {!hideShortcuts ? (
+                        <ShortcutKeys
+                          className="session-tab-pin-kbd"
+                          compact
+                          keys={["mod", "P"]}
+                          label="Pin or unpin tab"
+                          title={`Pin or unpin tab: ${pinShortcut}`}
+                        />
+                      ) : null}
+                    </span>
+                  ) : pinControl}
                   <button
                     type="button"
                     className="session-tab-main"
                     onClick={() => onActivate(tab.id)}
                   >
-                    {statusClass(tab.status) ? (
-                      <span className={`session-tab-dot ${statusClass(tab.status)}`} aria-hidden />
+                    {!isSingleTab && status ? (
+                      <span className={`session-tab-dot ${status}`} aria-hidden />
                     ) : null}
                     <span className="session-tab-text">
                       <span className="session-tab-project">{project || "Project"}</span>
                       <span className="session-tab-title">{title}</span>
                     </span>
-                    {switchShortcut ? (
-                      <span className="session-tab-kbd" title={`Switch tab ${switchShortcut}`}>
-                        {switchShortcut}
-                      </span>
+                    {switchShortcut && !hideShortcuts ? (
+                      <ShortcutKeys
+                        className="session-tab-kbd"
+                        compact
+                        keys={["mod", String(index + 1)]}
+                        label={`Switch tab ${index + 1}`}
+                        title={`Switch tab ${switchShortcut}`}
+                      />
                     ) : null}
                   </button>
                   <button

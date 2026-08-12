@@ -5,6 +5,7 @@ import type {
   ProjectSummary,
   SessionSummary,
   ThinkingLevel,
+  AgentMode,
 } from "../../shared/protocol";
 import { ModelSelector } from "./ModelSelector";
 import { ControlBox } from "./ControlBox";
@@ -33,8 +34,10 @@ export interface ComposerProps {
   models?: ModelOption[];
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  mode?: AgentMode;
   onModelSelect?: (model: string) => void;
   onThinkingLevel?: (level: ThinkingLevel) => void;
+  onModeChange?: (mode: AgentMode) => void;
   workspaceName?: string;
   workspacePath?: string;
   branchName?: string;
@@ -66,8 +69,10 @@ export function Composer({
   models = [],
   model = "",
   thinkingLevel = "medium",
+  mode = "execute",
   onModelSelect,
   onThinkingLevel,
+  onModeChange,
   workspaceName,
   workspacePath,
   branchName,
@@ -621,6 +626,30 @@ export function Composer({
           </div>
 
           <div className="composer-context-tools composer-meta">
+            {onModeChange && (
+              <div className="composer-mode-switch" role="group" aria-label="Agent mode">
+                <button
+                  type="button"
+                  className={`composer-mode-option ${mode === "plan" ? "active" : ""}`}
+                  aria-pressed={mode === "plan"}
+                  disabled={isRunning}
+                  title="Plan mode — project changes locked"
+                  onClick={() => onModeChange("plan")}
+                >
+                  Plan
+                </button>
+                <button
+                  type="button"
+                  className={`composer-mode-option ${mode === "execute" ? "active" : ""}`}
+                  aria-pressed={mode === "execute"}
+                  disabled={isRunning}
+                  title="Execute mode — tools can modify the project"
+                  onClick={() => onModeChange("execute")}
+                >
+                  Execute
+                </button>
+              </div>
+            )}
             {((onProjectChange || onOpenProject) || workspaceName || branchName) && (
               (onProjectChange || onOpenProject) ? (
                 <ComposerMenu

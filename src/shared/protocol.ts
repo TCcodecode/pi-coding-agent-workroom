@@ -1,5 +1,30 @@
 export type SessionStatus = "idle" | "running" | "awaiting_approval" | "completed" | "error" | "archived";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type AgentMode = "plan" | "execute";
+export type PlanStatus = "draft" | "ready" | "executing" | "superseded" | "completed";
+
+export interface AgentProfile {
+  modelKey?: string;
+  thinkingLevel: ThinkingLevel;
+}
+
+export interface PlanArtifactSummary {
+  id: string;
+  path: string;
+  title: string;
+  status: PlanStatus;
+  updatedAt: string;
+  revision: string;
+  /** Session identity that owns this plan artifact. */
+  sourceSession?: string;
+}
+
+export interface SessionModeState {
+  mode: AgentMode;
+  planProfile: AgentProfile;
+  executeProfile: AgentProfile;
+  activePlan?: PlanArtifactSummary;
+}
 
 export interface SessionStartedPayload {
   sessionId: string;
@@ -19,6 +44,7 @@ export interface SessionSummary {
   sessionFile?: string;
   messageCount: number;
   updatedAt: string;
+  modeState?: SessionModeState;
 }
 
 export interface ProjectSummary {
@@ -154,6 +180,8 @@ export interface SessionState {
   todos?: SessionTodoItem[];
   /** Monotonic within-session revision used to reject stale snapshots. */
   todosRevision?: number;
+  /** Optional for backwards-compatible snapshots from older Pi Desk runtimes. */
+  modeState?: SessionModeState;
 }
 
 export type TimelineItem =
@@ -444,6 +472,8 @@ export type PiEvent =
   | PiEventBase<"queue_updated", { steering: string[]; followUp: string[] }>
   | PiEventBase<"model_changed", { model: string; provider: string }>
   | PiEventBase<"thinking_level_changed", { level: ThinkingLevel }>
+  | PiEventBase<"mode_changed", SessionModeState>
+  | PiEventBase<"plan_artifact_changed", { plan?: PlanArtifactSummary; plans: PlanArtifactSummary[] }>
   | PiEventBase<"resource_snapshot", ResourceSnapshot>
   | PiEventBase<"diagnostics_updated", RuntimeDiagnostics>
   | PiEventBase<"notification_created", { message: string; kind?: "info" | "error" }>
@@ -519,6 +549,13 @@ export interface PiApi {
   importSession(path: string, cwdOverride?: string): Promise<void>;
   compact(instructions?: string): Promise<void>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
+  setMode?(mode: AgentMode, opts?: SessionCommandOptions): Promise<SessionModeState>;
+  setModeProfile?(mode: AgentMode, profile: AgentProfile, opts?: SessionCommandOptions): Promise<SessionModeState>;
+  listPlans?(opts?: SessionCommandOptions): Promise<PlanArtifactSummary[]>;
+  readPlan?(planId: string, opts?: SessionCommandOptions): Promise<{ summary: PlanArtifactSummary; content: string }>;
+  updatePlan?(planId: string, content: string, revision?: string, opts?: SessionCommandOptions): Promise<PlanArtifactSummary>;
+  savePlan?(title: string, content: string, status?: PlanStatus, planId?: string, opts?: SessionCommandOptions): Promise<{ summary: PlanArtifactSummary; content: string }>;
+  startExecution?(planId?: string, opts?: SessionCommandOptions): Promise<SessionModeState>;
   setTools(tools: string[]): Promise<void>;
   /** Persist skill enable/disable patterns (e.g. ["!superpowers"]) to settings.json and reload. */
   setSkills(patterns: string[]): Promise<void>;

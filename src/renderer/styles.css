@@ -87,6 +87,8 @@
   --settings-accent: #319DFF;
   --settings-accent-soft: #eaf5ff;
   --inspector-switch-accent: #319DFF;
+  --mode-selected: #F599C6;
+  --mode-selected-ink: #351622;
   font-family: var(--font-ui);
   color: var(--text-primary);
   background: var(--surface-center);
@@ -111,6 +113,7 @@ code, kbd, pre { font-family: var(--font-mono); }
 
 .app-shell {
   display: grid;
+  position: relative;
   height: 100%;
   max-height: 100%;
   overflow: hidden;
@@ -735,6 +738,7 @@ code, kbd, pre { font-family: var(--font-mono); }
 
 .main-column {
   display: flex;
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1025,12 +1029,20 @@ code, kbd, pre { font-family: var(--font-mono); }
   display: flex;
   align-items: center;
 }
+.timeline-wrap.has-plan-workspace {
+  overflow: hidden;
+}
+.timeline-wrap.has-plan-workspace .chat-column {
+  height: 100%;
+  min-height: 0;
+}
 /* Centered chat content column (messages + composer share this width). */
 .chat-column {
   width: min(760px, calc(100% - 48px));
   margin: 0 auto;
   padding: 20px 0 16px;
 }
+.chat-column.has-plan-workspace { height: 100%; min-height: 0; }
 .timeline-wrap.is-empty .chat-column {
   width: 100%;
   padding: 24px 16px;
@@ -1202,6 +1214,11 @@ code, kbd, pre { font-family: var(--font-mono); }
 .composer-context-control { max-width: 220px; }
 .composer-model { max-width: 170px; }
 .composer-thinking { max-width: 96px; }
+.composer-mode-switch { display: inline-flex; align-items: center; padding: 2px; border: 1px solid #2f333c; border-radius: 8px; background: #14161b; }
+.composer-mode-option { padding: 4px 7px; border: 0; border-radius: 6px; color: #858b97; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
+.composer-mode-option:hover:not(:disabled) { color: #f1f2f5; }
+.composer-mode-option.active { color: var(--mode-selected-ink); background: var(--mode-selected); box-shadow: 0 1px 2px rgba(0, 0, 0, .24); }
+.composer-mode-option:disabled { cursor: default; opacity: .45; }
 .composer-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -1320,7 +1337,54 @@ code, kbd, pre { font-family: var(--font-mono); }
 .model-status-name:empty::before { content: "no model"; color: #666c78; }
 .model-status-effort { padding: 1px 5px; border-radius: 4px; color: #c7a261; background: #26231b; font-size: 9px; text-transform: capitalize; }
 .composer-hints { display: flex; justify-content: center; gap: 12px; padding-top: 8px; color: #555a65; font-size: 9px; }
-
+.plan-workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; padding: 20px 0 18px; }
+.plan-workspace.has-conversation { height: 100%; min-height: 0; }
+.plan-workspace-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid #2b2e36; }
+.plan-workspace-title, .plan-workspace-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.plan-workspace-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e7e8ec; font-size: 13px; }
+.plan-status, .plan-dirty { padding: 3px 6px; border-radius: 5px; color: #9da3af; background: #24272f; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.plan-status-ready { color: var(--mode-selected); background: rgba(245, 153, 198, .18); }
+.plan-status-executing { color: #9db8f1; background: rgba(101, 131, 196, .16); }
+.plan-dirty { color: #dca68e; background: rgba(183, 104, 80, .16); text-transform: none; letter-spacing: 0; }
+.plan-workspace-action { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #343842; border-radius: 6px; color: #aeb3bd; background: #17191e; font-size: 10px; cursor: pointer; white-space: nowrap; }
+.plan-workspace-action:hover:not(:disabled) { border-color: #626876; color: #f1f2f5; }
+.plan-workspace-action.ready { color: #d7b36d; }
+.plan-workspace-action.execute { color: #a8c0f5; }
+.plan-workspace-action:disabled { cursor: default; opacity: .4; }
+.plan-workspace-editor-pane { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin-top: 14px; }
+.plan-workspace-editor { flex: 1 1 auto; width: 100%; min-height: 0; padding: 18px; border: 1px solid #30333b; border-radius: 9px; outline: none; resize: none; color: #dfe1e6; background: #14161b; font-family: var(--font-mono); font-size: 12px; line-height: 1.65; }
+.plan-workspace-editor:focus { border-color: #a47f43; box-shadow: 0 0 0 3px rgba(191, 150, 77, .08); }
+.plan-workspace-preview { flex: 1 1 auto; min-height: 0; margin-top: 14px; overflow: auto; padding: 26px 30px; border: 1px solid #30333b; border-radius: 9px; color: #dfe1e6; background: #14161b; font-size: 14px; line-height: 1.7; }
+.plan-workspace.has-conversation .plan-workspace-editor-pane,
+.plan-workspace.has-conversation .plan-workspace-preview { flex: 0 0 clamp(280px, 48vh, 520px); }
+.plan-workspace-preview .markdown h1 { margin-top: 0; }
+.plan-workspace-error { margin-top: 10px; padding: 8px 10px; border: 1px solid rgba(190, 96, 76, .5); border-radius: 6px; color: #e6a493; background: rgba(151, 59, 43, .14); font-size: 11px; }
+.plan-workspace-footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 9px; color: #656b77; font-family: var(--font-mono); font-size: 9px; }
+.plan-workspace-footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-workspace-conversation { flex: 1 1 auto; min-height: 0; margin-top: 22px; overflow-y: auto; padding-top: 14px; border-top: 1px solid #2b2e36; }
+.plan-workspace-conversation-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; color: #aeb3bd; font-size: 11px; }
+.plan-workspace-conversation-heading strong { font-weight: 600; }
+.plan-workspace-empty { margin: 0; color: #737884; }
+.plan-inspector { min-width: 0; }
+.plan-inspector-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 16px 16px 8px; }
+.plan-inspector-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; padding: 0 16px 16px; }
+.plan-inspector-title { display: flex; align-items: center; min-width: 0; gap: 9px; margin-bottom: 0; color: #dfe1e6; }
+.plan-inspector-title > div { display: flex; flex: 1 1 auto; align-items: center; min-width: 0; gap: 8px; }
+.plan-inspector-title strong { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.plan-inspector-title .plan-status { flex: 0 0 auto; }
+.plan-inspector-toolbar { display: flex; align-items: center; flex: 0 0 auto; gap: 5px; white-space: nowrap; }
+.plan-inspector-toolbar button { min-height: 28px; padding: 0 8px; border: 1px solid #343842; border-radius: 6px; color: #aeb3bd; background: #17191e; font-size: 10px; font-weight: 600; }
+.plan-inspector-toolbar button:hover:not(:disabled) { border-color: #626876; color: #f1f2f5; }
+.plan-inspector-toolbar button.ready { color: #d7b36d; }
+.plan-inspector-toolbar button.execute { color: #a8c0f5; }
+.plan-inspector-toolbar button:disabled { cursor: default; opacity: .45; }
+.plan-inspector-preview, .plan-inspector-editor { flex: 1 1 auto; min-height: 0; width: 100%; overflow: auto; padding: 15px; border: 1px solid #30333b; border-radius: 9px; color: #cdd0d7; background: #14161b; font-size: 12px; line-height: 1.65; }
+.plan-inspector-editor { outline: none; resize: none; font-family: var(--font-mono); }
+.plan-inspector-editor:focus { border-color: #a47f43; box-shadow: 0 0 0 3px rgba(191, 150, 77, .08); }
+.plan-inspector-preview p { margin: 0; color: #737884; }
+.plan-inspector-preview .markdown h1 { margin-top: 0; font-size: 16px; }
+.plan-inspector-preview .markdown h2 { font-size: 14px; }
+.plan-inspector-footer { padding: 10px 16px; overflow: hidden; border-top: 1px solid #2b2e36; color: #656b77; font-family: var(--font-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .inspector {
   display: flex;
   flex-direction: column;
@@ -2978,12 +3042,54 @@ body { min-width: 1040px; }
 .app-shell.with-inspector.changes-open {
   grid-template-columns: var(--sidebar-width, var(--shell-sidebar-width)) var(--shell-resizer-width) minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-changes-width));
 }
+.app-shell.sidebar-collapsed.chat-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app-shell.sidebar-collapsed.with-inspector,
+.app-shell.sidebar-collapsed.with-inspector.changes-open {
+  grid-template-columns: minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-inspector-width));
+}
+.app-shell.sidebar-collapsed > .sidebar,
+.app-shell.sidebar-collapsed > .panel-resizer:not(.right-panel-resizer) {
+  display: none;
+}
 .panel-resizer { width: var(--shell-resizer-width); }
 .right-panel-resizer { border-left: 1px solid transparent; }
 .right-panel-resizer:hover,
 .right-panel-resizer:active { background: #3a3d44; border-left-color: #50545d; }
 
 .sidebar { padding: 48px 12px 12px; }
+.topbar-left-panel-toggle {
+  position: fixed;
+  z-index: 100;
+  top: 9px;
+  left: 96px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.topbar-left-panel-toggle:hover {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.topbar-left-panel-toggle.is-collapsed { color: var(--text-tertiary); }
+.topbar-left-panel-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.app-shell.sidebar-collapsed .topbar {
+  /* Keep the tab/title lane clear of macOS traffic lights plus the left-pane toggle. */
+  padding-left: 136px;
+}
 .sidebar-top { padding-bottom: 12px; }
 .sidebar-brand .brand-title { font-size: 15px; line-height: 20px; }
 .sidebar-search { margin: 0 0 8px; padding: 0 8px; min-height: 32px; }
@@ -3012,6 +3118,11 @@ body { min-width: 1040px; }
 .timeline-wrap.is-empty .chat-column { padding: 24px; }
 .composer-dock { padding-bottom: 16px; }
 .composer-dock .chat-column { padding: 12px 0 0; }
+/* Plan mode keeps the same readable column width for empty and restored sessions. */
+.timeline-wrap.has-plan-workspace .chat-column {
+  width: 100%;
+  padding: 20px 24px 16px;
+}
 .welcome-orb { width: 48px; height: 48px; margin-bottom: 20px; font-size: 28px; }
 .welcome-copy { font-size: var(--text-body); line-height: var(--leading-body); }
 .quick-actions { gap: 8px; margin-top: 32px; }
@@ -3584,6 +3695,7 @@ select:focus-visible,
 .http-chat-empty p { max-width: 220px; margin: 0; font-size: 11px; line-height: 1.5; }
 .http-agent-chat-shell { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .http-agent-timeline { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; }
+.http-agent-timeline.has-plan-workspace { display: flex; flex-direction: column; overflow: hidden; }
 .http-agent-chat-shell .composer-dock { flex: 0 0 auto; padding: 10px; border-top: 1px solid #2b2d31; }
 .http-agent-chat-shell .chat-column { width: 100%; padding: 0; }
 .http-agent-chat-shell > .composer-area { flex: 0 0 auto; padding: 0 10px 10px; }
@@ -3911,6 +4023,33 @@ select:focus-visible,
   box-shadow: 0 12px 36px rgba(38, 39, 34, .10);
 }
 .theme-light .composer-card:focus-within { border-color: #c69b52; box-shadow: var(--focus-ring), 0 12px 36px rgba(38, 39, 34, .10); }
+.theme-light .composer-mode-switch {
+  border-color: var(--border-subtle);
+  background: var(--surface-elevated);
+}
+.theme-light .composer-mode-option { color: var(--text-secondary); }
+.theme-light .composer-mode-option:hover:not(:disabled) { color: var(--text-primary); }
+.theme-light .composer-mode-option.active { color: var(--mode-selected-ink); background: var(--mode-selected); }
+.theme-light .plan-workspace-header { border-bottom-color: var(--border-subtle); }
+.theme-light .plan-workspace-title strong { color: var(--text-primary); }
+.theme-light .plan-status,
+.theme-light .plan-dirty { color: var(--text-secondary); background: var(--surface-active); }
+.theme-light .plan-status-ready { color: #8e4d70; background: rgba(245, 153, 198, .28); }
+.theme-light .plan-status-executing { color: #4d6b9d; background: rgba(101, 131, 196, .16); }
+.theme-light .plan-dirty { color: #8d563e; background: #f9e7df; }
+.theme-light .plan-workspace-editor,
+.theme-light .plan-workspace-preview { border-color: var(--border-subtle); color: var(--text-primary); background: var(--surface-elevated); }
+.theme-light .plan-workspace-footer { color: var(--text-muted); }
+.theme-light .plan-workspace-conversation { border-top-color: var(--border-subtle); }
+.theme-light .plan-workspace-conversation-heading { color: var(--text-secondary); }
+.theme-light .plan-workspace-action { border-color: var(--border-subtle); color: var(--text-secondary); background: var(--surface-elevated); }
+.theme-light .plan-inspector-title { color: var(--text-primary); }
+.theme-light .plan-inspector-preview, .theme-light .plan-inspector-editor { border-color: var(--border-subtle); color: var(--text-primary); background: var(--surface-elevated); }
+.theme-light .plan-inspector-toolbar button { border-color: var(--border-subtle); color: var(--text-secondary); background: var(--surface-elevated); }
+.theme-light .plan-inspector-toolbar button:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .plan-inspector-toolbar button.execute { border-color: rgba(65, 109, 175, .28); color: #315985; background: #edf4ff; }
+.theme-light .plan-inspector-toolbar button.execute:hover:not(:disabled) { border-color: rgba(65, 109, 175, .48); color: #24476f; background: #e1eeff; }
+.theme-light .plan-inspector-footer { border-top-color: var(--border-subtle); }
 .theme-light .composer-queue-header,
 .theme-light .composer-hints,
 .theme-light .at-picker-label,
@@ -5134,8 +5273,9 @@ html.motion-disabled *::after {
   margin-left: 0;
   margin-top: 4px;
   gap: var(--sidebar-selection-gap);
-  padding: 0 var(--sidebar-selection-inset) 2px;
+  padding: 0 0 2px;
 }
+.theme-light .project-tree { padding-left: var(--sidebar-selection-inset); }
 .theme-light .session-item.nested {
   width: 100%;
   box-sizing: border-box;
@@ -5330,9 +5470,6 @@ html.motion-disabled *::after {
 }
 
 .theme-light .project-node-row:hover,
-.theme-light .project-node-row:hover .project-node-toggle,
-.theme-light .project-node-row:hover .sidebar-icon-btn,
-.theme-light .project-node-toggle:hover,
 .theme-light .session-item.nested:hover,
 .theme-light .session-item.active:hover,
 .theme-light .sidebar-user:hover,
@@ -5487,7 +5624,8 @@ html.motion-disabled *::after {
   height: 24px;
   justify-content: center;
   gap: 6px;
-  padding: 0 32px;
+  /* Reserve one ordered control lane: status → pin → pin shortcut. */
+  padding: 0 32px 0 84px;
   border-radius: inherit;
 }
 
@@ -5516,7 +5654,7 @@ html.motion-disabled *::after {
 /* Status remains discoverable without moving the centered label. */
 .theme-light .session-tab.session-tab--stacked .session-tab-dot {
   position: absolute;
-  left: 12px;
+  left: 7px;
 }
 
 /* Pin and close remain available on hover without changing the resting shape. */
@@ -5530,7 +5668,7 @@ html.motion-disabled *::after {
   transition: opacity var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
 }
 
-.theme-light .session-tab.session-tab--stacked .session-tab-pin { left: 3px; }
+.theme-light .session-tab.session-tab--stacked .session-tab-pin { left: 18px; }
 .theme-light .session-tab.session-tab--stacked .session-tab-close { right: 3px; }
 
 .theme-light .session-tab.session-tab--stacked:hover .session-tab-pin,
@@ -5553,7 +5691,7 @@ html.motion-disabled *::after {
 .theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd {
   position: absolute;
   top: 0;
-  left: 35px;
+  left: 46px;
   z-index: 2;
   display: inline-flex;
   align-items: center;
@@ -5567,6 +5705,59 @@ html.motion-disabled *::after {
 
 .theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-kbd {
   opacity: 1;
+}
+
+/* A lone session is a compact, centered control group—not a title with
+   detached controls. Keep the status, pin, its shortcut, and title together. */
+.theme-light .session-tab-scroll.is-single {
+  justify-content: center;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-dot {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: center;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin {
+  position: static;
+  flex: 0 0 24px;
+  margin: 0;
+  opacity: 1;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-main {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0;
+  gap: 10px;
+  justify-content: flex-start;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-close {
+  position: static;
+  flex: 0 0 24px;
+  margin: 0;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-text {
+  min-width: 0;
+  max-width: min(40vw, 480px);
 }
 
 /* Keep the three visible topbar shortcuts optically parallel with tab shortcuts. */
@@ -6988,6 +7179,352 @@ html.motion-disabled *::after {
     padding-left: 24px;
     padding-right: 24px;
   }
+}
+
+/* Shortcut hints are one quiet capsule per command, matching the compact
+   macOS title-bar treatment rather than a collection of separate keycaps. */
+.theme-light .shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  gap: 1px;
+  color: #303136;
+  background: #e9e9eb;
+  font-family: var(--font-ui);
+  font-variant-numeric: normal;
+  line-height: 1;
+}
+.theme-light .shortcut-keys kbd {
+  display: inline;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+.theme-light .shortcut-keys--compact {
+  height: 20px;
+  padding: 0 7px;
+  gap: 0;
+}
+.theme-light .shortcut-keys--compact kbd,
+.theme-light .shortcut-keys--compact kbd[data-shortcut-key="mod"] {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.theme-light .topbar-button:hover .shortcut-keys,
+.theme-light .topbar-button.active .shortcut-keys {
+  color: #202126;
+  background: #e1e1e3;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd.shortcut-keys {
+  height: 20px;
+  padding: 0 7px;
+}
+.theme-light .session-tab.session-tab--stacked .session-tab-kbd.shortcut-keys {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+.theme-light .session-tab.session-tab--stacked .session-tab-kbd.shortcut-keys kbd {
+  font-size: 11px;
+}
+.theme-light .session-tab.session-tab--stacked .session-tab-pin-kbd.shortcut-keys,
+.theme-light .session-tab.session-tab--stacked .session-tab-kbd.shortcut-keys {
+  height: auto;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+/* All inline title-bar hints share one quiet text treatment. Full-size
+   shortcuts in help and dialogs keep the capsule treatment above. */
+.theme-light .shortcut-keys--compact,
+.theme-light .topbar-kbd.shortcut-keys--compact,
+.theme-light .session-tab.session-tab--stacked .session-tab-pin-kbd.shortcut-keys,
+.theme-light .session-tab.session-tab--stacked .session-tab-kbd.shortcut-keys {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #5b5b5b;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+.theme-light .shortcut-keys--compact kbd,
+.theme-light .topbar-kbd.shortcut-keys--compact kbd,
+.theme-light .topbar-kbd.shortcut-keys--compact kbd[data-shortcut-key="mod"] {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+.theme-light .topbar-button:hover .shortcut-keys--compact,
+.theme-light .topbar-button.active .shortcut-keys--compact {
+  color: #5b5b5b;
+  background: transparent;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd.shortcut-keys,
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd.shortcut-keys kbd {
+  font-family: var(--font-ui);
+  font-variant-numeric: normal;
+}
+
+/* Explicit actions pair their icon and shortcut in one shared control surface.
+   Tab-switch hints remain text-only so they do not compete with the title. */
+.theme-light .shortcut-action-container {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid #dfdfdf;
+  border-radius: 8px;
+  gap: 6px;
+  color: #454545;
+  background: #f3f3f3;
+}
+.theme-light .topbar-button.shortcut-action-container,
+.theme-light .topbar-button.shortcut-action-container:hover,
+.theme-light .topbar-button.shortcut-action-container.active,
+.theme-light .topbar-button.shortcut-action-container.active:hover {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  color: #454545;
+  background: #f3f3f3;
+}
+.theme-light .topbar-actions .topbar-button.shortcut-action-container,
+.theme-light .topbar-actions .topbar-button.shortcut-action-container:hover,
+.theme-light .topbar-actions .topbar-button.shortcut-action-container.active,
+.theme-light .topbar-actions .topbar-button.shortcut-action-container.active:hover {
+  color: #454545;
+}
+.theme-light .shortcut-action-container:hover,
+.theme-light .topbar-button.shortcut-action-container:hover {
+  border-color: #d2d2d2;
+  background: #e9e9e9;
+}
+.theme-light .shortcut-action-container .shortcut-keys--compact,
+.theme-light .shortcut-action-container:hover .shortcut-keys--compact {
+  color: #5b5b5b;
+  background: transparent;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container {
+  flex: 0 0 auto;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 7px;
+  gap: 4px;
+  background: #f3f3f3;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container.is-icon-only {
+  width: 28px;
+  justify-content: center;
+  gap: 0;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container.is-icon-only .session-tab-pin {
+  display: grid;
+  flex: 0 0 24px;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+/* Icon-only Pin is a true square button inside the action surface. Grid
+   centering avoids the old flex basis and left-margin shifting the glyph. */
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container.is-icon-only {
+  display: grid !important;
+  place-items: center;
+  box-sizing: border-box;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container.is-icon-only .session-tab-pin,
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container.is-icon-only .session-tab-pin:hover {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container .session-tab-pin:hover {
+  color: #454545;
+  background: transparent;
+}
+
+/* When the central column gets narrow—such as Plan review occupying most of
+   the window—keep actions discoverable by retaining their icons only. */
+@container (max-width: 560px) {
+  .theme-light .topbar-actions .shortcut-action-container .shortcut-keys--compact,
+  .theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd,
+  .theme-light .session-tab.session-tab--stacked .session-tab-kbd {
+    display: none !important;
+  }
+
+  .theme-light .topbar-actions .topbar-button.shortcut-action-container,
+  .theme-light .topbar-actions .topbar-button.shortcut-action-container:hover,
+  .theme-light .topbar-actions .topbar-button.shortcut-action-container.active,
+  .theme-light .topbar-actions .topbar-button.shortcut-action-container.active:hover {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+}
+
+/* Plan focus is intentionally compact even when the browser reports a
+   slightly wider container: never let the shortcut labels compete with the
+   centered session title in this mode. */
+.main-column.plan-focus-main .topbar-actions .shortcut-action-container .shortcut-keys--compact,
+.main-column.plan-focus-main .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd,
+.main-column.plan-focus-main .session-tab.session-tab--stacked .session-tab-kbd {
+  display: none !important;
+}
+.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container,
+.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container:hover,
+.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container.active,
+.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container.active:hover {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+.main-column.plan-focus-main .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+/* Final shared contract for the two topbar actions and the single-tab Pin
+   action. Keep selected/open state from changing the outer surface. */
+.theme-light .shortcut-action-container,
+.theme-light .shortcut-action-container:hover,
+.theme-light .shortcut-action-container.active,
+.theme-light .shortcut-action-container.active:hover {
+  box-sizing: border-box;
+  min-height: 28px;
+  height: 28px;
+  border: 1px solid #dfdfdf !important;
+  border-radius: 8px !important;
+  color: #454545 !important;
+  background: #f3f3f3 !important;
+  box-shadow: none !important;
+}
+.theme-light .shortcut-action-container:hover {
+  border-color: #d2d2d2 !important;
+  background: #e9e9e9 !important;
+}
+.theme-light .shortcut-action-container .shortcut-keys--compact,
+.theme-light .shortcut-action-container:hover .shortcut-keys--compact,
+.theme-light .shortcut-action-container.active .shortcut-keys--compact {
+  color: #5b5b5b !important;
+  background: transparent !important;
+}
+.theme-light .topbar-actions .shortcut-action-container,
+.theme-light .topbar-actions .shortcut-action-container:hover,
+.theme-light .topbar-actions .shortcut-action-container.active,
+.theme-light .topbar-actions .shortcut-action-container.active:hover {
+  width: auto;
+  padding: 0 8px;
+  gap: 6px;
+}
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container,
+.theme-light .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control.shortcut-action-container:hover {
+  width: auto;
+  padding: 0 7px;
+  gap: 4px;
+}
+.main-column.plan-focus-main .topbar-actions .shortcut-action-container,
+.main-column.plan-focus-main .topbar-actions .shortcut-action-container:hover,
+.main-column.plan-focus-main .topbar-actions .shortcut-action-container.active,
+.main-column.plan-focus-main .topbar-actions .shortcut-action-container.active:hover {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+@container (max-width: 560px) {
+  .theme-light .topbar-actions .shortcut-action-container,
+  .theme-light .topbar-actions .shortcut-action-container:hover,
+  .theme-light .topbar-actions .shortcut-action-container.active,
+  .theme-light .topbar-actions .shortcut-action-container.active:hover {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+}
+
+/* The shared hit areas stay in place without a persistent gray fill. Keep a
+   soft hover/focus surface so the controls remain discoverable when pointed at. */
+.theme-light .shortcut-action-container,
+.theme-light .shortcut-action-container:active,
+.theme-light .shortcut-action-container.active,
+.theme-light .shortcut-action-container.active:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.theme-light .shortcut-action-container:hover,
+.theme-light .shortcut-action-container:focus-visible {
+  background: #f3f3f3 !important;
+  border-color: transparent !important;
+}
+
+/* Sidebar project rows own one hover surface, including the active project. */
+.theme-light .project-node-row:hover,
+.theme-light .project-node.active .project-node-row:hover {
+  color: var(--text-primary);
+  background: var(--interaction-hover-surface);
+}
+.theme-light .project-node-row:hover .project-node-toggle,
+.theme-light .project-node-row:hover .sidebar-icon-btn,
+.theme-light .project-node-row .project-node-toggle:hover,
+.theme-light .project-node-row .sidebar-icon-btn:hover {
+  color: inherit;
+  background: transparent;
+}
+
+.theme-light .session-item-delete:hover,
+.theme-light .session-item-delete:focus-visible {
+  color: #b54740;
+  background: transparent;
 }
 
 .theme-light .inspector .mcp-status-label.needs-auth {

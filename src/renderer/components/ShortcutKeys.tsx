@@ -50,14 +50,11 @@ export function ShortcutKeys({ keys, platform = resolvePlatform(), label, compac
   const labels = keys.map((key) => getKeyLabel(key, platform));
   const classes = ["shortcut-keys", compact && "shortcut-keys--compact", className].filter(Boolean).join(" ");
   const ariaLabel = label ? `${label}: ${labels.map((item) => item.readable).join(" ")}` : undefined;
+  const shortcut = labels.map((item) => item.display).join(platform === "mac" ? "" : "+");
 
   return (
     <span {...props} className={classes} role={ariaLabel ? "group" : undefined} aria-label={ariaLabel}>
-      {labels.map((item, index) => (
-        <kbd key={`${keys[index]}-${index}`} data-shortcut-key={keys[index]} aria-hidden="true">
-          {item.display}
-        </kbd>
-      ))}
+      <kbd data-shortcut-key={keys.join("+")} aria-hidden="true">{shortcut}</kbd>
     </span>
   );
 }

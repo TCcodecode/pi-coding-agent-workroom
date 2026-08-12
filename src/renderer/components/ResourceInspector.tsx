@@ -21,6 +21,7 @@ export interface ResourceInspectorProps {
   onToggleTools?: (names: string[]) => void;
   onToggleSkills?: (patterns: string[]) => void;
   onOpenChanges?: () => void;
+  onOpenPlan?: () => void;
   changeCount?: number;
   onClose?: () => void;
   tab?: InspectorTab;
@@ -495,6 +496,7 @@ export function ResourceInspector({
   onToggleTools,
   onToggleSkills,
   onOpenChanges,
+  onOpenPlan,
   changeCount = 0,
   onClose,
   tab: controlledTab,
@@ -612,6 +614,7 @@ export function ResourceInspector({
       <div className="inspector-header">
         <div className="right-pane-mode-tabs" role="tablist" aria-label="Right panel mode">
           <button type="button" role="tab" aria-selected="true" className="selected">Inspector</button>
+          {onOpenPlan && <button type="button" role="tab" aria-selected="false" onClick={onOpenPlan}>Plan</button>}
           <button type="button" role="tab" aria-selected="false" onClick={onOpenChanges}>
             Changes{changeCount > 0 && <span className="tab-badge">{changeCount}</span>}
           </button>

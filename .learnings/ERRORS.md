@@ -347,3 +347,34 @@ Update the SessionTabBar assertions to query the shortcut group or normalize the
 - **Notes**: Kept the existing shortcut label rendering and aligned shortcut styling with the topbar instead of splitting tab labels into separate key nodes. Full suite now passes: 47 test files, 415 tests.
 
 ---
+
+## [ERR-20260811-004] theme_test_hover_block_scope
+
+**Logged**: 2026-08-11T18:11:33Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The sidebar hover regression test searched from a comment to EOF, so it included a later intentional override.
+
+### Error
+```text
+Expected the shared hover block not to include project child selectors.
+```
+
+### Context
+- The final project-row override intentionally includes those selectors to keep child controls transparent.
+
+### Suggested Fix
+Scope the assertion to the shared hover rule instead of all subsequent CSS.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/renderer/theme.test.ts, src/renderer/styles.css
+
+### Resolution
+- **Resolved**: 2026-08-11T18:11:33Z
+- **Notes**: Replaced the broad slice assertion with a selector-list assertion for the shared hover rule.
+
+---

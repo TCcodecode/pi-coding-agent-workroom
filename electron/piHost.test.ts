@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiHost, type PiRuntimeLike, type PiSessionLike } from "./piHost.js";
+import { PlanModeStore } from "./planMode.js";
 
 function createFakeRuntime(cwd = "/tmp/project") {
   const listeners = new Set<(event: unknown) => void>();
@@ -35,7 +36,7 @@ function createFakeRuntime(cwd = "/tmp/project") {
     get isStreaming() { return streaming; },
     get messages() { return []; },
     getActiveToolNames: () => ["read", "bash"],
-    getAllTools: () => [],
+    getAllTools: () => ["read", "grep", "find", "ls", "write", "edit", "bash", "plan_save", "plan_list", "plan_read"].map((name) => ({ name })),
     getSessionStats: () => ({ sessionFile: "/tmp/session.jsonl", sessionId: "session-1", userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }),
     getContextUsage: () => undefined,
     subscribe: (listener: (event: unknown) => void) => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -78,6 +79,12 @@ function createFakeRuntime(cwd = "/tmp/project") {
 }
 
 describe("PiHost", () => {
+  test("returns no plans before a runtime has started", () => {
+    const host = new PiHost({ workspaceId: "workspace-1" });
+
+    expect(host.listPlans()).toEqual([]);
+  });
+
   test("maps prompt controls to the real Pi session", async () => {
     const fake = createFakeRuntime();
     const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
@@ -94,6 +101,46 @@ describe("PiHost", () => {
     expect(fake.calls.map((call) => call.method)).toEqual([
       "prompt", "steer", "followUp", "abort", "setThinkingLevel", "setActiveToolsByName", "compact", "reload",
     ]);
+  });
+
+  test("switches the active runtime into a read-only plan tool policy", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-mode-test-"));
+    try {
+      const fake = createFakeRuntime(cwd);
+      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+      fake.calls.length = 0;
+
+      const mode = await host.setMode("plan");
+
+      expect(mode.mode).toBe("plan");
+      expect(fake.calls.map((call) => call.method)).toEqual(["setThinkingLevel", "setActiveToolsByName"]);
+      expect(fake.calls[1]?.args[0]).toEqual(["read", "grep", "find", "ls", "plan_save", "plan_list", "plan_read"]);
+      expect(host.snapshot().session.modeState?.mode).toBe("plan");
+      const stored = JSON.parse(readFileSync(join(cwd, ".pai/session-modes.json"), "utf8"));
+      expect(stored.sessions["session-1"]?.mode).toBe("plan");
+      expect(stored.sessions["file:/tmp/session.jsonl"]).toBeUndefined();
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("restores a sole session-owned plan when older mode state lacks activePlan", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-plan-restore-"));
+    try {
+      const saved = new PlanModeStore(cwd).savePlan({
+        title: "Recovered plan",
+        content: "# Recovered plan\n\n## Goal\nRestore the plan preview.",
+        sourceSession: "session-1",
+      });
+      const fake = createFakeRuntime(cwd);
+      const host = new PiHost({ workspaceId: "workspace-1", runtimeFactory: async () => fake.runtime });
+
+      const snapshot = await host.start({ cwd, sessionPath: "/tmp/session.jsonl" });
+
+      expect(snapshot.session.modeState?.activePlan).toMatchObject({ id: saved.summary.id, title: "Recovered plan" });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   test("edits a follow-up queue item and can send it now", async () => {

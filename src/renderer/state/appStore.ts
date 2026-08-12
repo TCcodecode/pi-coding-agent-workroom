@@ -46,6 +46,11 @@ const emptySession: SessionState = {
   cost: 0,
   todos: [],
   todosRevision: 0,
+  modeState: {
+    mode: "execute",
+    planProfile: { thinkingLevel: "medium" },
+    executeProfile: { thinkingLevel: "medium" },
+  },
 };
 
 export type AppState = PiSnapshot & {
@@ -184,6 +189,27 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
       return { ...state, session: { ...state.session, model: event.payload.model, provider: event.payload.provider } };
     case "thinking_level_changed":
       return { ...state, session: { ...state.session, thinkingLevel: event.payload.level } };
+    case "mode_changed":
+      return {
+        ...state,
+        session: {
+          ...state.session,
+          modeState: event.payload,
+          model: event.payload.mode === "plan"
+            ? event.payload.planProfile.modelKey ?? state.session.model
+            : event.payload.executeProfile.modelKey ?? state.session.model,
+          thinkingLevel: event.payload.mode === "plan"
+            ? event.payload.planProfile.thinkingLevel
+            : event.payload.executeProfile.thinkingLevel,
+        },
+      };
+    case "plan_artifact_changed":
+      return {
+        ...state,
+        session: state.session.modeState
+          ? { ...state.session, modeState: { ...state.session.modeState, activePlan: event.payload.plan } }
+          : state.session,
+      };
     case "resource_snapshot":
       return { ...state, resources: event.payload };
     case "diagnostics_updated":

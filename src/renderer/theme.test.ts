@@ -104,8 +104,9 @@ describe("PI Desk light surface hierarchy", () => {
     expect(css).toMatch(/\.sidebar-leading-control\s*\{\s*gap: var\(--sidebar-leading-gap\);\s*padding-left: var\(--sidebar-leading-inset\);\s*padding-right: var\(--sidebar-leading-inset\);\s*\}/s);
     expect(css).toMatch(/\.theme-light \.context-bar-track\s*\{\s*background: var\(--surface-active\);\s*\}/s);
     expect(css).toMatch(
-      /\.theme-light \.project-session-list\s*\{[^}]*gap: var\(--sidebar-selection-gap\)[^}]*padding: 0 var\(--sidebar-selection-inset\) 2px/s,
+      /\.theme-light \.project-session-list\s*\{[^}]*gap: var\(--sidebar-selection-gap\)[^}]*padding: 0 0 2px/s,
     );
+    expect(css).toMatch(/\.theme-light \.project-tree\s*\{\s*padding-left: var\(--sidebar-selection-inset\);\s*\}/s);
     expect(css).toMatch(/\.theme-light \.session-item\.nested\s*\{[^}]*width: 100%[^}]*padding-left: 20px/s);
   });
 
@@ -114,10 +115,21 @@ describe("PI Desk light surface hierarchy", () => {
     expect(css).toContain(".theme-light .settings-tab.active,");
     expect(css).toContain(".theme-light .session-item.nested:hover,");
     expect(css).toContain(".theme-light .sidebar-user:hover,");
-    expect(css).toContain(".theme-light .project-node-row:hover .project-node-toggle,");
+    expect(css).toMatch(
+      /\.theme-light \.project-node-row:hover \.project-node-toggle,\s*\.theme-light \.project-node-row:hover \.sidebar-icon-btn\s*\{\s*color: inherit;\s*background: transparent;\s*\}/s,
+    );
+    expect(css).not.toContain(
+      ".theme-light .project-node-row:hover,\n.theme-light .project-node-row:hover .project-node-toggle,",
+    );
+    expect(css).toMatch(
+      /\.theme-light \.project-node-row:hover,\s*\.theme-light \.project-node\.active \.project-node-row:hover\s*\{\s*color: var\(--text-primary\);\s*background: var\(--interaction-hover-surface\);\s*\}/s,
+    );
     expect(css).toContain("background: var(--interaction-hover-surface);");
     expect(css).toContain("background: var(--interaction-selected-surface);");
     expect(css).toContain(".theme-light .settings-oauth-option:has(input:checked)");
+    expect(css).toMatch(
+      /\.theme-light \.session-item-delete:hover,\s*\.theme-light \.session-item-delete:focus-visible\s*\{\s*color: #b54740;\s*background: transparent;\s*\}/s,
+    );
   });
 
   it("routes right-pane interactions through the shared neutral contract", () => {

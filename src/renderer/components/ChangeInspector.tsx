@@ -9,6 +9,7 @@ interface ChangeInspectorProps {
   onOpenFile: (path: string) => void;
   onUndo?: (path: string) => void;
   onOpenInspector: () => void;
+  onOpenPlan?: () => void;
   onClose?: () => void;
 }
 
@@ -149,7 +150,7 @@ function DiffView({ change, showTitle = true }: { change: FileChangeSummary; sho
   );
 }
 
-export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, onUndo, onOpenInspector, onClose }: ChangeInspectorProps) {
+export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, onUndo, onOpenInspector, onOpenPlan, onClose }: ChangeInspectorProps) {
   const tree = useMemo(() => buildFileTree(changes), [changes]);
   const selectedChange = changes.find((change) => change.path === selectedPath) ?? changes[0];
   const [reviewedPaths, setReviewedPaths] = useState<Set<string>>(() => new Set());
@@ -202,6 +203,7 @@ export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, o
       <div className="inspector-header">
         <div className="right-pane-mode-tabs" role="tablist" aria-label="Right panel mode">
           <button type="button" role="tab" aria-selected="false" onClick={onOpenInspector}>Inspector</button>
+          {onOpenPlan && <button type="button" role="tab" aria-selected="false" onClick={onOpenPlan}>Plan</button>}
           <button type="button" role="tab" aria-selected="true" className="selected">
             Changes{changes.length > 0 && <span className="tab-badge">{changes.length}</span>}
           </button>

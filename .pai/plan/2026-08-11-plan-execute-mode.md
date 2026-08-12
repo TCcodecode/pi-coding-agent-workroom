@@ -1,7 +1,7 @@
 # Plan / Execute Mode — Implementation Plan
 
-**Status:** proposed  
-**Date:** 2026-08-11  
+**Status:** implemented (MVP)
+**Date:** 2026-08-12
 **Owner:** Pi Desk  
 **Scope:** one Pi Desk session can move between a high-reasoning, non-mutating planning phase and a normal execution phase without losing its conversation.
 
@@ -17,6 +17,19 @@ Add a per-session workflow mode with two independently configurable profiles:
 Mode belongs to the Pi Desk session, not to the project or global app settings. The underlying Pi JSONL session remains the one source of conversational history; the mode metadata is stored by Pi Desk, keyed by the session’s stable session file/ID, so resume, focus, and multi-session operation restore the correct profile.
 
 **Do not silently change modes solely because an LLM says a plan is complete.** When a plan is saved with `ready` status, surface a clear **Start execution** action. Automatic transition may be offered later as an opt-in setting, but only after a valid saved plan and a structured ready signal.
+
+## Implementation status
+
+The MVP is implemented in the current workspace:
+
+- Per-session Plan/Execute mode and independent model/thinking profiles.
+- Strict Plan tool allowlist plus extension-level `tool_call` blocking.
+- Atomic, revisioned Markdown plans under `.pai/plan/` with path/symlink safety.
+- Plan editor occupying the upper conversation canvas; bottom composer remains unchanged.
+- Explicit `Mark ready` and `Start execution` handoff into the same session.
+- IPC, renderer state/events, multi-session `sessionKey` routing, focused tests, typecheck, and production build.
+
+Deferred enhancements are interactive conflict resolution, Markdown preview/code-reference links, plan history UI, and opt-in automatic transition.
 
 ## Product contract
 
