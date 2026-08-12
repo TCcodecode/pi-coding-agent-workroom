@@ -118,7 +118,14 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
         session: { ...state.session, status: "running", name: nextName },
         timeline: [
           ...state.timeline,
-          { id: event.payload.messageId, kind: "user", content: event.payload.content, status: "completed" },
+          {
+            id: event.payload.messageId,
+            kind: "user",
+            content: event.payload.content,
+            status: "completed",
+            startedAt: event.timestamp,
+            completedAt: event.timestamp,
+          },
         ],
       };
     }
@@ -126,7 +133,10 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
       return {
         ...state,
         session: { ...state.session, status: "running" },
-        timeline: [...state.timeline, { id: event.payload.messageId, kind: "assistant", content: "", status: "streaming" }],
+        timeline: [
+          ...state.timeline,
+          { id: event.payload.messageId, kind: "assistant", content: "", status: "streaming", startedAt: event.timestamp },
+        ],
       };
     case "assistant_message_delta":
       return {
@@ -136,21 +146,45 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
     case "assistant_message_completed":
       return {
         ...state,
-        timeline: updateTimelineItem(state.timeline, event.payload.messageId, (item) => item.kind === "assistant" ? { ...item, status: "completed" } : item),
+        timeline: updateTimelineItem(state.timeline, event.payload.messageId, (item) => item.kind === "assistant"
+          ? { ...item, status: "completed", completedAt: event.timestamp }
+          : item),
       };
     case "thinking_started":
-      return { ...state, timeline: [...state.timeline, { id: event.payload.messageId, kind: "thinking", content: "", status: "streaming" }] };
+      return {
+        ...state,
+        timeline: [
+          ...state.timeline,
+          { id: event.payload.messageId, kind: "thinking", content: "", status: "streaming", startedAt: event.timestamp },
+        ],
+      };
     case "thinking_delta":
       return { ...state, timeline: updateTimelineItem(state.timeline, event.payload.messageId, (item) => item.kind === "thinking" ? { ...item, content: item.content + event.payload.delta } : item) };
     case "thinking_completed":
-      return { ...state, timeline: updateTimelineItem(state.timeline, event.payload.messageId, (item) => item.kind === "thinking" ? { ...item, status: "completed" } : item) };
+      return {
+        ...state,
+        timeline: updateTimelineItem(state.timeline, event.payload.messageId, (item) => item.kind === "thinking"
+          ? { ...item, status: "completed", completedAt: event.timestamp }
+          : item),
+      };
     case "tool_call_started": {
       const tool: ToolCallState = { id: event.payload.toolCallId, toolName: event.payload.toolName, input: event.payload.input, status: "running" };
       return {
         ...state,
         toolCalls: { ...state.toolCalls, [tool.id]: tool },
         session: { ...state.session, status: "running" },
-        timeline: [...state.timeline, { id: tool.id, kind: "tool", toolCallId: tool.id, toolName: tool.toolName, input: tool.input, status: tool.status }],
+        timeline: [
+          ...state.timeline,
+          {
+            id: tool.id,
+            kind: "tool",
+            toolCallId: tool.id,
+            toolName: tool.toolName,
+            input: tool.input,
+            status: tool.status,
+            startedAt: event.timestamp,
+          },
+        ],
       };
     }
     case "tool_call_delta": {
@@ -170,7 +204,9 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
       return {
         ...state,
         toolCalls: { ...state.toolCalls, [current.id]: { ...current, output: event.payload.result, status, change: event.payload.change } },
-        timeline: updateTimelineItem(state.timeline, current.id, (item) => item.kind === "tool" ? { ...item, output: event.payload.result, status, change: event.payload.change } : item),
+        timeline: updateTimelineItem(state.timeline, current.id, (item) => item.kind === "tool"
+          ? { ...item, output: event.payload.result, status, change: event.payload.change, completedAt: event.timestamp }
+          : item),
       };
     }
     case "file_change_undone": {
@@ -215,22 +251,53 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
     case "diagnostics_updated":
       return { ...state, diagnostics: event.payload };
     case "notification_created":
-      return { ...state, timeline: [...state.timeline, { id: event.eventId, kind: "notification", content: event.payload.message, status: "completed" }] };
+      return {
+        ...state,
+        timeline: [
+          ...state.timeline,
+          {
+            id: event.eventId,
+            kind: "notification",
+            content: event.payload.message,
+            status: "completed",
+            startedAt: event.timestamp,
+            completedAt: event.timestamp,
+          },
+        ],
+      };
     case "agent_started":
     case "turn_started":
     case "compaction_started":
     case "auto_retry_started":
       return { ...state, session: { ...state.session, status: "running" } };
     case "turn_completed":
+      return { ...state, session: { ...state.session, status: "completed" } };
+    // Compaction and retry are sub-steps of an active agent run. Their end
+    // must not make the global run indicator appear finished before agent_end.
     case "compaction_completed":
     case "auto_retry_completed":
-      return { ...state, session: { ...state.session, status: "completed" } };
+      return state;
     case "model_select":
       return { ...state, session: { ...state.session, model: event.payload.model ?? state.session.model, provider: event.payload.provider ?? state.session.provider } };
     case "session_completed":
       return { ...state, session: { ...state.session, status: "completed" } };
     case "session_error":
-      return { ...state, session: { ...state.session, status: "error" }, lastError: event.payload.message, timeline: [...state.timeline, { id: event.eventId, kind: "error", content: event.payload.message, status: "error" }] };
+      return {
+        ...state,
+        session: { ...state.session, status: "error" },
+        lastError: event.payload.message,
+        timeline: [
+          ...state.timeline,
+          {
+            id: event.eventId,
+            kind: "error",
+            content: event.payload.message,
+            status: "error",
+            startedAt: event.timestamp,
+            completedAt: event.timestamp,
+          },
+        ],
+      };
     case "session_name_changed": {
       const { name, sessionId, sessionFile } = event.payload;
       const isActive =
@@ -291,55 +358,129 @@ interface AppStore extends AppState {
   clearProviderLogin: (providerId: string) => void;
 }
 
-export const useAppStore = create<AppStore>((set) => ({
-  ...createInitialState(),
-  applyEvent: (event) => set((state) => reducePiEvent(state, event)),
-  clearProviderLogin: (providerId) =>
+/**
+ * Streaming deltas arrive at token rate from the provider (dozens per second
+ * for fast models with high thinking). Applying each one as its own state
+ * update forces a full React re-render of the timeline on every token, which
+ * is what froze the UI on long sessions. Coalesce these three event types so
+ * consecutive deltas for the same message collapse into one update per flush
+ * interval. The reducer appends `delta` to the existing content, so
+ * concatenating deltas produces identical final state.
+ */
+const COALESCED_DELTA_TYPES = new Set<PiEvent["type"]>([
+  "assistant_message_delta",
+  "thinking_delta",
+  "tool_call_delta",
+]);
+
+/** Upper bound between a delta arriving and its coalesced flush. */
+const DELTA_FLUSH_INTERVAL_MS = 50;
+
+type DeltaEvent = Extract<
+  PiEvent,
+  { type: "assistant_message_delta" | "thinking_delta" | "tool_call_delta" }
+>;
+
+function deltaBufferKey(event: DeltaEvent): string {
+  if (event.type === "tool_call_delta") return `${event.type}:${event.payload.toolCallId}`;
+  return `${event.type}:${event.payload.messageId}`;
+}
+
+export const useAppStore = create<AppStore>((set) => {
+  const pendingDeltas = new Map<string, { first: DeltaEvent; delta: string }>();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushPendingDeltas = (): void => {
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (pendingDeltas.size === 0) return;
+    // Each buffered entry carries a delta payload whose `delta` field we have
+    // accumulated; the resulting object is a valid PiEvent for its type.
+    const events = [...pendingDeltas.values()].map(
+      ({ first, delta }) => ({
+        ...first,
+        payload: { ...first.payload, delta },
+      }) as PiEvent,
+    );
+    pendingDeltas.clear();
+    // Fold every coalesced delta into one `set` so React renders once.
     set((state) => {
-      if (!(providerId in state.providerLogins)) return state;
-      const providerLogins = { ...state.providerLogins };
-      delete providerLogins[providerId];
-      return { ...state, providerLogins };
-    }),
-  replaceSnapshot: (snapshot) =>
-    set((state) => {
-      // Prefer non-empty project lists from either side; never wipe known projects with [].
-      const incoming = snapshot.projects;
-      const existing = state.projects ?? [];
-      const nextProjects =
-        incoming && incoming.length > 0
-          ? incoming
-          : existing.length > 0
-            ? existing
-            : incoming ?? existing;
-      const nextActive =
-        snapshot.activeProjectId ??
-        state.activeProjectId ??
-        nextProjects[0]?.id;
-      const nextSession = {
-        ...state.session,
-        ...snapshot.session,
-        cwd: snapshot.session?.cwd || state.session.cwd,
-      };
-      const sameSession =
-        Boolean(state.session.sessionId) &&
-        state.session.sessionId === snapshot.session.sessionId;
-      if (
-        sameSession &&
-        (state.session.todosRevision ?? 0) > (snapshot.session.todosRevision ?? 0)
-      ) {
-        nextSession.todos = state.session.todos;
-        nextSession.todosRevision = state.session.todosRevision;
+      let next: AppState = state;
+      for (const event of events) next = reducePiEvent(next, event);
+      return next;
+    });
+  };
+
+  return {
+    ...createInitialState(),
+    applyEvent: (event) => {
+      if (COALESCED_DELTA_TYPES.has(event.type)) {
+        const deltaEvent = event as DeltaEvent;
+        const key = deltaBufferKey(deltaEvent);
+        const pending = pendingDeltas.get(key);
+        if (pending) pending.delta += deltaEvent.payload.delta;
+        else pendingDeltas.set(key, { first: deltaEvent, delta: deltaEvent.payload.delta });
+        if (flushTimer === null) {
+          flushTimer = setTimeout(flushPendingDeltas, DELTA_FLUSH_INTERVAL_MS);
+        }
+        return;
       }
-      return {
-        ...state,
-        ...snapshot,
-        projects: nextProjects,
-        activeProjectId: nextActive,
-        // Always take timeline/toolCalls from the snapshot after resume/start.
-        timeline: snapshot.timeline ?? [],
-        toolCalls: snapshot.toolCalls ?? {},
-        session: nextSession,
-      };
-    }),
-}));
+      // Any non-delta event must observe the coalesced deltas that precede it.
+      flushPendingDeltas();
+      set((state) => reducePiEvent(state, event));
+    },
+    clearProviderLogin: (providerId) =>
+      set((state) => {
+        if (!(providerId in state.providerLogins)) return state;
+        const providerLogins = { ...state.providerLogins };
+        delete providerLogins[providerId];
+        return { ...state, providerLogins };
+      }),
+    replaceSnapshot: (snapshot) => {
+      // A snapshot rewrites the timeline wholesale; never drop unflushed deltas.
+      flushPendingDeltas();
+      set((state) => {
+        // Prefer non-empty project lists from either side; never wipe known projects with [].
+        const incoming = snapshot.projects;
+        const existing = state.projects ?? [];
+        const nextProjects =
+          incoming && incoming.length > 0
+            ? incoming
+            : existing.length > 0
+              ? existing
+              : incoming ?? existing;
+        const nextActive =
+          snapshot.activeProjectId ??
+          state.activeProjectId ??
+          nextProjects[0]?.id;
+        const nextSession = {
+          ...state.session,
+          ...snapshot.session,
+          cwd: snapshot.session?.cwd || state.session.cwd,
+        };
+        const sameSession =
+          Boolean(state.session.sessionId) &&
+          state.session.sessionId === snapshot.session.sessionId;
+        if (
+          sameSession &&
+          (state.session.todosRevision ?? 0) > (snapshot.session.todosRevision ?? 0)
+        ) {
+          nextSession.todos = state.session.todos;
+          nextSession.todosRevision = state.session.todosRevision;
+        }
+        return {
+          ...state,
+          ...snapshot,
+          projects: nextProjects,
+          activeProjectId: nextActive,
+          // Always take timeline/toolCalls from the snapshot after resume/start.
+          timeline: snapshot.timeline ?? [],
+          toolCalls: snapshot.toolCalls ?? {},
+          session: nextSession,
+        };
+      });
+    },
+  };
+});

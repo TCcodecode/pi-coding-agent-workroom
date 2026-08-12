@@ -16,6 +16,8 @@ function createFakeRuntime(cwd = "/tmp/project") {
   const session: PiSessionLike & {
     getLastAssistantText?: () => string;
     setSessionName?: (name: string) => void;
+    getSteeringMessages: () => string[];
+    getFollowUpMessages: () => string[];
     modelRuntime?: {
       getModels(): ReadonlyArray<{ provider?: string; id?: string; name?: string }>;
       getModel(provider: string, id: string): unknown;
@@ -709,6 +711,33 @@ describe("PiHost", () => {
     ]);
   });
 
+  test("hydrates persisted assistant parts in their original trace order", () => {
+    const fake = createFakeRuntime();
+    Object.defineProperty(fake.session, "messages", {
+      get: () => [
+        { id: "u1", role: "user", content: "fix the test" },
+        {
+          id: "a1",
+          role: "assistant",
+          content: [
+            { type: "text", text: "I will inspect it." },
+            { type: "thinking", thinking: "Find the failing assertion." },
+            { type: "toolCall", id: "read-1", name: "read", arguments: { path: "src/App.test.tsx" } },
+            { type: "text", text: "Now I know what to change." },
+            { type: "toolCall", id: "edit-1", name: "edit", arguments: { path: "src/App.test.tsx" } },
+          ],
+        },
+        { id: "read-result", role: "toolResult", toolCallId: "read-1", toolName: "read", content: [{ type: "text", text: "file contents" }] },
+        { id: "a2", role: "assistant", content: [{ type: "text", text: "The test is fixed." }] },
+      ],
+    });
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    expect(host.snapshot().timeline.map((item) => item.id)).toEqual([
+      "u1", "a1-text-0", "a1-thinking-1", "read-1", "a1-text-3", "edit-1", "read-result", "a2-text-0",
+    ]);
+  });
+
   test("hydrates persisted edit metadata into the timeline", () => {
     const fake = createFakeRuntime();
     Object.defineProperty(fake.session, "messages", {
@@ -1188,6 +1217,87 @@ describe("PiHost", () => {
     await host.start({ cwd: "/p", sessionPath: "/tmp/a.jsonl", sessionKey: "file:/tmp/a.jsonl" });
     expect(factoryCalls).toBe(1);
     expect(host.listLiveSessions()).toHaveLength(1);
+  });
+});
+
+describe("PiHost todo nudge", () => {
+  test("steers a nudge once a turn crosses the tool threshold with no todos", async () => {
+    const fake = createFakeRuntime();
+    new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, todoNudgeThreshold: 3 });
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: "ok" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t2", toolName: "read", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toEqual([]);
+
+    fake.emit({ type: "tool_execution_end", toolCallId: "t3", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toHaveLength(1);
+    expect(fake.session.getSteeringMessages()[0]).toContain("todowrite");
+
+    // Only once per turn, no matter how many more tools run.
+    fake.emit({ type: "tool_execution_end", toolCallId: "t4", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toHaveLength(1);
+  });
+
+  test("does not nudge when a todo list already exists", async () => {
+    const fake = createFakeRuntime();
+    new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, todoNudgeThreshold: 2 });
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: {
+        content: [{ type: "text", text: "ok" }],
+        details: {
+          todos: [{ id: "1", content: "Do it", status: "in_progress", priority: "high" }],
+          updatedAt: "2026-08-08T00:00:00.000Z",
+        },
+      },
+    });
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: "ok" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t2", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toEqual([]);
+  });
+
+  test("uses a lower threshold for fast models", async () => {
+    const fake = createFakeRuntime();
+    fake.session.model = { provider: "deepseek", id: "deepseek-v4-flash" };
+    new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, todoNudgeThreshold: 8, todoNudgeFastThreshold: 2 });
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: "ok" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t2", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toHaveLength(1);
+  });
+
+  test("resets the nudge budget on each new turn", async () => {
+    const fake = createFakeRuntime();
+    new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, todoNudgeThreshold: 2 });
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t1", toolName: "bash", isError: false, result: "ok" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t2", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toHaveLength(1);
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t3", toolName: "bash", isError: false, result: "ok" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "t4", toolName: "bash", isError: false, result: "ok" });
+    expect(fake.session.getSteeringMessages()).toHaveLength(2);
+  });
+
+  test("ignores todo tools when counting toward the threshold", async () => {
+    const fake = createFakeRuntime();
+    new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, todoNudgeThreshold: 2 });
+
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "tr1", toolName: "todoread", isError: false, result: {} });
+    fake.emit({ type: "tool_execution_end", toolCallId: "tr2", toolName: "todoread", isError: false, result: {} });
+    fake.emit({ type: "tool_execution_end", toolCallId: "tr3", toolName: "todoread", isError: false, result: {} });
+    expect(fake.session.getSteeringMessages()).toEqual([]);
   });
 });
 

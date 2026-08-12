@@ -157,6 +157,10 @@ export function App() {
   const [activeTabId, setActiveTabId] = useState<string | undefined>(() => loadOpenTabs().activeTabId);
   const [liveSessions, setLiveSessions] = useState<LiveSessionSummary[]>([]);
   const sessionChanges = useMemo(() => collectFileChanges(state.timeline), [state.timeline]);
+  const composerHistory = useMemo(
+    () => state.timeline.flatMap((item) => (item.kind === "user" ? [item.content] : [])),
+    [state.timeline],
+  );
   const initialRestoredRef = useRef(false);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -283,10 +287,16 @@ export function App() {
   }, [state.session.sessionId, state.session.sessionFile, state.session.name, state.session.status, state.session.cwd, state.timeline, state.projects, state.activeProjectId]);
 
   // Follow the conversation to the bottom while new content streams in,
-  // unless the user has scrolled up to read older content.
+  // unless the user has scrolled up to read older content. Coalesce to the
+  // next animation frame so a burst of deltas triggers one layout pass, not one
+  // forced reflow per token.
   useEffect(() => {
-    const wrap = timelineWrapRef.current;
-    if (wrap && stickToBottomRef.current) wrap.scrollTop = wrap.scrollHeight;
+    if (!stickToBottomRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      const wrap = timelineWrapRef.current;
+      if (wrap && stickToBottomRef.current) wrap.scrollTop = wrap.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [state.timeline]);
 
   const patchTabStatus = useCallback((sessionKey: string, status: SessionStatus) => {
@@ -1491,7 +1501,6 @@ export function App() {
   const planConversation = state.timeline.length > 0 ? (
     <Timeline
       items={state.timeline}
-      sessionStatus={state.session.status}
       onReviewChanges={openChanges}
       reviewOpen={inspectorOpen && rightPane === "changes"}
       selectedReviewPath={selectedChangePath}
@@ -1511,7 +1520,7 @@ export function App() {
       </div>
       <Composer
         onSubmit={submit}
-        history={state.timeline.flatMap((item) => item.kind === "user" ? [item.content] : [])}
+        history={composerHistory}
         conversationId={activeTabId ?? state.session.sessionId}
         onAbort={() => void api?.abort(activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined)}
         onPickFile={() => api?.chooseFile() ?? Promise.resolve(undefined)}
@@ -1737,7 +1746,7 @@ export function App() {
           <div className="chat-column">
             <Composer
               onSubmit={submit}
-              history={state.timeline.flatMap((item) => item.kind === "user" ? [item.content] : [])}
+              history={composerHistory}
               conversationId={activeTabId ?? state.session.sessionId}
               onAbort={() =>
                 void api?.abort(

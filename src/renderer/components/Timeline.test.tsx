@@ -3,8 +3,6 @@ import { describe, expect, test, vi } from "vitest";
 import type { TimelineItem } from "../../shared/protocol";
 import { Timeline } from "./Timeline";
 
-const expandActivity = () => fireEvent.click(screen.getByRole("button", { name: /expand agent activity/i }));
-
 describe("Timeline", () => {
   test("shows a file change summary below the edited turn", () => {
     const onReviewChanges = vi.fn();
@@ -126,24 +124,42 @@ describe("Timeline", () => {
     expect(container.textContent).not.toContain("π");
   });
 
-  test("renders answer, folds tools into a summary line, expands on demand", () => {
+  test("keeps agent actions in their original order instead of folding a whole turn", () => {
     const items: TimelineItem[] = [
-      { id: "assistant-1", kind: "assistant", content: "I found the issue.", status: "streaming" },
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test\n--run", output: "passed", status: "completed" },
+      { id: "user-1", kind: "user", content: "Fix the test", status: "completed" },
+      { id: "thinking-1", kind: "thinking", content: "I will inspect the failing test first.", status: "completed" },
+      { id: "assistant-1", kind: "assistant", content: "I found the failing assertion.", status: "completed" },
+      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{"path":"src/App.test.tsx"}', status: "completed" },
+      { id: "assistant-2", kind: "assistant", content: "I am correcting it now.", status: "completed" },
+      { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "edit", input: '{"path":"src/App.test.tsx"}', status: "completed" },
+    ];
+    const { container } = render(<Timeline items={items} />);
+
+    const text = container.querySelector(".turn")?.textContent ?? "";
+    expect(text.indexOf("Fix the test")).toBeLessThan(text.indexOf("Thinking"));
+    expect(text.indexOf("Thinking")).toBeLessThan(text.indexOf("I found the failing assertion."));
+    expect(text.indexOf("I found the failing assertion.")).toBeLessThan(text.indexOf("Read"));
+    expect(text.indexOf("Read")).toBeLessThan(text.indexOf("I am correcting it now."));
+    expect(text.indexOf("I am correcting it now.")).toBeLessThan(text.indexOf("Edited"));
+  });
+
+  test("keeps every completed tool visible while its raw payload stays collapsed", () => {
+    const items: TimelineItem[] = [
+      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test -- --run", output: "20 tests passed", status: "completed" },
+      { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "read", input: '{"path": "src/App.tsx"}', output: "long file contents", status: "completed" },
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.getByText("I found the issue.")).toBeInTheDocument();
-    expect(screen.getByText("Ran 1")).toBeInTheDocument();
-    expect(screen.queryByText("passed")).not.toBeInTheDocument();
-    expandActivity();
-    expect(screen.getByText("bash")).toBeInTheDocument();
-    expect(screen.getByText("npm test")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /expand bash/i }));
-    expect(screen.getByText("passed")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.getByText("npm test -- --run")).toBeInTheDocument();
+    expect(screen.getByText("20 tests passed")).toBeInTheDocument();
+    expect(screen.queryByText("long file contents")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /expand ran \(bash\)/i }));
+    expect(screen.getAllByText("20 tests passed")).toHaveLength(2);
   });
 
-  test("marks MCP-backed tools with a via-MCP tag, plain tools stay clean", () => {
+  test("uses action language and MCP targets instead of adapter tool names", () => {
     const items: TimelineItem[] = [
       { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "mcp", input: '{"action":"call","tool":"list_todos"}', status: "completed" },
       { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "read", input: '{"path": "src/App.tsx"}', status: "completed" },
@@ -151,196 +167,190 @@ describe("Timeline", () => {
     ];
     render(<Timeline items={items} />);
 
-    expandActivity();
-    fireEvent.click(screen.getByRole("button", { name: /expand 3 tools/i }));
     const tags = screen.getAllByText("via MCP");
     expect(tags).toHaveLength(2);
-    expect(tags[0].closest(".tool-item")).toHaveTextContent("mcp");
-    expect(tags[1].closest(".tool-item")).toHaveTextContent("mcp__github__get_issue");
-    // Plain tools never get the tag.
-    expect(screen.getByText("read").closest(".tool-item")).not.toHaveTextContent("via MCP");
+    expect(tags[0].closest(".tool-item")).toHaveTextContent("MCP");
+    expect(tags[0].closest(".tool-item")).toHaveTextContent("list_todos");
+    expect(tags[1].closest(".tool-item")).toHaveTextContent("github · get_issue");
+    expect(screen.getByText("Read").closest(".tool-item")).not.toHaveTextContent("via MCP");
   });
 
-  test("empty assistant messages render nothing (no stray empty line)", () => {
+  test("shows a compact thinking summary, duration, and on-demand body", () => {
     const items: TimelineItem[] = [
-      { id: "assistant-1", kind: "assistant", content: "", status: "streaming" },
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{"path": "src/App.tsx"}', output: "line1\nline2", status: "completed" },
+      {
+        id: "thinking-1",
+        kind: "thinking",
+        content: "First I inspect the failing test.\nThen I update the assertion.",
+        status: "completed",
+        startedAt: "2026-08-12T00:00:00.000Z",
+        completedAt: "2026-08-12T00:00:01.200Z",
+      },
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.queryByText("Pi")).not.toBeInTheDocument();
-    expect(screen.getByText("Read 1")).toBeInTheDocument();
-    expandActivity();
-    expect(screen.getByText("read")).toBeInTheDocument();
-    expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("First I inspect the failing test.")).toBeInTheDocument();
+    expect(screen.getByText("1.2s")).toBeInTheDocument();
+    expect(screen.queryByText("Then I update the assertion.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /expand thinking/i }));
+    expect(screen.getByText(/Then I update the assertion\./)).toBeInTheDocument();
   });
 
-  test("different tools fold into one categorized summary", () => {
+  test("shows a direct error state for a failed action", () => {
     const items: TimelineItem[] = [
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{\n  "path": "src/App.tsx"\n}', output: "42 lines", status: "completed" },
-      { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "bash", input: '{"command": "npm test -- --run"}', status: "completed" },
+      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test", output: "test failed", status: "error" },
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.getByText("Read 1 · Ran 1")).toBeInTheDocument();
-    expect(screen.queryByText("src/App.tsx")).not.toBeInTheDocument();
-    expandActivity();
-    fireEvent.click(screen.getByRole("button", { name: /expand 2 tools/i }));
-    expect(screen.getByText("read")).toBeInTheDocument();
-    expect(screen.getByText("bash")).toBeInTheDocument();
-    expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /expand ran \(bash\)/i })).toBeInTheDocument();
   });
 
-  test("summary shows a red failed count when any tool errored", () => {
-    const items: TimelineItem[] = [
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test", status: "completed" },
-      { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "read", input: '{"path": "src/App.tsx"}', status: "error" },
-    ];
-    render(<Timeline items={items} />);
-
-    expect(screen.getByText("Ran 1 · Read 1")).toBeInTheDocument();
-    expect(screen.getByText("1 failed")).toBeInTheDocument();
-  });
-
-  test("active activity shows a fixed live window instead of the summary", () => {
+  test("shows each running action rather than a synthetic live window", () => {
     const items: TimelineItem[] = [
       { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test", status: "running" },
       { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "read", input: '{"path": "a.ts"}', status: "running" },
     ];
     render(<Timeline items={items} />);
 
-    // anchor row + live tail line both carry the summary
-    expect(screen.getAllByText("Ran 1 · Read 1")).toHaveLength(2);
-    expect(screen.getByText("2 running")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.getAllByText("running")).toHaveLength(2);
   });
 
-  test("keeps the current turn live across thinking and tool status boundaries", () => {
-    const items: TimelineItem[] = [
-      { id: "thinking-1", kind: "thinking", content: "checking the plan", status: "completed" },
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{"path": "a.ts"}', status: "completed" },
-    ];
-    render(<Timeline items={items} sessionStatus="running" />);
+  test("opens a trace payload from the keyboard", () => {
+    const { container } = render(<Timeline items={[
+      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "bash", input: "npm test", output: "passed", status: "completed" },
+    ]} />);
 
-    // The turn is still running even though this render is between two
-    // individual activity events, so the live trace does not disappear.
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
-    expect(screen.getAllByText("Read 1")).toHaveLength(2);
+    const control = screen.getByRole("button", { name: /expand ran \(bash\)/i });
+    fireEvent.keyDown(control, { key: " " });
+    expect(container.querySelector(".tool-body pre")).toHaveTextContent("passed");
+    expect(control).toHaveAttribute("aria-expanded", "true");
   });
 
-  test("only the current running turn keeps its live trace", () => {
+  test("opens a new turn at each user message without mixing their actions", () => {
     const items: TimelineItem[] = [
       { id: "user-1", kind: "user", content: "First", status: "completed" },
-      { id: "thinking-1", kind: "thinking", content: "first thought", status: "completed" },
-      { id: "user-2", kind: "user", content: "Second", status: "completed" },
-      { id: "thinking-2", kind: "thinking", content: "second thought", status: "completed" },
-    ];
-    render(<Timeline items={items} sessionStatus="running" />);
-
-    const traces = document.querySelectorAll(".activity-trace");
-    expect(traces).toHaveLength(1);
-    expect(screen.queryByText("second thought")).not.toBeInTheDocument();
-  });
-
-  test("finished thinking collapses to a stub and shows content when expanded", () => {
-    const items: TimelineItem[] = [
-      { id: "thinking-1", kind: "thinking", content: "First I check the logs.\nThen I retry.", status: "completed" },
-    ];
-    render(<Timeline items={items} />);
-
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
-    expect(screen.queryByText("First I check the logs.")).not.toBeInTheDocument();
-    expandActivity();
-    expect(screen.getByText(/Then I retry\./)).toBeInTheDocument();
-  });
-
-  test("streaming thinking appears in the live window and shows content when expanded", () => {
-    const items: TimelineItem[] = [
-      { id: "thinking-1", kind: "thinking", content: "line1\nline2\nline3\nline4\nline5", status: "streaming" },
-    ];
-    render(<Timeline items={items} />);
-
-    // live window: the anchor stub + a "· Thinking" tail line, content hidden
-    expect(screen.getAllByText("Thinking")).toHaveLength(2);
-    expect(screen.queryByText(/line1/)).not.toBeInTheDocument();
-    expandActivity();
-    expect(screen.getByText(/line1/)).toBeInTheDocument();
-    expect(screen.getByText(/line5/)).toBeInTheDocument();
-  });
-
-  test("user messages open a new turn, each with its own activity", () => {
-    const items: TimelineItem[] = [
-      { id: "user-1", kind: "user", content: "First question", status: "completed" },
       { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{"path": "a.ts"}', status: "completed" },
-      { id: "user-2", kind: "user", content: "Second question", status: "completed" },
+      { id: "user-2", kind: "user", content: "Second", status: "completed" },
       { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "grep", input: '{"pattern": "foo"}', status: "completed" },
     ];
-    render(<Timeline items={items} />);
+    const { container } = render(<Timeline items={items} />);
 
-    expect(screen.getByText("First question")).toBeInTheDocument();
-    expect(screen.getByText("Second question")).toBeInTheDocument();
-    expect(screen.getAllByText("Read 1")).toHaveLength(2);
+    const turns = [...container.querySelectorAll(".turn")];
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toHaveTextContent("Read");
+    expect(turns[0]).not.toHaveTextContent("Searched");
+    expect(turns[1]).toHaveTextContent("Searched");
   });
 
-  test("a tool call and its toolResult merge into one counted row", () => {
+  test("merges a persisted tool call and tool result into its first position", () => {
     const items: TimelineItem[] = [
-      { id: "call-1", kind: "tool", toolCallId: "call-1", toolName: "bash", input: '{"command": "ls -la"}', status: "completed" },
-      { id: "result-1", kind: "tool", toolCallId: "call-1", toolName: "bash", input: "", output: "total 4", status: "completed" },
-      { id: "call-2", kind: "tool", toolCallId: "call-2", toolName: "bash", input: '{"command": "git status"}', status: "completed" },
-      { id: "result-2", kind: "tool", toolCallId: "call-2", toolName: "bash", input: "", output: "nothing to commit", status: "completed" },
+      { id: "assistant-1", kind: "assistant", content: "I will list the files.", status: "completed" },
+      { id: "call-1", kind: "tool", toolCallId: "call-1", toolName: "bash", input: '{"command": "ls -la"}', status: "completed", startedAt: "2026-08-12T00:00:00.000Z" },
+      { id: "result-1", kind: "tool", toolCallId: "call-1", toolName: "bash", input: "", output: "total 4", status: "completed", completedAt: "2026-08-12T00:00:00.800Z" },
+      { id: "assistant-2", kind: "assistant", content: "The directory is clean.", status: "completed" },
     ];
-    render(<Timeline items={items} />);
+    const { container } = render(<Timeline items={items} />);
 
-    expect(screen.getByText("Ran 2")).toBeInTheDocument();
-    expandActivity();
-    fireEvent.click(screen.getByRole("button", { name: /expand 2 tools/i }));
-    expect(screen.getByText("ls -la")).toBeInTheDocument();
-    expect(screen.getByText("git status")).toBeInTheDocument();
-    expect(screen.queryByText("total 4")).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /expand bash/i })[0]);
-    expect(screen.getByText("total 4")).toBeInTheDocument();
+    expect(container.querySelectorAll(".tool-item")).toHaveLength(1);
+    const text = container.querySelector(".turn")?.textContent ?? "";
+    expect(text.indexOf("I will list the files.")).toBeLessThan(text.indexOf("ls -la"));
+    expect(text.indexOf("ls -la")).toBeLessThan(text.indexOf("The directory is clean."));
+    expect(screen.getByText("800ms")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /expand ran \(bash\)/i }));
+    expect(screen.getAllByText("total 4")).toHaveLength(2);
   });
 
-  test("many thinking blocks share one summary and expand into a trace", () => {
-    const items: TimelineItem[] = [
-      { id: "thinking-1", kind: "thinking", content: "round one", status: "completed" },
-      { id: "thinking-2", kind: "thinking", content: "round two", status: "completed" },
-      { id: "thinking-3", kind: "thinking", content: "round three", status: "completed" },
-    ];
-    render(<Timeline items={items} />);
-
-    expect(screen.getAllByText("Thinking")).toHaveLength(1);
-    expect(screen.queryByText("round one")).not.toBeInTheDocument();
-    expandActivity();
-    // header + inline thinking content, no per-block stubs
-    expect(screen.getAllByText("Thinking")).toHaveLength(1);
-    expect(screen.getByText("round one")).toBeInTheDocument();
-    expect(screen.getByText("round three")).toBeInTheDocument();
-  });
-
-  test("assistant messages render markdown", () => {
-    const items: TimelineItem[] = [
-      { id: "assistant-1", kind: "assistant", content: "# Title\n\nSome **bold** and `code` here.", status: "completed" },
-    ];
-    render(<Timeline items={items} />);
+  test("assistant messages still render markdown", () => {
+    render(<Timeline items={[{ id: "assistant-1", kind: "assistant", content: "# Title\n\nSome **bold** and `code` here.", status: "completed" }]} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Title" })).toBeInTheDocument();
     expect(screen.getByText("bold")).toBeInTheDocument();
     expect(screen.getByText("code")).toBeInTheDocument();
   });
+});
 
-  test("expanded activity collapses back to its summary", () => {
+describe("Timeline tool grouping", () => {
+  const bash = (id: string, command: string): TimelineItem => ({
+    id,
+    kind: "tool",
+    toolCallId: id,
+    toolName: "bash",
+    input: JSON.stringify({ command }),
+    status: "completed",
+  });
+
+  test("collapses consecutive bash calls into one expandable row", () => {
+    render(<Timeline items={[bash("bash-1", "ls -la"), bash("bash-2", "pwd"), bash("bash-3", "cd /tmp")]} />);
+
+    expect(screen.getByText("Ran 3 commands")).toBeInTheDocument();
+    expect(screen.queryByText("Ran")).not.toBeInTheDocument();
+    expect(screen.queryByRole("code")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand ran 3 commands/i }));
+    expect(screen.getAllByText("Ran")).toHaveLength(3);
+    // Nested rows stay collapsed until opened individually.
+    expect(screen.queryByRole("code")).not.toBeInTheDocument();
+  });
+
+  test("groups read calls but keeps distinct categories separate", () => {
     const items: TimelineItem[] = [
-      { id: "tool-1", kind: "tool", toolCallId: "tool-1", toolName: "read", input: '{"path": "a.ts"}', status: "completed" },
-      { id: "tool-2", kind: "tool", toolCallId: "tool-2", toolName: "bash", input: "npm test", status: "completed" },
+      { id: "read-1", kind: "tool", toolCallId: "read-1", toolName: "read", input: '{"path":"a.ts"}', status: "completed" },
+      { id: "read-2", kind: "tool", toolCallId: "read-2", toolName: "read", input: '{"path":"b.ts"}', status: "completed" },
+      bash("bash-1", "pwd"),
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.getByText("Read 1 · Ran 1")).toBeInTheDocument();
-    expandActivity();
-    fireEvent.click(screen.getByRole("button", { name: /expand 2 tools/i }));
-    expect(screen.getByText("read")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /collapse agent activity/i }));
-    expect(screen.getByText("Read 1 · Ran 1")).toBeInTheDocument();
-    expect(screen.queryByText("read")).not.toBeInTheDocument();
+    expect(screen.getByText("Read 2 files")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+  });
+
+  test("does not group tools separated by an assistant message", () => {
+    const items: TimelineItem[] = [
+      bash("bash-1", "a"),
+      { id: "assistant-1", kind: "assistant", content: "checking", status: "completed" },
+      bash("bash-2", "b"),
+    ];
+    render(<Timeline items={items} />);
+
+    expect(screen.getAllByText("Ran")).toHaveLength(2);
+    expect(screen.queryByText("Ran 2 commands")).not.toBeInTheDocument();
+  });
+
+  test("keeps failed tools out of a group", () => {
+    const items: TimelineItem[] = [
+      bash("bash-1", "a"),
+      { id: "bash-2", kind: "tool", toolCallId: "bash-2", toolName: "bash", input: '{"command":"b"}', output: "boom", status: "error" },
+      bash("bash-3", "c"),
+    ];
+    render(<Timeline items={items} />);
+
+    expect(screen.queryByText("Ran 3 commands")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Ran")).toHaveLength(3);
+    expect(screen.getByText("failed")).toBeInTheDocument();
+  });
+
+  test("keeps file edits individual so their diffs stay visible", () => {
+    const items: TimelineItem[] = [
+      { id: "edit-1", kind: "tool", toolCallId: "edit-1", toolName: "edit", input: '{"path":"a.ts"}', status: "completed", change: { path: "a.ts", additions: 1, deletions: 0, diff: "" } },
+      { id: "write-1", kind: "tool", toolCallId: "write-1", toolName: "write", input: '{"path":"b.ts"}', status: "completed", change: { path: "b.ts", additions: 2, deletions: 0, diff: "" } },
+    ];
+    render(<Timeline items={items} />);
+
+    expect(screen.getByText("Edited")).toBeInTheDocument();
+    expect(screen.getByText("Wrote")).toBeInTheDocument();
+  });
+
+  test("shows the aggregate duration on a group", () => {
+    const items: TimelineItem[] = [
+      { ...bash("bash-1", "a"), startedAt: "2026-08-12T00:00:00.000Z", completedAt: "2026-08-12T00:00:00.300Z" },
+      { ...bash("bash-2", "b"), startedAt: "2026-08-12T00:00:00.300Z", completedAt: "2026-08-12T00:00:01.100Z" },
+    ];
+    render(<Timeline items={items} />);
+
+    expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
+    expect(screen.getByText("1.1s")).toBeInTheDocument();
   });
 });

@@ -78,6 +78,9 @@ import { registerHttpWorkbenchTools } from "./httpWorkbenchExtension.js";
 import { isPlanBlockedTool, PLAN_TOOL_NAMES, PlanModeStore, defaultModeState } from "./planMode.js";
 import { registerPlanModeTools } from "./planModeExtension.js";
 
+/** Fast/cheap model ids get a lower todo-nudge threshold (they drift more). */
+const FAST_MODEL_PATTERN = /flash|mini|haiku|lite|nano|small/i;
+
 export interface PiSessionLike {
   sessionId: string;
   sessionFile?: string;
@@ -202,6 +205,10 @@ export interface PiHostOptions {
   usageRegistry?: ProviderUsageRegistry;
   /** Balance cache TTL in ms (default 60s). */
   usageCacheTtlMs?: number;
+  /** Tool calls within one turn before an automatic todo nudge fires (default 8). */
+  todoNudgeThreshold?: number;
+  /** Lower threshold for fast/cheap models (default 4). */
+  todoNudgeFastThreshold?: number;
 }
 
 interface RuntimeSlot {
@@ -212,6 +219,9 @@ interface RuntimeSlot {
   thinkingMessageId?: string;
   sessionTodos: SessionTodoItem[];
   todoRevision: number;
+  /** Tool calls completed in the current turn (for the todo nudge). */
+  turnToolCount: number;
+  turnNudged: boolean;
   sessionGeneration: number;
   status: SessionStatus;
   pendingFileMutations: Map<string, { path: string; absolutePath: string; before?: string }>;
@@ -230,6 +240,8 @@ export class PiHost {
   private readonly openExternal?: (url: string) => void;
   private readonly usageRegistry: ProviderUsageRegistry;
   private readonly usageCacheTtlMs: number;
+  private readonly todoNudgeThreshold: number;
+  private readonly todoNudgeFastThreshold: number;
   private httpWorkbench?: HttpWorkbenchStore;
   /** Multi-session live slots. Foreground is `foregroundKey`. */
   private readonly slots = new Map<SessionKey, RuntimeSlot>();
@@ -268,6 +280,8 @@ export class PiHost {
     this.openExternal = options.openExternal;
     this.usageRegistry = options.usageRegistry ?? createDefaultUsageRegistry();
     this.usageCacheTtlMs = options.usageCacheTtlMs ?? 60_000;
+    this.todoNudgeThreshold = options.todoNudgeThreshold ?? 8;
+    this.todoNudgeFastThreshold = options.todoNudgeFastThreshold ?? 4;
     if (options.runtime) {
       const key = this.keyForRuntime(options.runtime);
       this.attachRuntime(key, options.runtime);
@@ -1829,6 +1843,8 @@ export class PiHost {
       runtime,
       sessionTodos: [],
       todoRevision: 0,
+      turnToolCount: 0,
+      turnNudged: false,
       sessionGeneration: 0,
       status: "idle",
       pendingFileMutations: new Map(),
@@ -1849,6 +1865,8 @@ export class PiHost {
       slot.pendingFileMutations.clear();
       slot.completedFileMutations.clear();
       slot.todoRevision = 0;
+      slot.turnToolCount = 0;
+      slot.turnNudged = false;
       const fallback = defaultModeState(
         this.modelName(session) || undefined,
         (session.thinkingLevel || "medium") as ThinkingLevel,
@@ -2091,6 +2109,25 @@ export class PiHost {
     );
   }
 
+  /**
+   * The static system guidance tells the model to use todowrite, but weak
+   * models ignore it. When a turn racks up tool calls without ever writing a
+   * todo list, inject one gentle steer to structure the remaining work.
+   */
+  private maybeNudgeForTodos(slot: RuntimeSlot): void {
+    if (slot.turnNudged || slot.sessionTodos.length > 0) return;
+    const modelId = slot.runtime.session.model?.id ?? "";
+    const threshold = FAST_MODEL_PATTERN.test(modelId) ? this.todoNudgeFastThreshold : this.todoNudgeThreshold;
+    if (slot.turnToolCount < threshold) return;
+    slot.turnNudged = true;
+    const message = [
+      "Reminder: this turn has made several tool calls without a todo list.",
+      "Call todowrite to break the remaining work into a checklist",
+      "(pending / in_progress / completed), then continue one task at a time.",
+    ].join(" ");
+    void slot.runtime.session.steer(message).catch(() => undefined);
+  }
+
   private handleSessionEvent(slot: RuntimeSlot, raw: unknown): void {
     type SessionEventMessage = {
       role?: string;
@@ -2207,6 +2244,10 @@ export class PiHost {
           );
         }
         this.applyTodosFromToolResult(slot, event.toolName, event.result, Boolean(event.isError));
+        if (!event.toolName || !isTodoToolName(event.toolName)) {
+          slot.turnToolCount += 1;
+          this.maybeNudgeForTodos(slot);
+        }
         break;
       case "session_tree":
         // Branch navigation changes the effective message history. The todo
@@ -2295,6 +2336,8 @@ export class PiHost {
         break;
       case "turn_start":
         slot.status = "running";
+        slot.turnToolCount = 0;
+        slot.turnNudged = false;
         this.emit("turn_started", {}, raw, key);
         this.emitLiveSessionsChanged();
         break;
@@ -2614,25 +2657,51 @@ export class PiHost {
       }
 
       if (role === "assistant") {
-        const thinking = this.messageThinking(message);
-        if (thinking.trim()) {
-          items.push({ id: `${baseId}-thinking`, kind: "thinking", content: thinking, status: "completed" });
+        const parts = Array.isArray(message.content) ? message.content : undefined;
+        if (!parts) {
+          const content = this.messageText(message);
+          if (content.trim()) items.push({ id: baseId, kind: "assistant", content, status: "completed" });
+          continue;
         }
-        const content = this.messageText(message);
-        if (content.trim()) {
-          items.push({ id: baseId, kind: "assistant", content, status: "completed" });
-        }
-        for (const tool of this.messageToolCalls(message, baseId)) {
-          const path = filePathFromToolInput(tool.name, tool.input);
-          items.push({
-            id: tool.id,
-            kind: "tool",
-            toolCallId: tool.id,
-            toolName: tool.name,
-            input: tool.input,
-            status: "completed",
-          });
-          if (path) toolPaths.set(tool.id, path);
+        for (const [partIndex, part] of parts.entries()) {
+          if (typeof part === "string") {
+            if (part.trim()) items.push({ id: `${baseId}-text-${partIndex}`, kind: "assistant", content: part, status: "completed" });
+            continue;
+          }
+          if (typeof part !== "object" || part === null) continue;
+          const record = part as {
+            type?: string;
+            id?: string;
+            toolCallId?: string;
+            name?: string;
+            toolName?: string;
+            arguments?: unknown;
+            input?: unknown;
+            args?: unknown;
+            thinking?: unknown;
+            text?: unknown;
+            content?: unknown;
+          };
+          if (record.type === "thinking") {
+            const content = String(record.thinking ?? record.text ?? "");
+            if (content.trim()) items.push({ id: `${baseId}-thinking-${partIndex}`, kind: "thinking", content, status: "completed" });
+            continue;
+          }
+          if (record.type === "toolCall" || record.type === "tool_use" || record.type === "functionCall") {
+            const toolId = record.id ?? record.toolCallId ?? `${baseId}-tool-${partIndex}`;
+            const toolName = record.name ?? record.toolName ?? "tool";
+            const input = this.stringify(record.arguments ?? record.input ?? record.args ?? {});
+            items.push({ id: toolId, kind: "tool", toolCallId: toolId, toolName, input, status: "completed" });
+            const path = filePathFromToolInput(toolName, input);
+            if (path) toolPaths.set(toolId, path);
+            continue;
+          }
+          const content = record.type === "text" || "text" in record
+            ? String(record.text ?? "")
+            : typeof record.content === "string"
+              ? record.content
+              : "";
+          if (content.trim()) items.push({ id: `${baseId}-text-${partIndex}`, kind: "assistant", content, status: "completed" });
         }
         continue;
       }
@@ -2685,32 +2754,6 @@ export class PiHost {
       };
     }
     return toolCalls;
-  }
-
-  private messageThinking(message: { content?: unknown }): string {
-    if (!Array.isArray(message.content)) return "";
-    return message.content
-      .map((part) => {
-        if (typeof part !== "object" || part === null) return "";
-        const record = part as { type?: string; thinking?: unknown; text?: unknown };
-        if (record.type === "thinking") return String(record.thinking ?? record.text ?? "");
-        return "";
-      })
-      .join("");
-  }
-
-  private messageToolCalls(message: { content?: unknown }, baseId: string): Array<{ id: string; name: string; input: string }> {
-    if (!Array.isArray(message.content)) return [];
-    return message.content.flatMap((part, index) => {
-      if (typeof part !== "object" || part === null) return [];
-      const record = part as { type?: string; id?: string; toolCallId?: string; name?: string; toolName?: string; arguments?: unknown; input?: unknown; args?: unknown };
-      if (record.type !== "toolCall" && record.type !== "tool_use" && record.type !== "functionCall") return [];
-      return [{
-        id: record.id ?? record.toolCallId ?? `${baseId}-tool-${index}`,
-        name: record.name ?? record.toolName ?? "tool",
-        input: this.stringify(record.arguments ?? record.input ?? record.args ?? {}),
-      }];
-    });
   }
 
   private stringify(value: unknown): string {

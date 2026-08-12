@@ -1,11 +1,10 @@
-import { useState } from "react";
-import type { FileChangeSummary, SessionStatus, TimelineItem } from "../../shared/protocol";
+import { memo, useState } from "react";
+import type { FileChangeSummary, TimelineItem } from "../../shared/protocol";
 import { Markdown } from "./Markdown";
-import { AppIcon } from "./icons";
+import { AppIcon, type AppIconName } from "./icons";
 
 export interface TimelineProps {
   items: TimelineItem[];
-  sessionStatus?: SessionStatus;
   onReviewChanges?: (path?: string) => void;
   reviewOpen?: boolean;
   selectedReviewPath?: string;
@@ -13,9 +12,8 @@ export interface TimelineProps {
   onUndoChanges?: (paths: string[]) => void | Promise<void>;
 }
 
-export function Timeline({
+export const Timeline = memo(function Timeline({
   items,
-  sessionStatus,
   onReviewChanges,
   reviewOpen = false,
   selectedReviewPath,
@@ -29,12 +27,10 @@ export function Timeline({
   const turns = groupTurns(items);
   return (
     <div className="timeline">
-      {turns.map((turn, index) => (
+      {turns.map((turn) => (
         <Turn
           key={turn[0]?.id ?? "turn"}
           items={turn}
-          isCurrentTurn={index === turns.length - 1}
-          sessionStatus={sessionStatus}
           onReviewChanges={onReviewChanges}
           reviewOpen={reviewOpen}
           selectedReviewPath={selectedReviewPath}
@@ -44,7 +40,16 @@ export function Timeline({
       ))}
     </div>
   );
-}
+}, (prev, next) => {
+  // The timeline only needs to re-render when its items or the review
+  // highlight change. Decoupling it from the app-wide store subscription means
+  // status/queue/diagnostics events no longer force this subtree to render.
+  return (
+    prev.items === next.items &&
+    prev.reviewOpen === next.reviewOpen &&
+    prev.selectedReviewPath === next.selectedReviewPath
+  );
+});
 
 /** Split the flat item stream into turns at user-message boundaries. */
 function groupTurns(items: TimelineItem[]): TimelineItem[][] {
@@ -61,18 +66,20 @@ function groupTurns(items: TimelineItem[]): TimelineItem[][] {
   return turns;
 }
 
-// The message variant uses a wide kind union; intersect to get specific shapes.
-type ThinkingItem = TimelineItem & { kind: "thinking" };
 type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
-type ActivityItem = ThinkingItem | ToolItem;
-type ActivityUnit =
-  | { kind: "thinking"; item: ThinkingItem }
-  | { kind: "tools"; items: ToolItem[] };
 
-function Turn({
+/** A run of same-category completed tools collapsed into one expandable row. */
+export interface ToolGroup {
+  kind: "toolGroup";
+  id: string;
+  category: ToolCategory;
+  items: ToolItem[];
+}
+
+type TimelineEntry = TimelineItem | ToolGroup;
+
+const Turn = memo(function Turn({
   items,
-  isCurrentTurn,
-  sessionStatus,
   onReviewChanges,
   reviewOpen,
   selectedReviewPath,
@@ -80,29 +87,20 @@ function Turn({
   onUndoChanges,
 }: {
   items: TimelineItem[];
-  isCurrentTurn: boolean;
-  sessionStatus?: SessionStatus;
   onReviewChanges?: (path?: string) => void;
   reviewOpen: boolean;
   selectedReviewPath?: string;
   onCloseReview?: () => void;
   onUndoChanges?: (paths: string[]) => void | Promise<void>;
 }) {
-  const prompts = items.filter((item) => item.kind === "user");
-  const textItems = items.filter((item) => item.kind !== "user" && item.kind !== "thinking" && item.kind !== "tool");
-  const activityItems = items.filter((item): item is ActivityItem => item.kind === "thinking" || item.kind === "tool");
-  const activityActive = isActivityActive(activityItems);
-  const changes = summarizeFileChanges(activityItems);
-  const live = isCurrentTurn && (
-    sessionStatus === undefined
-      ? activityActive
-      : sessionStatus === "running" || sessionStatus === "awaiting_approval"
-  );
+  const trace = mergeTimelineToolCalls(items);
+  const changes = summarizeFileChanges(trace);
+  const entries = groupTimelineTools(trace);
   return (
     <div className="turn">
-      {prompts.map((item) => <TimelineItemView key={item.id} item={item} />)}
-      {activityItems.length > 0 && <ActivityBlock key="activity" items={activityItems} live={live} />}
-      {textItems.map((item) => <TimelineItemView key={item.id} item={item} />)}
+      {entries.map((entry) => entry.kind === "toolGroup"
+        ? <ToolGroupView key={entry.id} group={entry} />
+        : <TimelineItemView key={entry.id} item={entry} />)}
       {changes && (
         <ChangeSummary
           key="changes"
@@ -116,89 +114,22 @@ function Turn({
       )}
     </div>
   );
-}
-
-function isActivityActive(items: ActivityItem[]): boolean {
-  return items.some((item) => item.kind === "thinking" ? item.status === "streaming" : item.status === "running");
-}
-
-/**
- * The agent's thinking + tool use for a turn, as one accordion:
- * - done: a single summary row
- * - live: the summary row + a live tail (fixed size), held open for the
- *   current turn rather than derived from individual event boundaries
- * - expanded: the summary row + the full ordered trace; thinking is shown
- *   inline as plain text, tools as terse lines (Codex style)
- */
-function ActivityBlock({ items, live }: { items: ActivityItem[]; live: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const units = buildUnits(items);
-  const allTools = units.flatMap((unit) => (unit.kind === "tools" ? unit.items : []));
-  const { summary, failed, running } = summarizeTools(allTools);
-  const label = expanded ? "Collapse agent activity" : "Expand agent activity";
-  const toggle = () => setExpanded((value) => !value);
-  const tail = units.slice(-3);
-  const overflow = units.length - tail.length;
-  const shown = expanded ? units : tail;
-
-  return (
-    <div className="activity-block">
-      <div
-        className="activity-heading"
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={label}
-        onClick={toggle}
-        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
-      >
-        <strong>{summary || "Thinking"}</strong>
-        <AppIcon name="chevronRight" size="xs" className={`activity-chevron ${expanded ? "open" : ""}`} />
-        {running > 0 && <span className="activity-status">{running} running</span>}
-        {failed > 0 && <span className="activity-status failed">{failed} failed</span>}
-      </div>
-      {(expanded || live) && (
-        <div className="activity-trace">
-          {!expanded && overflow > 0 && <div className="activity-more">… {overflow} more</div>}
-          {shown.map((unit, index) => {
-            if (unit.kind === "thinking") {
-              return expanded
-                ? <div key={unit.item.id} className="thinking-inline">{unit.item.content}</div>
-                : <div key={unit.item.id} className="activity-line"><AppIcon name="circleDot" size="xs" className="activity-dot" />Thinking</div>;
-            }
-            const single = unit.items[0];
-            if (expanded) {
-              return single && unit.items.length === 1
-                ? <TimelineItemView key={single.toolCallId || single.id} item={single} />
-                : <ToolGroup key={single?.id ?? `tools-${index}`} tools={unit.items} />;
-            }
-            return (
-              <div key={single?.id ?? `tools-${index}`} className="activity-line">
-                <AppIcon name="chevronRight" size="xs" className="activity-dot" />
-                <span className="activity-line-text">{summarizeTools(unit.items).summary}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Group the ordered activity into thinking units and consecutive tool units, deduped. */
-function buildUnits(activity: ActivityItem[]): ActivityUnit[] {
-  const units: ActivityUnit[] = [];
-  for (const item of activity) {
-    if (item.kind === "thinking") {
-      units.push({ kind: "thinking", item });
-    } else {
-      const last = units[units.length - 1];
-      if (last && last.kind === "tools") last.items.push(item);
-      else units.push({ kind: "tools", items: [item] });
-    }
+}, (prev, next) => {
+  // A turn only re-renders when one of its items changed identity. The store
+  // preserves references for untouched items, so a streaming delta re-renders
+  // exactly one turn instead of the whole timeline.
+  if (prev.items.length !== next.items.length) return false;
+  for (let i = 0; i < prev.items.length; i += 1) {
+    if (prev.items[i] !== next.items[i]) return false;
   }
-  return units.map((unit) => (unit.kind === "tools" ? { ...unit, items: mergeToolCalls(unit.items) } : unit));
-}
+  return (
+    prev.onReviewChanges === next.onReviewChanges &&
+    prev.reviewOpen === next.reviewOpen &&
+    prev.selectedReviewPath === next.selectedReviewPath &&
+    prev.onCloseReview === next.onCloseReview &&
+    prev.onUndoChanges === next.onUndoChanges
+  );
+});
 
 /**
  * Merge a tool call entry and its toolResult entry (they share toolCallId)
@@ -218,11 +149,40 @@ function mergeToolCalls(tools: ToolItem[]): ToolItem[] {
       if (!existing.input && tool.input) existing.input = tool.input;
       if (!existing.output && tool.output) existing.output = tool.output;
       if (!existing.change && tool.change) existing.change = tool.change;
+      if (!existing.startedAt && tool.startedAt) existing.startedAt = tool.startedAt;
+      if (tool.completedAt) existing.completedAt = tool.completedAt;
       if (tool.status === "error") existing.status = "error";
       else if (existing.status !== "error" && tool.status === "completed") existing.status = "completed";
     }
   }
   return order.map((key) => merged.get(key)!);
+}
+
+/**
+ * Preserve the incoming event order while merging each persisted tool-result
+ * into its originating call. A trace action must never move ahead of an
+ * assistant message merely because it happens to be a tool.
+ */
+function mergeTimelineToolCalls(items: TimelineItem[]): TimelineItem[] {
+  const result: TimelineItem[] = [];
+  const toolIndex = new Map<string, number>();
+  for (const item of items) {
+    if (item.kind !== "tool") {
+      result.push(item);
+      continue;
+    }
+    const key = item.toolCallId || item.id;
+    const index = toolIndex.get(key);
+    if (index === undefined) {
+      toolIndex.set(key, result.length);
+      result.push({ ...item });
+      continue;
+    }
+    const existing = result[index];
+    if (!existing || existing.kind !== "tool") continue;
+    result[index] = mergeToolCalls([existing, item])[0];
+  }
+  return result;
 }
 
 interface FileChangeTotals {
@@ -231,7 +191,7 @@ interface FileChangeTotals {
   deletions: number;
 }
 
-function summarizeFileChanges(items: ActivityItem[]): FileChangeTotals | undefined {
+function summarizeFileChanges(items: TimelineItem[]): FileChangeTotals | undefined {
   const files = collectFileChanges(items);
   if (files.length === 0) return undefined;
   return {
@@ -347,64 +307,34 @@ function ChangeSummary({
   );
 }
 
-const TOOL_VERBS: Array<[RegExp, string]> = [
-  [/^(read|read_file|cat|view|list|list_dir|ls|dir|glob|grep|search|find|skills?|resources?|docs?)$/, "Read"],
-  [/^(bash|shell|run_terminal_cmd|execute|exec|terminal|npm|pip|cargo|git|node|python|make|test)/, "Ran"],
-  [/^(edit|search_replace|apply_patch|write|insert|create|append|delete|delete_file|rename)/, "Edited"],
-  [/^(web_search|websearch|search_web|web_fetch|webfetch|fetch|http)/, "Searched"],
-];
-const OTHER_LABEL = "tools";
+const TOOL_PREVIEW_KEYS = ["command", "pattern", "query", "path", "file", "filePath", "url", "glob", "directory", "name"];
 
-function toolVerb(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [pattern, verb] of TOOL_VERBS) if (pattern.test(lower)) return verb;
-  return OTHER_LABEL;
+type ToolCategory = "shell" | "read" | "search" | "change" | "web" | "plan" | "mcp" | "other";
+
+interface ToolPresentation {
+  label: string;
+  category: ToolCategory;
+  icon: AppIconName;
+  preview?: string;
 }
 
-function summarizeTools(tools: ToolItem[]): { summary: string; failed: number; running: number } {
-  const counts = new Map<string, number>();
-  let failed = 0;
-  let running = 0;
-  for (const tool of tools) {
-    const verb = toolVerb(tool.toolName);
-    counts.set(verb, (counts.get(verb) ?? 0) + 1);
-    if (tool.status === "error") failed++;
-    if (tool.status === "running") running++;
-  }
-  const summary = [...counts.entries()]
-    .map(([verb, count]) => (verb === OTHER_LABEL ? `${count} tools` : `${verb} ${count}`))
-    .join(" · ");
-  return { summary, failed, running };
-}
+/**
+ * Categories whose consecutive completed tools collapse into one row. Edits,
+ * MCP calls, and plan updates stay individual because each carries a distinct
+ * file diff, server·tool target, or checklist change that grouping would hide.
+ */
+const AGGREGATABLE_CATEGORIES: ReadonlySet<ToolCategory> = new Set(["shell", "read", "search", "web", "other"]);
 
-function ToolGroup({ tools }: { tools: ToolItem[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const { summary, failed, running } = summarizeTools(tools);
-  const statusParts = [failed > 0 && `${failed} failed`, running > 0 && `${running} running`].filter(Boolean) as string[];
-  const label = expanded ? "Collapse tools" : `Expand ${tools.length} ${tools.length === 1 ? "tool" : "tools"}`;
-  const toggle = () => setExpanded((value) => !value);
-
-  return (
-    <div className="tool-group">
-      <div
-        className="timeline-item-heading toggleable"
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={label}
-        onClick={toggle}
-        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
-      >
-        <strong>{summary}</strong>
-        <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
-        {statusParts.length > 0 && <span className={`timeline-status ${failed > 0 ? "failed" : ""}`}>{statusParts.join(" · ")}</span>}
-      </div>
-      {expanded && tools.map((tool) => <TimelineItemView key={tool.toolCallId || tool.id} item={tool} />)}
-    </div>
-  );
-}
-
-const TOOL_PREVIEW_KEYS = ["command", "pattern", "path", "file", "url", "query", "glob", "directory", "name"];
+const CATEGORY_GROUP_LABEL: Record<ToolCategory, (count: number) => string> = {
+  shell: (count) => `Ran ${count} ${count === 1 ? "command" : "commands"}`,
+  read: (count) => `Read ${count} ${count === 1 ? "file" : "files"}`,
+  search: (count) => `Searched ${count} ${count === 1 ? "time" : "times"}`,
+  change: (count) => `Changed ${count} ${count === 1 ? "file" : "files"}`,
+  web: (count) => `Browsed ${count} ${count === 1 ? "time" : "times"}`,
+  mcp: (count) => `MCP · ${count} ${count === 1 ? "call" : "calls"}`,
+  plan: (count) => `Updated plan ${count} ${count === 1 ? "time" : "times"}`,
+  other: (count) => `Used ${count} ${count === 1 ? "tool" : "tools"}`,
+};
 
 /**
  * MCP-backed tools surface as the adapter's unified proxy tool (`mcp`) or as
@@ -416,13 +346,13 @@ function isMcpTool(name: string): boolean {
 }
 
 /** Extract a one-line human summary from a tool call's input. */
-function toolPreview(input: string): string {
+function toolPreview(input: string, preferredKeys = TOOL_PREVIEW_KEYS): string {
   const text = input.trim();
   if (!text) return "";
   if (text.startsWith("{") || text.startsWith("[")) {
     try {
       const obj = JSON.parse(text) as Record<string, unknown>;
-      for (const key of TOOL_PREVIEW_KEYS) {
+      for (const key of preferredKeys) {
         const value = obj[key];
         if (typeof value === "string" && value.trim()) return value.trim();
       }
@@ -436,14 +366,198 @@ function toolPreview(input: string): string {
   return text.split("\n")[0];
 }
 
-function TimelineItemView({ item }: { item: TimelineItem }) {
+function parsedToolInput(input: string): Record<string, unknown> | undefined {
+  try {
+    const value = JSON.parse(input) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function stringInput(input: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!input) return undefined;
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function mcpTarget(toolName: string, input: string): string | undefined {
+  if (toolName.startsWith("mcp__")) {
+    const [, server, ...toolParts] = toolName.split("__");
+    return [server, toolParts.join("__")].filter(Boolean).join(" · ") || undefined;
+  }
+  const parsed = parsedToolInput(input);
+  const tool = stringInput(parsed, ["tool", "name", "method"]);
+  const server = stringInput(parsed, ["server", "serverName"]);
+  return [server, tool].filter(Boolean).join(" · ") || undefined;
+}
+
+function describeTool(item: ToolItem): ToolPresentation {
+  const name = item.toolName.toLowerCase();
+  if (isMcpTool(name)) {
+    return { label: "MCP", category: "mcp", icon: "wrench", preview: mcpTarget(item.toolName, item.input) };
+  }
+  if (["bash", "shell", "exec", "execute", "terminal", "command"].includes(name)) {
+    return { label: "Ran", category: "shell", icon: "play", preview: toolPreview(item.input, ["command", "script", "cmd"]) };
+  }
+  if (["read", "cat", "open_file", "view_file", "list", "ls", "list_files"].includes(name)) {
+    return { label: "Read", category: "read", icon: "fileText", preview: toolPreview(item.input, ["path", "file", "filePath", "directory", "glob"]) };
+  }
+  if (["grep", "rg", "search", "find", "glob", "code_search", "mcp_search"].includes(name)) {
+    return { label: "Searched", category: "search", icon: "search", preview: toolPreview(item.input, ["pattern", "query", "glob", "path", "file"]) };
+  }
+  if (["edit", "patch", "apply_patch", "replace"].includes(name)) {
+    return { label: "Edited", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+  }
+  if (["write", "create", "create_file"].includes(name)) {
+    return { label: "Wrote", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+  }
+  if (["delete", "remove", "rm", "delete_file"].includes(name)) {
+    return { label: "Deleted", category: "change", icon: "trash", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+  }
+  if (["web", "browser", "fetch", "http", "http_request"].includes(name)) {
+    return { label: "Browsed", category: "web", icon: "globe", preview: toolPreview(item.input, ["url", "query", "path"]) };
+  }
+  if (["todowrite", "todo", "update_todos"].includes(name)) {
+    return { label: "Updated plan", category: "plan", icon: "check", preview: toolPreview(item.input, ["content", "summary", "name"]) };
+  }
+  return { label: "Used tool", category: "other", icon: "wrench", preview: toolPreview(item.input) };
+}
+
+/**
+ * Collapse consecutive completed tool calls of a noisy category into one
+ * expandable row. Hard breaks (user/assistant text, notifications, errors,
+ * in-flight tools) and non-aggregatable tools flush any pending group.
+ */
+export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
+  const result: TimelineEntry[] = [];
+  let group: ToolItem[] = [];
+  let groupCategory: ToolCategory | undefined;
+
+  const flush = () => {
+    if (group.length === 1) result.push(group[0]!);
+    else if (group.length > 1) {
+      result.push({ kind: "toolGroup", id: `group:${group[0]!.id}`, category: groupCategory!, items: group });
+    }
+    group = [];
+    groupCategory = undefined;
+  };
+
+  for (const item of trace) {
+    if (item.kind === "tool" && item.status === "completed") {
+      const category = describeTool(item).category;
+      if (AGGREGATABLE_CATEGORIES.has(category)) {
+        if (groupCategory === category) {
+          group.push(item);
+          continue;
+        }
+        flush();
+        group = [item];
+        groupCategory = category;
+        continue;
+      }
+    }
+    flush();
+    result.push(item);
+  }
+  flush();
+  return result;
+}
+
+function oneLine(text: string, limit = 120): string | undefined {
+  const line = text.split("\n").map((value) => value.trim()).find(Boolean);
+  if (!line) return undefined;
+  return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
+}
+
+/**
+ * Keep raw payloads opt-in, but make command outcome and file-change impact
+ * visible directly on the trace row. File reads/searches deliberately avoid
+ * default output, since their payload is usually the noisy part.
+ */
+function toolResultSummary(item: ToolItem, presentation: ToolPresentation): string | undefined {
+  if (item.status === "error") return oneLine(item.output ?? "") || "failed";
+  if (item.change) {
+    const stats = [item.change.additions ? `+${item.change.additions}` : "", item.change.deletions ? `−${item.change.deletions}` : ""].filter(Boolean).join(" ");
+    return stats || "changed";
+  }
+  return presentation.category === "shell" ? oneLine(item.output ?? "") : undefined;
+}
+
+function durationBetween(start: string | undefined, end: string | undefined): string | undefined {
+  if (!start || !end) return undefined;
+  const elapsed = new Date(end).getTime() - new Date(start).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
+  if (elapsed < 1000) return `${elapsed}ms`;
+  return `${(elapsed / 1000).toFixed(elapsed >= 10_000 ? 0 : 1).replace(/\.0$/, "")}s`;
+}
+
+function timelineDuration(item: TimelineItem): string | undefined {
+  return durationBetween(item.startedAt, item.completedAt);
+}
+
+function groupDuration(items: ToolItem[]): string | undefined {
+  return durationBetween(items[0]?.startedAt, items[items.length - 1]?.completedAt);
+}
+
+function thinkingSummary(content: string): string | undefined {
+  // Only the first line is needed; avoid splitting the entire (possibly large,
+  // still-streaming) thinking block on every render.
+  const newline = content.indexOf("\n");
+  const firstLine = (newline === -1 ? content : content.slice(0, newline)).trim();
+  if (!firstLine) return undefined;
+  return firstLine.length > 96 ? `${firstLine.slice(0, 95)}…` : firstLine;
+}
+
+function ToolGroupView({ group }: { group: ToolGroup }) {
+  const [expanded, setExpanded] = useState(false);
+  const first = group.items[0]!;
+  const presentation = describeTool(first);
+  const label = CATEGORY_GROUP_LABEL[group.category](group.items.length);
+  const duration = groupDuration(group.items);
+  const toggle = () => setExpanded((value) => !value);
+  return (
+    <article className="timeline-item tool-item tool-group completed">
+      <div
+        className="timeline-item-heading toggleable"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
+        onClick={toggle}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
+      >
+        <span className="timeline-icon tool" aria-hidden><AppIcon name="circleCheck" size="xs" /></span>
+        <span className={`timeline-icon tool-action tool-action-${group.category}`} aria-hidden><AppIcon name={presentation.icon} size="xs" /></span>
+        <strong className="tool-name" title={label}>{label}</strong>
+        <span className="tool-group-count" title={`${group.items.length} tool calls`}>{group.items.length}</span>
+        {presentation.preview && <><span className="tool-sep">·</span><span className="tool-inline-preview">{presentation.preview}</span></>}
+        {duration && <span className="timeline-duration">{duration}</span>}
+        <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
+      </div>
+      {expanded && (
+        <div className="tool-group-body">
+          {group.items.map((tool) => <TimelineItemView key={tool.id} item={tool} />)}
+        </div>
+      )}
+    </article>
+  );
+}
+
+const TimelineItemView = memo(function TimelineItemView({ item }: { item: TimelineItem }) {
   const [expanded, setExpanded] = useState(false);
   const toggle = () => setExpanded((value) => !value);
-
   if (item.kind === "tool") {
-    const preview = toolPreview(item.input) || toolPreview(item.output ?? "");
+    const presentation = describeTool(item);
+    const preview = presentation.preview || toolPreview(item.input) || toolPreview(item.output ?? "");
+    const resultSummary = toolResultSummary(item, presentation);
     const hasInput = item.input.trim() !== "";
     const hasOutput = Boolean(item.output && item.output.trim() !== "");
+    const duration = timelineDuration(item);
+    const status = item.status === "running" ? "running" : item.status === "error" ? "failed" : undefined;
     return (
       <article className={`timeline-item tool-item ${item.status}`}>
         <div
@@ -451,14 +565,21 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
           role="button"
           tabIndex={0}
           aria-expanded={expanded}
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${item.toolName}`}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${presentation.label} (${item.toolName})`}
           onClick={toggle}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
         >
-          <strong className="tool-name">{item.toolName}</strong>
+          <span className="timeline-icon tool" aria-hidden>
+            <AppIcon name={item.status === "error" ? "circleAlert" : item.status === "completed" ? "circleCheck" : "circleDot"} size="xs" />
+          </span>
+          <span className={`timeline-icon tool-action tool-action-${presentation.category}`} aria-hidden><AppIcon name={presentation.icon} size="xs" /></span>
+          <strong className="tool-name" title={item.toolName}>{presentation.label}</strong>
           {isMcpTool(item.toolName) && <span className="mcp-tag">via MCP</span>}
           <span className="tool-sep">·</span>
           <span className="tool-inline-preview">{preview || item.status}</span>
+          {resultSummary && <span className={`tool-result-summary ${item.status === "error" ? "failed" : ""}`}>{resultSummary}</span>}
+          {duration && <span className="timeline-duration">{duration}</span>}
+          {status && <span className={`timeline-status ${item.status === "error" ? "failed" : ""}`}>{status}</span>}
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </div>
         {expanded && (hasInput || hasOutput) && (
@@ -471,7 +592,31 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
     );
   }
 
-  if (item.kind === "thinking") return null;
+  if (item.kind === "thinking") {
+    const summary = thinkingSummary(item.content);
+    const duration = timelineDuration(item);
+    return (
+      <article className={`timeline-item thinking-item ${item.status}`}>
+        <div
+          className="timeline-item-heading toggleable"
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} thinking`}
+          onClick={toggle}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
+        >
+          <span className="timeline-icon thinking" aria-hidden><AppIcon name="brain" size="xs" /></span>
+          <strong>Thinking</strong>
+          {summary && <span className="thinking-summary">{summary}</span>}
+          {duration && <span className="timeline-duration">{duration}</span>}
+          {item.status === "streaming" && <span className="timeline-status">running</span>}
+          <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
+        </div>
+        {expanded && item.content.trim() && <div className="thinking-body">{item.content}</div>}
+      </article>
+    );
+  }
 
   if (item.content.trim() === "") return null;
 
@@ -492,8 +637,8 @@ function TimelineItemView({ item }: { item: TimelineItem }) {
     <article className={`timeline-item message-item ${item.kind}`}>
       {item.kind === "error" && <span className="message-error">error</span>}
       <div className="message-content">
-        {item.kind === "assistant" ? <Markdown content={item.content} /> : item.content}
+        {item.kind === "assistant" ? <Markdown content={item.content} plain={item.status === "streaming"} /> : item.content}
       </div>
     </article>
   );
-}
+});

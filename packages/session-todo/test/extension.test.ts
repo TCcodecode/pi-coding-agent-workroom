@@ -26,6 +26,36 @@ describe("session-todo extension", () => {
     expect(result.systemPrompt).toContain("before inspecting files");
   });
 
+  it("injects the current todo snapshot on before_agent_start", async () => {
+    const tools = new Map<string, (id: string, params: any) => Promise<any>>();
+    const pi = {
+      registerTool: vi.fn((definition: { name: string; execute: (id: string, params: any) => Promise<unknown> }) => {
+        tools.set(definition.name, definition.execute);
+      }),
+      on: vi.fn(),
+    };
+    registerSessionTodoTools(pi as never);
+    const handler = pi.on.mock.calls.find(([event]) => event === "before_agent_start")?.[1] as
+      | ((event: { systemPrompt?: string }) => Promise<{ systemPrompt: string }>)
+      | undefined;
+
+    const empty = await handler!({ systemPrompt: "" });
+    expect(empty.systemPrompt).toContain("No tasks tracked yet");
+
+    await tools.get("todowrite")!("w1", {
+      todos: [
+        { id: "t1", content: "Alpha", status: "completed", priority: "high" },
+        { id: "t2", content: "Beta", status: "in_progress", priority: "medium" },
+      ],
+    });
+
+    const withTodos = await handler!({ systemPrompt: "" });
+    expect(withTodos.systemPrompt).toContain("Alpha");
+    expect(withTodos.systemPrompt).toContain("Beta");
+    expect(withTodos.systemPrompt).toContain("Progress: 1/2 completed");
+    expect(withTodos.systemPrompt).toContain("Currently in progress: Beta");
+  });
+
   it("todowrite replaces list and returns details", async () => {
     const tools = new Map<string, (id: string, params: unknown) => Promise<{ content: unknown[]; details: unknown }>>();
     const pi = {

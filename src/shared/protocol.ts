@@ -190,8 +190,28 @@ export interface SessionState {
 }
 
 export type TimelineItem =
-  | { id: string; kind: "user" | "assistant" | "thinking" | "notification" | "error"; content: string; status: "streaming" | "completed" | "error" }
-  | { id: string; kind: "tool"; toolCallId: string; toolName: string; input: string; output?: string; status: "running" | "completed" | "error"; change?: FileChangeSummary };
+  | {
+      id: string;
+      kind: "user" | "assistant" | "thinking" | "notification" | "error";
+      content: string;
+      status: "streaming" | "completed" | "error";
+      /** Event time from the host; absent for older persisted sessions. */
+      startedAt?: string;
+      completedAt?: string;
+    }
+  | {
+      id: string;
+      kind: "tool";
+      toolCallId: string;
+      toolName: string;
+      input: string;
+      output?: string;
+      status: "running" | "completed" | "error";
+      change?: FileChangeSummary;
+      /** Event time from the host; absent for older persisted sessions. */
+      startedAt?: string;
+      completedAt?: string;
+    };
 
 export interface FileChangeSummary {
   path: string;

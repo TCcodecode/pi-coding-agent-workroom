@@ -17,6 +17,7 @@ import {
   makeTodoDetails,
   normalizeTodos,
   reconstructTodosFromMessages,
+  todoProgress,
   todosFromToolResult,
 } from "../src/state.js";
 import type { SessionTodoItem } from "../src/types.js";
@@ -109,9 +110,36 @@ export function registerSessionTodoTools(
     onBranchChanged?.(todos, ctx.sessionManager);
   });
 
+  /**
+   * Snapshot the current checklist for the system prompt. The empty case is
+   * injected on purpose — a visible "no tasks yet" nudges the model to call
+   * todowrite instead of drifting through a multi-step request.
+   */
+  const todoStateSection = (): string => {
+    if (todos.length === 0) {
+      return [
+        "## Current task list",
+        "",
+        "No tasks tracked yet. For multi-step work, call todowrite first to break it into a checklist.",
+      ].join("\n");
+    }
+    const progress = todoProgress(todos);
+    const active = todos.find((todo) => todo.status === "in_progress");
+    const lines = [
+      "## Current task list",
+      "",
+      formatTodoListText(todos),
+      "",
+      `Progress: ${progress.completed}/${progress.total} completed.`,
+    ];
+    if (active) lines.push(`Currently in progress: ${active.content}`);
+    return lines.join("\n");
+  };
+
   pi.on("before_agent_start", async (event) => {
     const base = event.systemPrompt ?? "";
-    return { systemPrompt: base ? `${base}\n\n${SYSTEM_GUIDANCE}` : SYSTEM_GUIDANCE };
+    const section = todoStateSection();
+    return { systemPrompt: base ? `${base}\n\n${SYSTEM_GUIDANCE}\n\n${section}` : `${SYSTEM_GUIDANCE}\n\n${section}` };
   });
 
   pi.registerTool({

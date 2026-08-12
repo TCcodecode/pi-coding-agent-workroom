@@ -6,6 +6,29 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## [LRN-20260813-001] correction
+
+**Logged**: 2026-08-13T02:05:00+08:00
+**Priority**: critical
+**Status**: pending
+**Area**: frontend
+
+### Summary
+For PI Desk session-switch instability, renderer memory/CPU telemetry must determine root-cause priority over event-path correlation.
+
+### Details
+The initial investigation correctly found background session event and tab-identity races, but treated them as the primary cause of the freeze. The user measured the renderer at 100–190% CPU, roughly 14 GB peak memory, and heavy swap while the model was not continuously producing output. This establishes Timeline full recomputation/rendering after the recent hot update as the primary fault; IPC and identity races are secondary amplifiers that become more likely once rendering stalls.
+
+### Suggested Action
+Profile Timeline render and derived-data allocations first. Ensure stable memoization, incremental updates, and windowed rendering for long timelines; then retain session-key validation and background-event throttling as hardening work. Add a regression test or benchmark that asserts bounded render work and heap growth for a long, mostly idle timeline.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/renderer/components/Timeline.tsx, src/renderer/App.tsx, src/renderer/state/appStore.ts
+- Tags: timeline, performance, memory, rendering, session-tabs, correction
+
+---
+
 ## [LRN-20260809-004] correction
 
 **Logged**: 2026-08-09T13:21:00+08:00

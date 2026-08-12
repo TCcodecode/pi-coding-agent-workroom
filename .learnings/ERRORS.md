@@ -4,6 +4,118 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260812-004] global_fake_session_behavior
+
+**Logged**: 2026-08-12T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Adding `setModel` to the shared fake session changed constructor-time behavior across unrelated tests that load persisted mode profiles.
+
+### Error
+```text
+model-list tests unexpectedly included openai/gpt-5 and excluded their assigned current model
+```
+
+### Context
+- PiHost applies a persisted profile asynchronously when a session exposes `setModel`.
+- The shared fake intentionally omits optional capabilities unless a test requires them.
+
+### Suggested Fix
+Attach optional fake methods only within the tests that exercise them.
+
+### Metadata
+- Reproducible: yes
+- Related Files: electron/piHost.test.ts
+
+---
+
+## [ERR-20260812-003] restricted_test_artifact_cleanup
+
+**Logged**: 2026-08-12T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The terminal safety policy rejected removal of a known temporary test artifact with `rm -f`.
+
+### Error
+```text
+rm -f style commands are not permitted. Use a safer approach
+```
+
+### Context
+- Target: the isolated test's leaked `/tmp/project/.pai/session-modes.json` file.
+- The file will be moved to a new `mktemp` directory instead, preserving recoverability.
+
+### Suggested Fix
+Move test artifacts out of shared locations or use per-test temporary directories from the start.
+
+### Metadata
+- Reproducible: yes
+- Related Files: electron/piHost.test.ts
+
+---
+
+## [ERR-20260812-002] shared_test_mode_state
+
+**Logged**: 2026-08-12T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A new PiHost test reused the default `/tmp/project` working directory and persisted PlanMode state that affected a later test.
+
+### Error
+```text
+refreshAvailableModels ignores ambient env providers: expected the current Anthropic model to be listed, but only DeepSeek models were returned
+```
+
+### Context
+- The test changed a model profile, which writes `.pai/session-modes.json` under its runtime cwd.
+- Existing tests use a shared default cwd unless explicitly isolated.
+
+### Suggested Fix
+Use a fresh `mkdtempSync` cwd for every test that mutates mode profiles and remove it in `finally`.
+
+### Metadata
+- Reproducible: yes
+- Related Files: electron/piHost.test.ts
+
+---
+
+## [ERR-20260812-001] package_subpath_export
+
+**Logged**: 2026-08-12T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A diagnostic script imported an internal package file through a package subpath that is not exported.
+
+### Error
+```text
+ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './dist/core/auth-storage.js' is not defined by "exports"
+```
+
+### Context
+- Read-only investigation of Pi credential refresh behavior.
+- No user credentials or project source data were written or exposed.
+
+### Suggested Fix
+For package-internal diagnostics, resolve the file from the workspace's `node_modules` path with a file URL, or use a public export.
+
+### Metadata
+- Reproducible: yes
+- Related Files: node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js
+
+---
+
 ## [ERR-20260810-001] rg_pattern_starts_with_option
 
 **Logged**: 2026-08-10T19:47:30+08:00
@@ -376,5 +488,37 @@ Scope the assertion to the shared hover rule instead of all subsequent CSS.
 ### Resolution
 - **Resolved**: 2026-08-11T18:11:33Z
 - **Notes**: Replaced the broad slice assertion with a selector-list assertion for the shared hover rule.
+
+---
+
+## [ERR-20260812-001] provider_error_test_event_broadcasts
+
+**Logged**: 2026-08-12T23:21:33+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The provider-error event test omitted existing live-session status broadcasts from its exact event-list assertion.
+
+### Error
+```text
+Expected only assistant, turn, and session-error events; received additional live_sessions_changed events.
+```
+
+### Context
+- The host broadcasts live-session status after turn completion and after a terminal provider error.
+- Those broadcasts are unrelated to the regression being tested.
+
+### Suggested Fix
+Assert the relevant normalized events while allowing independent live-session broadcasts.
+
+### Metadata
+- Reproducible: yes
+- Related Files: electron/piHost.test.ts
+
+### Resolution
+- **Resolved**: 2026-08-12T23:21:33+08:00
+- **Notes**: Narrowed the assertion to event types and the terminal error payload.
 
 ---

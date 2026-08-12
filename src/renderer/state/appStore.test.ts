@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { IndexStatus } from "@pi-desk/code-index";
 import {
   createInitialState,
@@ -43,6 +43,31 @@ describe("reducePiEvent", () => {
     ]);
   });
 
+  test("keeps event timing on thinking and tool trace rows", () => {
+    let state = createInitialState();
+    state = reducePiEvent(state, {
+      ...event("thinking_started", { messageId: "thinking-1" }),
+      timestamp: "2026-08-06T00:00:00.000Z",
+    });
+    state = reducePiEvent(state, {
+      ...event("thinking_completed", { messageId: "thinking-1" }),
+      timestamp: "2026-08-06T00:00:01.250Z",
+    });
+    state = reducePiEvent(state, {
+      ...event("tool_call_started", { toolCallId: "tool-1", toolName: "bash", input: "npm test" }),
+      timestamp: "2026-08-06T00:00:02.000Z",
+    });
+    state = reducePiEvent(state, {
+      ...event("tool_call_completed", { toolCallId: "tool-1", result: "passed", isError: false }),
+      timestamp: "2026-08-06T00:00:04.400Z",
+    });
+
+    expect(state.timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "thinking-1", startedAt: "2026-08-06T00:00:00.000Z", completedAt: "2026-08-06T00:00:01.250Z" }),
+      expect.objectContaining({ id: "tool-1", startedAt: "2026-08-06T00:00:02.000Z", completedAt: "2026-08-06T00:00:04.400Z" }),
+    ]));
+  });
+
   test("keeps tool execution, queue, and diff state visible", () => {
     let state = createInitialState();
     state = reducePiEvent(state, event("tool_call_started", { toolCallId: "tool-1", toolName: "bash", input: "npm test" }));
@@ -71,7 +96,9 @@ describe("reducePiEvent", () => {
     state = reducePiEvent(state, event("compaction_started", {}));
     expect(state.session.status).toBe("running");
     state = reducePiEvent(state, event("compaction_completed", { summary: "done" }));
-    expect(state.session.status).toBe("completed");
+    expect(state.session.status).toBe("running");
+    state = reducePiEvent(state, event("auto_retry_completed", {}));
+    expect(state.session.status).toBe("running");
   });
 
   test("first user message becomes session title when still Untitled", () => {
@@ -258,5 +285,59 @@ describe("reducePiEvent", () => {
     }));
     expect(state.resources.mcp?.servers).toHaveLength(1);
     expect(state.resources.mcp?.servers[0].status).toBe("cached");
+  });
+});
+
+describe("applyEvent delta coalescing", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const findContent = (id: string) => {
+    const item = useAppStore.getState().timeline.find((entry) => entry.id === id);
+    return item && "content" in item ? item : undefined;
+  };
+
+  test("coalesces streaming deltas into one update per flush interval", () => {
+    vi.useFakeTimers();
+    useAppStore.setState(createInitialState());
+
+    useAppStore.getState().applyEvent(event("assistant_message_started", { messageId: "m1" }));
+    useAppStore.getState().applyEvent(event("assistant_message_delta", { messageId: "m1", delta: "Hel" }));
+    useAppStore.getState().applyEvent(event("assistant_message_delta", { messageId: "m1", delta: "lo" }));
+
+    // Deltas are buffered, not applied token-by-token.
+    expect(findContent("m1")?.content).toBe("");
+
+    vi.advanceTimersByTime(50);
+    expect(findContent("m1")?.content).toBe("Hello");
+  });
+
+  test("flushes buffered deltas before a following non-delta event", () => {
+    vi.useFakeTimers();
+    useAppStore.setState(createInitialState());
+
+    useAppStore.getState().applyEvent(event("assistant_message_started", { messageId: "m1" }));
+    useAppStore.getState().applyEvent(event("assistant_message_delta", { messageId: "m1", delta: "Hi" }));
+    // A completion event must observe the buffered content.
+    useAppStore.getState().applyEvent(event("assistant_message_completed", { messageId: "m1" }));
+
+    const item = findContent("m1");
+    expect(item?.content).toBe("Hi");
+    expect(item?.status).toBe("completed");
+  });
+
+  test("keeps thinking deltas separate from assistant deltas", () => {
+    vi.useFakeTimers();
+    useAppStore.setState(createInitialState());
+
+    useAppStore.getState().applyEvent(event("assistant_message_started", { messageId: "a1" }));
+    useAppStore.getState().applyEvent(event("thinking_started", { messageId: "t1" }));
+    useAppStore.getState().applyEvent(event("assistant_message_delta", { messageId: "a1", delta: "text" }));
+    useAppStore.getState().applyEvent(event("thinking_delta", { messageId: "t1", delta: "plan" }));
+
+    vi.advanceTimersByTime(50);
+    expect(findContent("a1")?.content).toBe("text");
+    expect(findContent("t1")?.content).toBe("plan");
   });
 });
