@@ -504,6 +504,10 @@ export function Composer({
             }
           }}
           onKeyDown={(event) => {
+            // Let IMEs consume Enter while choosing/committing a candidate.
+            // WebKit can end composition before it dispatches that Enter, but
+            // reports the legacy 229 key code for the IME-owned event.
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
             if (commandPickerOpen) {
               if (event.key === "ArrowDown") {
                 event.preventDefault();

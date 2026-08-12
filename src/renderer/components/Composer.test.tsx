@@ -114,6 +114,27 @@ describe("Composer", () => {
     await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("fire and forget"));
   });
 
+  test("does not send when Enter is used to confirm an IME candidate", () => {
+    const { props } = renderComposer();
+    const input = screen.getByRole("textbox", { name: /message/i });
+    fireEvent.change(input, { target: { value: "zhong" } });
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+
+    expect(props.onSubmit).not.toHaveBeenCalled();
+  });
+
+  test("still sends on Enter after IME composition ends", async () => {
+    const { props } = renderComposer();
+    const input = screen.getByRole("textbox", { name: /message/i });
+    fireEvent.change(input, { target: { value: "已确认" } });
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("已确认"));
+  });
+
   test("navigates the active conversation history with the arrow keys", () => {
     renderComposer({ history: ["first prompt", "second prompt"] });
 
