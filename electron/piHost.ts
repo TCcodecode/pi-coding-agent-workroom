@@ -2092,9 +2092,18 @@ export class PiHost {
   }
 
   private handleSessionEvent(slot: RuntimeSlot, raw: unknown): void {
+    type SessionEventMessage = {
+      role?: string;
+      id?: string;
+      content?: unknown;
+      stopReason?: string;
+      errorMessage?: string;
+    };
     const event = raw as {
       type?: string;
-      message?: { role?: string; id?: string; content?: unknown };
+      message?: SessionEventMessage;
+      messages?: SessionEventMessage[];
+      willRetry?: boolean;
       assistantMessageEvent?: { type?: string; delta?: string };
       toolCallId?: string;
       toolName?: string;
@@ -2223,7 +2232,32 @@ export class PiHost {
       case "thinking_level_changed":
         if (event.level) this.emit("thinking_level_changed", { level: event.level }, raw, key);
         break;
-      case "agent_end":
+      case "agent_end": {
+        // Pi represents provider/transport failures as a completed assistant
+        // message with stopReason "error". Wait for agent_end so retryable
+        // failures do not flash as terminal errors before their retry starts.
+        if (event.willRetry) {
+          slot.status = "running";
+          this.emitLiveSessionsChanged();
+          break;
+        }
+        const failedAssistant = [...(event.messages ?? [])]
+          .reverse()
+          .find((message) => message.role === "assistant" && message.stopReason === "error");
+        if (failedAssistant) {
+          slot.status = "error";
+          this.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
+          this.emit(
+            "session_error",
+            {
+              message: failedAssistant.errorMessage?.trim() || "The model request failed without a detailed error.",
+            },
+            raw,
+            key,
+          );
+          this.emitLiveSessionsChanged();
+          break;
+        }
         slot.status = "completed";
         this.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
         this.emit(
@@ -2237,6 +2271,7 @@ export class PiHost {
         );
         this.emitLiveSessionsChanged();
         break;
+      }
       case "session_info_changed": {
         const session = slot.runtime.session;
         const name =

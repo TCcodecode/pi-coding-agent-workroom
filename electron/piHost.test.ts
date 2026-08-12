@@ -292,6 +292,55 @@ describe("PiHost", () => {
     expect(errors).toEqual(["boom"]);
   });
 
+  test("surfaces terminal provider errors carried by assistant events", () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+    const events: Array<{ type: string; payload: unknown }> = [];
+    host.subscribe((event) => events.push({ type: event.type, payload: event.payload }));
+    const failedAssistant = {
+      role: "assistant",
+      stopReason: "error",
+      errorMessage: "429: rate limit exceeded",
+      content: [],
+    };
+
+    fake.emit({ type: "message_start", message: failedAssistant });
+    fake.emit({ type: "message_end", message: failedAssistant });
+    fake.emit({ type: "turn_end", message: failedAssistant, toolResults: [] });
+    fake.emit({ type: "agent_end", messages: [failedAssistant], willRetry: false });
+
+    expect(events.filter((event) => event.type !== "live_sessions_changed")).toEqual([
+      expect.objectContaining({ type: "assistant_message_started" }),
+      expect.objectContaining({ type: "assistant_message_completed" }),
+      expect.objectContaining({ type: "turn_completed" }),
+      expect.objectContaining({ type: "session_error", payload: { message: "429: rate limit exceeded" } }),
+    ]);
+    expect(events.at(-1)).toEqual(expect.objectContaining({
+      type: "live_sessions_changed",
+      payload: expect.objectContaining({
+        sessions: [expect.objectContaining({ status: "error" })],
+      }),
+    }));
+  });
+
+  test("waits for an automatic retry before surfacing a provider error", () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+    const events: string[] = [];
+    host.subscribe((event) => events.push(event.type));
+    const failedAssistant = {
+      role: "assistant",
+      stopReason: "error",
+      errorMessage: "503: service unavailable",
+      content: [],
+    };
+
+    fake.emit({ type: "agent_end", messages: [failedAssistant], willRetry: true });
+
+    expect(events).not.toContain("session_error");
+    expect(events).not.toContain("session_completed");
+  });
+
   test("preflight rejection propagates as a prompt failure", async () => {
     const fake = createFakeRuntime();
     const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
