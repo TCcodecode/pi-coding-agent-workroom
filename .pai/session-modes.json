@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "sessions": {
+    "tmp:1786470899387-9ezyn9": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-pro",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-pro",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "2026-08-11-plan-execute-mode",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11-plan-execute-mode.md",
+        "title": "Plan / Execute Mode — Implementation Plan",
+        "status": "draft",
+        "updatedAt": "2026-08-11T16:26:34.074Z",
+        "revision": "728c06423cadcbb9"
+      }
+    },
+    "file:/Users/tc/.pi/agent/sessions/--Users-tc-work-pi-workspace--/2026-08-09T14-59-57-360Z_019fe709-a730-7264-bc4c-72facfdf85b0.jsonl": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "plan_ccf42e1e47bd4365b234d55f0828427a",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11T18-24-40-145Z-pi-desk-focus.md",
+        "title": "PI Desk 视觉统一:状态点颜色体系 + focus 样式",
+        "status": "ready",
+        "updatedAt": "2026-08-11T18:24:40.145Z",
+        "revision": "a62032bd71efc8a9",
+        "sourceSession": "019fe709-a730-7264-bc4c-72facfdf85b0"
+      }
+    },
+    "tmp:1786471005631-7o6oke": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "2026-08-11-plan-execute-mode",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11-plan-execute-mode.md",
+        "title": "Plan / Execute Mode — Implementation Plan",
+        "status": "draft",
+        "updatedAt": "2026-08-11T16:26:34.074Z",
+        "revision": "728c06423cadcbb9"
+      }
+    },
+    "tmp:1786471181278-u8f7l2": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "2026-08-11-plan-execute-mode",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11-plan-execute-mode.md",
+        "title": "Plan / Execute Mode — Implementation Plan",
+        "status": "draft",
+        "updatedAt": "2026-08-11T16:26:34.074Z",
+        "revision": "728c06423cadcbb9"
+      }
+    },
+    "tmp:1786471194313-s3v61q": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "2026-08-11-plan-execute-mode",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11-plan-execute-mode.md",
+        "title": "Plan / Execute Mode — Implementation Plan",
+        "status": "draft",
+        "updatedAt": "2026-08-11T16:26:34.074Z",
+        "revision": "728c06423cadcbb9"
+      }
+    },
+    "tmp:1786471226027-zwlaat": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786471415036-s53uqt": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786471759373-q9lr16": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786471775092-4jxbqg": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786471899053-qtjwtu": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786471917053-21e3b1": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786472064425-1p7bij": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786472238257-4nn1k6": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786472249690-3ajh2n": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "tmp:1786491449407-1rrzzm": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "plan_bad5937dc6194bf589e4406094c07327",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11T23-39-12-255Z-plan.md",
+        "title": "高质量 Plan 写作模板与指南",
+        "status": "draft",
+        "updatedAt": "2026-08-11T23:39:12.255Z",
+        "revision": "bdc4b870de980ef9",
+        "sourceSession": "019ff330-30d6-789e-b8ca-ef192084d83d"
+      }
+    },
+    "019ff330-30d6-789e-b8ca-ef192084d83d": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "plan_bad5937dc6194bf589e4406094c07327",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11T23-39-12-255Z-plan.md",
+        "title": "高质量 Plan 写作模板与指南",
+        "status": "draft",
+        "updatedAt": "2026-08-11T23:39:12.255Z",
+        "revision": "bdc4b870de980ef9",
+        "sourceSession": "019ff330-30d6-789e-b8ca-ef192084d83d"
+      },
+      "executeToolNames": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "grep",
+        "find",
+        "ls",
+        "index_codebase",
+        "index_status",
+        "search_symbols",
+        "find_usages",
+        "todowrite",
+        "todocreate",
+        "todoupdate",
+        "todoread",
+        "plan_save",
+        "plan_list",
+        "plan_read",
+        "mcpScript",
+        "mcp",
+        "http_workspace_info",
+        "http_create_folder",
+        "http_create_test",
+        "http_read_test",
+        "http_update_test",
+        "http_run_test",
+        "http_list_run_history"
+      ]
+    },
+    "019fe709-a730-7264-bc4c-72facfdf85b0": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "activePlan": {
+        "id": "plan_ccf42e1e47bd4365b234d55f0828427a",
+        "path": "/Users/tc/work/pi-workspace/.pai/plan/2026-08-11T18-24-40-145Z-pi-desk-focus.md",
+        "title": "PI Desk 视觉统一:状态点颜色体系 + focus 样式",
+        "status": "ready",
+        "updatedAt": "2026-08-11T18:24:40.145Z",
+        "revision": "a62032bd71efc8a9",
+        "sourceSession": "019fe709-a730-7264-bc4c-72facfdf85b0"
+      }
+    },
+    "019ff3b6-39c3-7a39-88d1-c0427bd233d7": {
+      "mode": "plan",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      }
+    },
+    "019ff6d0-0e8e-79b0-a84d-e375fd3fbaf2": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-pro",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "executeToolNames": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "grep",
+        "find",
+        "ls",
+        "index_codebase",
+        "index_status",
+        "search_symbols",
+        "find_usages",
+        "todowrite",
+        "todocreate",
+        "todoupdate",
+        "todoread",
+        "plan_save",
+        "plan_list",
+        "plan_read",
+        "mcpScript",
+        "mcp",
+        "http_workspace_info",
+        "http_create_folder",
+        "http_create_test",
+        "http_read_test",
+        "http_update_test",
+        "http_run_test",
+        "http_list_run_history"
+      ]
+    },
+    "019ff720-4853-7558-b58a-0a2fc9f1692a": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-pro",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "executeToolNames": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "grep",
+        "find",
+        "ls",
+        "index_codebase",
+        "index_status",
+        "search_symbols",
+        "find_usages",
+        "todowrite",
+        "todocreate",
+        "todoupdate",
+        "todoread",
+        "plan_save",
+        "plan_list",
+        "plan_read",
+        "mcpScript",
+        "mcp",
+        "http_workspace_info",
+        "http_create_folder",
+        "http_create_test",
+        "http_read_test",
+        "http_update_test",
+        "http_run_test",
+        "http_list_run_history"
+      ]
+    }
+  }
+}
