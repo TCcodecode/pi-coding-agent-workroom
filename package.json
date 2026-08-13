@@ -2,7 +2,10 @@
   "name": "pi-desk",
   "version": "0.1.0",
   "description": "A desktop workspace for Pi coding agent sessions.",
-  "author": "TCcodecode",
+  "author": {
+    "name": "TCcodecode",
+    "email": "pi-desk@users.noreply.github.com"
+  },
   "private": true,
   "type": "module",
   "workspaces": [

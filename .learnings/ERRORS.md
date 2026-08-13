@@ -4,6 +4,35 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260814-003] linux_deb_maintainer_metadata
+
+**Logged**: 2026-08-14T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+The Linux release build produced AppImage and tarball artifacts but could not finish the Debian package because package metadata omitted a maintainer email.
+
+### Error
+```text
+Please specify author 'email' in the application package.json
+It is required to set Linux .deb package maintainer.
+```
+
+### Context
+- GitHub Actions package-linux job for the first public release.
+- The macOS and Windows package jobs succeeded; the publish job correctly did not create a partial release.
+
+### Suggested Fix
+Use an author object with the project's public noreply contact address, or set linux.maintainer explicitly.
+
+### Metadata
+- Reproducible: yes
+- Related Files: package.json, .github/workflows/release.yml
+
+---
+
 ## [ERR-20260814-001] updater_api_integration
 
 **Logged**: 2026-08-14T00:00:00+08:00
