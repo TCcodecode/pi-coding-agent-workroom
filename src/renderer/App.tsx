@@ -16,7 +16,7 @@ import { ShortcutKeys } from "./components/ShortcutKeys";
 import { getPiApi } from "./state/piApi";
 import { useAppStore } from "./state/appStore";
 import type { InspectorTab } from "./components/ResourceInspector";
-import type { AgentMode, AgentProfile, LiveSessionSummary, PiEvent, PiSnapshot, SessionModeState, SessionStatus } from "../shared/protocol";
+import type { AgentMode, AgentProfile, AppUpdateState, LiveSessionSummary, PiEvent, PiSnapshot, SessionModeState, SessionStatus } from "../shared/protocol";
 import {
   closeTab as closeTabInList,
   dedupeTabs,
@@ -97,6 +97,7 @@ export function App() {
   const api = getPiApi();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updateState, setUpdateState] = useState<AppUpdateState>();
   const [helpOpen, setHelpOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -145,6 +146,25 @@ export function App() {
       return "pi";
     }
   });
+
+  useEffect(() => {
+    if (!api?.getUpdateState || !api.onUpdateState) return;
+    let active = true;
+    const unsubscribe = api.onUpdateState(setUpdateState);
+    void api.getUpdateState().then((next) => {
+      if (active) setUpdateState(next);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [api]);
+
+  const handleUpdateAction = useCallback(() => {
+    if (!api || !updateState) return;
+    if (updateState.status === "available") void api.downloadUpdate();
+    if (updateState.status === "downloaded") void api.installUpdate();
+  }, [api, updateState]);
 
   useEffect(() => {
     try {
@@ -1697,6 +1717,8 @@ export function App() {
         onRevealInFolder={revealInFolder}
         loadSessions={async (cwd) => (await api?.listSessions?.(cwd)) ?? []}
         onOpenSettings={() => setSettingsOpen(true)}
+        updateState={updateState}
+        onUpdateAction={handleUpdateAction}
       />
 
       <div

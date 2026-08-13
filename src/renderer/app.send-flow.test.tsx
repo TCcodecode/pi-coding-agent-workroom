@@ -122,6 +122,11 @@ function makeFakeApi() {
     setMcpServerEnabled: vi.fn(async () => ({ changed: false, path: "/tmp/project/.pi/mcp.json" })),
     importCursorMcp: vi.fn(async () => ({ imported: [], skipped: [] })),
     openMcpConfigFile: vi.fn(async () => undefined),
+    getUpdateState: vi.fn(async () => ({ status: "idle" as const, currentVersion: "0.1.0" })),
+    checkForUpdate: vi.fn(async () => undefined),
+    downloadUpdate: vi.fn(async () => undefined),
+    installUpdate: vi.fn(async () => undefined),
+    onUpdateState: vi.fn(() => () => undefined),
     addProject: vi.fn(async () => {
       const snapshot = await api.startSession({ cwd: "/tmp/project" });
       return {

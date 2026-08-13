@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { ProjectSummary, SessionSummary } from "../../shared/protocol";
+import type { AppUpdateState, ProjectSummary, SessionSummary } from "../../shared/protocol";
 import { SessionSidebar } from "./SessionSidebar";
 
 const project: ProjectSummary = {
@@ -253,6 +253,19 @@ describe("SessionSidebar", () => {
     expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.queryByText("deepseek-v4")).not.toBeInTheDocument();
     expect(screen.queryByText("medium")).not.toBeInTheDocument();
+  });
+
+  test("shows an optional update action only when a release is available", async () => {
+    const onUpdateAction = vi.fn();
+    const updateState: AppUpdateState = {
+      status: "available",
+      currentVersion: "0.1.0",
+      version: "0.1.1",
+    };
+    renderSidebar({ updateState, onUpdateAction });
+
+    fireEvent.click(screen.getByRole("button", { name: "Update to 0.1.1" }));
+    expect(onUpdateAction).toHaveBeenCalledOnce();
   });
 
   test("project context menu can remove from list", async () => {

@@ -98,6 +98,8 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.tar.gz
+            dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
           retention-days: 7
 

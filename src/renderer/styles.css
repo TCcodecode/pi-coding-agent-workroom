@@ -690,6 +690,29 @@ code, kbd, pre { font-family: var(--font-mono); }
   text-align: left;
 }
 .sidebar-user:hover { background: #212121; }
+.sidebar-update {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  color: #ececec;
+  background: transparent;
+  text-align: left;
+}
+.sidebar-update:hover { background: #212121; }
+.sidebar-update:disabled { cursor: default; }
+.sidebar-update-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: var(--accent-primary, #e4b961);
+  box-shadow: 0 0 0 3px rgba(228, 185, 97, .14);
+}
+.sidebar-update.downloaded .sidebar-update-dot { background: #7dccad; box-shadow: 0 0 0 3px rgba(125, 204, 173, .14); }
+.sidebar-update svg { color: #8f8f8f; flex-shrink: 0; }
 .sidebar-user-meta {
   display: flex;
   min-width: 0;

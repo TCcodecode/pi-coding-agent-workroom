@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from "electron";
-import type { PiApi, PiEvent } from "../src/shared/protocol.js";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import type { AppUpdateState, PiApi, PiEvent } from "../src/shared/protocol.js";
 
 const api: PiApi = {
   getSnapshot: () => ipcRenderer.invoke("pi:getSnapshot"),
@@ -73,6 +73,15 @@ const api: PiApi = {
   setMcpServerEnabled: (name, enabled) => ipcRenderer.invoke("pi:setMcpServerEnabled", name, enabled),
   importCursorMcp: () => ipcRenderer.invoke("pi:importCursorMcp"),
   openMcpConfigFile: (cwd) => ipcRenderer.invoke("pi:openMcpConfigFile", cwd),
+  getUpdateState: () => ipcRenderer.invoke("pi:getUpdateState"),
+  checkForUpdate: () => ipcRenderer.invoke("pi:checkForUpdate"),
+  downloadUpdate: () => ipcRenderer.invoke("pi:downloadUpdate"),
+  installUpdate: () => ipcRenderer.invoke("pi:installUpdate"),
+  onUpdateState: (listener) => {
+    const handler = (_event: IpcRendererEvent, state: unknown) => listener(state as AppUpdateState);
+    ipcRenderer.on("pi:updateState", handler);
+    return () => ipcRenderer.removeListener("pi:updateState", handler);
+  },
   http: {
     workspace: (projectId) => ipcRenderer.invoke("pi:http:workspace", projectId),
     readFile: (projectId, relativePath) => ipcRenderer.invoke("pi:http:readFile", projectId, relativePath),

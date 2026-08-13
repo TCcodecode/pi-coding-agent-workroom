@@ -75,7 +75,9 @@ out/renderer/*
 
 ### 自动更新边界
 
-第一阶段只提供“检查 GitHub Releases + 手动下载”。未签名 macOS 包不启用原地自更新，避免更新流程遇到 Gatekeeper 拒绝或留下半更新状态。待 macOS 签名/公证稳定后，再引入 `electron-updater` 和 `latest.yml`/`app-update.yml` 等平台更新元数据。
+Windows 的 NSIS 安装版与 Linux AppImage 使用 `electron-updater`：启动后只检查新版，左下角显示升级点；用户点击后才下载，下载完成后再次确认重启安装。`.zip`、`.deb` 保持手动更新。Release workflow 上传 `latest*.yml` 与 `.blockmap` 元数据，供客户端验证和下载更新。
+
+未签名 macOS 包不启用原地自更新，避免更新流程遇到 Gatekeeper 拒绝或留下半更新状态。待 macOS 签名/公证稳定后，再打开同一个 `electron-updater` 管道的 macOS 分支。
 
 ## 4. 实施步骤
 

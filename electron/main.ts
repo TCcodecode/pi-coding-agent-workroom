@@ -10,6 +10,7 @@ import { setProjectCatalogPath } from "./projectCatalog.js";
 import { CodeIndexService } from "./indexService.js";
 import { sessionCompletionNotification, shouldNotifySessionCompleted } from "./sessionNotifications.js";
 import { HttpWorkbenchStore, setHttpWorkbenchUserDataPath } from "./httpWorkbench.js";
+import { UpdateService } from "./updates.js";
 
 // The main bundle is ESM (electron-vite), where __dirname is not defined.
 const __dirname = import.meta.dirname;
@@ -30,6 +31,9 @@ async function getGitBranch(cwd: string): Promise<string | undefined> {
 }
 
 let mainWindow: BrowserWindow | undefined;
+const updates = new UpdateService((state) => {
+  BrowserWindow.getAllWindows().forEach((window) => window.webContents.send("pi:updateState", state));
+});
 const piHost = new PiHost({
   workspaceId: "local",
   openExternal: (url) => void shell.openExternal(url),
@@ -51,6 +55,10 @@ function kickIndex(cwd: string | undefined): void {
 }
 
 function registerPiIpc() {
+  ipcMain.handle("pi:getUpdateState", () => updates.getState());
+  ipcMain.handle("pi:checkForUpdate", () => updates.check());
+  ipcMain.handle("pi:downloadUpdate", () => updates.download());
+  ipcMain.handle("pi:installUpdate", () => updates.install());
   ipcMain.handle("pi:getSnapshot", async () => ({ ...piHost.snapshot(), sessions: await piHost.listSessions() }));
   ipcMain.handle("pi:chooseWorkspace", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
@@ -402,6 +410,7 @@ app.whenReady().then(() => {
   installApplicationMenu();
   registerPiIpc();
   createWindow();
+  updates.start();
   // Pre-download rg/fd in the background so grep/find are ready without blocking startup.
   void piHost.warmupTools();
   app.on("activate", () => {

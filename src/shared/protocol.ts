@@ -569,6 +569,20 @@ export interface ComposerImageAttachmentFile {
   name: string;
 }
 
+export type AppUpdateStatus = "idle" | "unsupported" | "checking" | "available" | "downloading" | "downloaded" | "error";
+
+/** A serializable view of the app updater; no release asset URLs are exposed to the renderer. */
+export interface AppUpdateState {
+  status: AppUpdateStatus;
+  currentVersion: string;
+  version?: string;
+  releaseName?: string;
+  releaseNotes?: string;
+  releaseDate?: string;
+  progress?: number;
+  message?: string;
+}
+
 export interface PiApi {
   getSnapshot(): Promise<PiSnapshot>;
   chooseWorkspace(): Promise<string | undefined>;
@@ -686,6 +700,11 @@ export interface PiApi {
   importCursorMcp(): Promise<{ imported: string[]; skipped: string[] }>;
   /** Open the project MCP override file (.pi/mcp.json) in the default editor. */
   openMcpConfigFile(cwd?: string): Promise<void>;
+  getUpdateState(): Promise<AppUpdateState>;
+  checkForUpdate(): Promise<void>;
+  downloadUpdate(): Promise<void>;
+  installUpdate(): Promise<void>;
+  onUpdateState(listener: (state: AppUpdateState) => void): () => void;
   http?: HttpApi;
   onEvent(listener: (event: PiEvent) => void): () => void;
 }

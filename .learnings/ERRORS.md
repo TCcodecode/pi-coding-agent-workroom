@@ -4,6 +4,62 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20260814-001] updater_api_integration
+
+**Logged**: 2026-08-14T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Adding required updater IPC methods left the full PiApi test fake incomplete; the dependency insertion also duplicated an existing key.
+
+### Error
+```text
+Type PiApi fake is missing getUpdateState, checkForUpdate, downloadUpdate, installUpdate, onUpdateState
+Duplicate key "electron-updater" in package.json
+```
+
+### Context
+- The first typecheck after implementing optional user-initiated updates caught both issues.
+- No release or user data was affected.
+
+### Suggested Fix
+Update complete PiApi fakes whenever the protocol grows, and inspect dependency placement before patching package.json.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/renderer/app.send-flow.test.tsx, package.json
+
+---
+
+## [ERR-20260814-002] updater_release_name_nullability
+
+**Logged**: 2026-08-14T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: backend
+
+### Summary
+electron-updater permits a null release name while the renderer update protocol intentionally exposes optional strings only.
+
+### Error
+```text
+Type 'string | null | undefined' is not assignable to type 'string | undefined'
+```
+
+### Context
+- Typecheck caught the value boundary in the updater state mapper.
+
+### Suggested Fix
+Normalize nullable upstream metadata to undefined before crossing the IPC protocol.
+
+### Metadata
+- Reproducible: yes
+- Related Files: electron/updates.ts, src/shared/protocol.ts
+
+---
+
 ## [ERR-20260812-004] global_fake_session_behavior
 
 **Logged**: 2026-08-12T00:00:00+08:00

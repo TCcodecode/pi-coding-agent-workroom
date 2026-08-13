@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import type {
+  AppUpdateState,
   LiveSessionSummary,
   ProjectSummary,
   SessionStatus,
@@ -49,6 +50,15 @@ export interface SessionSidebarProps {
   onRevealInFolder: (path: string) => void;
   loadSessions: (projectPath: string) => Promise<SessionSummary[]>;
   onOpenSettings: () => void;
+  updateState?: AppUpdateState;
+  onUpdateAction?: () => void;
+}
+
+function updateLabel(state: AppUpdateState): string | undefined {
+  if (state.status === "available") return `Update to ${state.version ?? "new version"}`;
+  if (state.status === "downloading") return `Downloading update${state.progress === undefined ? "…" : ` ${state.progress}%`}`;
+  if (state.status === "downloaded") return "Restart to update";
+  return undefined;
 }
 
 function IconButton({
@@ -106,6 +116,8 @@ export function SessionSidebar({
   onRevealInFolder,
   loadSessions,
   onOpenSettings,
+  updateState,
+  onUpdateAction,
 }: SessionSidebarProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadExpandedMap());
@@ -632,6 +644,20 @@ export function SessionSidebar({
       </div>
 
       <div className="sidebar-bottom">
+        {updateState && updateLabel(updateState) ? (
+          <button
+            type="button"
+            className={`sidebar-update ${updateState.status}`}
+            onClick={onUpdateAction}
+            disabled={updateState.status === "downloading" || !onUpdateAction}
+            aria-label={updateLabel(updateState)}
+            title={updateState.status === "available" ? "Download update" : updateLabel(updateState)}
+          >
+            <span className="sidebar-update-dot" aria-hidden />
+            <span className="sidebar-user-label">{updateLabel(updateState)}</span>
+            <AppIcon name={updateState.status === "downloaded" ? "check" : "circleDot"} size="sm" />
+          </button>
+        ) : null}
         <button type="button" className="sidebar-user" onClick={onOpenSettings} aria-label="Settings">
           <span className="sidebar-user-label">Settings</span>
           <AppIcon name="settings" size="sm" />

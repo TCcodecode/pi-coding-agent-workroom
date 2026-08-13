@@ -146,6 +146,15 @@ xattr -dr com.apple.quarantine "/Applications/Pi Desk.app"
 这只移除该应用的下载隔离标记；不要为了安装 Pi Desk 全局关闭 Gatekeeper。
 获得 Developer ID 证书并完成公证后，macOS 会恢复普通双击启动流程。
 
+## 更新
+
+Windows 的 NSIS 安装版和 Linux 的 AppImage 会在启动后静默检查 GitHub Release。
+有新版时，左下角会出现升级提示；点击后才会下载，下载完成后再由你确认重启安装，
+不会强制升级。`.zip`、`.deb`、`.dmg` 安装方式仍通过下一次下载更新。
+
+由于 macOS 的原地更新要求应用具有 Developer ID 签名，当前未签名 macOS 版本不提供
+应用内更新；待签名和公证上线后，用户无需更改安装方式即可获得同样的升级提示。
+
 ## 从源码运行
 
 当前项目以源码运行和本地开发为主：
