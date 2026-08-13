@@ -175,7 +175,7 @@ describe("Timeline", () => {
     expect(screen.getByText("Read").closest(".tool-item")).not.toHaveTextContent("via MCP");
   });
 
-  test("shows a compact thinking summary, duration, and on-demand body", () => {
+  test("shows a compact thinking duration and on-demand body", () => {
     const items: TimelineItem[] = [
       {
         id: "thinking-1",
@@ -188,12 +188,13 @@ describe("Timeline", () => {
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
-    expect(screen.getByText("First I inspect the failing test.")).toBeInTheDocument();
-    expect(screen.getByText("1.2s")).toBeInTheDocument();
+    // Metadata-first: the duration is the headline, not the raw first line.
+    expect(screen.getByText("Thinking · 1.2s")).toBeInTheDocument();
+    expect(screen.queryByText("First I inspect the failing test.")).not.toBeInTheDocument();
     expect(screen.queryByText("Then I update the assertion.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /expand thinking/i }));
     expect(screen.getByText(/Then I update the assertion\./)).toBeInTheDocument();
+    expect(screen.getByText(/First I inspect the failing test\./)).toBeInTheDocument();
   });
 
   test("shows a direct error state for a failed action", () => {
@@ -352,5 +353,121 @@ describe("Timeline tool grouping", () => {
 
     expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
     expect(screen.getByText("1.1s")).toBeInTheDocument();
+  });
+
+  test("absorbs thinking between grouped tools and reveals it when expanded", () => {
+    const items: TimelineItem[] = [
+      { id: "bash-1", kind: "tool", toolCallId: "bash-1", toolName: "bash", input: '{"command":"a"}', status: "completed" },
+      { id: "think-1", kind: "thinking", content: "Between the commands I decide on the next step.", status: "completed" },
+      { id: "bash-2", kind: "tool", toolCallId: "bash-2", toolName: "bash", input: '{"command":"b"}', status: "completed" },
+    ];
+    render(<Timeline items={items} />);
+
+    // No standalone thinking row; the group is the single visual unit.
+    expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
+    expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Between the commands/)).not.toBeInTheDocument();
+
+    // Expanding the group reveals the absorbed thinking as a nested row.
+    fireEvent.click(screen.getByRole("button", { name: /expand ran 2 commands/i }));
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.queryByText(/Between the commands/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /expand thinking/i }));
+    expect(screen.getByText(/Between the commands I decide/)).toBeInTheDocument();
+  });
+
+  test("keeps standalone thinking visible when it is not next to grouped tools", () => {
+    const items: TimelineItem[] = [
+      { id: "think-1", kind: "thinking", content: "A standalone thought.", status: "completed" },
+      { id: "bash-1", kind: "tool", toolCallId: "bash-1", toolName: "bash", input: '{"command":"a"}', status: "completed" },
+    ];
+    render(<Timeline items={items} />);
+
+    // thinking before the run stays visible; a single bash stays individual.
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+  });
+});
+
+describe("Timeline dividers", () => {
+  test("renders a compaction divider with its summary", () => {
+    render(<Timeline items={[
+      { id: "d1", kind: "divider", label: "compacted", detail: "kept key decisions", status: "completed" },
+    ]} />);
+
+    expect(screen.getByText("Context compacted")).toBeInTheDocument();
+    expect(screen.getByText("kept key decisions")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  test("renders a live compaction state while it is running", () => {
+    render(<Timeline items={[
+      { id: "d1", kind: "divider", label: "compacting", status: "running" },
+    ]} />);
+
+    expect(screen.getByText("Compacting context…")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveClass("running");
+  });
+
+  test("renders an auto-retry divider", () => {
+    render(<Timeline items={[
+      { id: "d1", kind: "divider", label: "retried", status: "completed" },
+    ]} />);
+
+    expect(screen.getByText("Auto-retried")).toBeInTheDocument();
+  });
+});
+
+describe("Timeline task grouping", () => {
+  const taskTodo = (id: string, content: string, status: "pending" | "in_progress" | "completed") => ({ id, content, status, priority: "high" as const });
+  const bash = (id: string, command: string, taskId?: string): TimelineItem => ({
+    id,
+    kind: "tool",
+    toolCallId: id,
+    toolName: "bash",
+    input: JSON.stringify({ command }),
+    status: "completed",
+    ...(taskId ? { taskId } : {}),
+  });
+
+  test("groups tool rows under the in-progress todo header", () => {
+    render(<Timeline
+      items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-1")]}
+      todos={[taskTodo("task-1", "Explore the repo", "in_progress")]}
+    />);
+
+    expect(screen.getByText("Explore the repo")).toBeInTheDocument();
+    expect(screen.getByText("in_progress")).toBeInTheDocument();
+    expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
+    const task = screen.getByText("Explore the repo").closest(".timeline-task");
+    expect(task).not.toBeNull();
+    expect(task!.querySelector(".timeline-task-body")).not.toBeNull();
+  });
+
+  test("keeps rows without a matching todo ungrouped", () => {
+    render(<Timeline items={[bash("bash-1", "a")]} todos={[]} />);
+
+    expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("completed")).not.toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  test("starts a new task section when the trace moves to another todo", () => {
+    render(<Timeline
+      items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-2")]}
+      todos={[
+        taskTodo("task-1", "Explore", "completed"),
+        taskTodo("task-2", "Implement", "in_progress"),
+      ]}
+    />);
+
+    const headers = screen.getAllByText(/^(Explore|Implement)$/);
+    expect(headers).toHaveLength(2);
+    // Tools from different todos are not merged into one group.
+    const firstTask = headers[0]!.closest(".timeline-task")!;
+    const secondTask = headers[1]!.closest(".timeline-task")!;
+    expect(firstTask.querySelectorAll(".tool-item")).toHaveLength(1);
+    expect(secondTask.querySelectorAll(".tool-item")).toHaveLength(1);
   });
 });

@@ -56,6 +56,8 @@ const emptySession: SessionState = {
 export type AppState = PiSnapshot & {
   providerLogins: Record<string, ProviderLoginState>;
   indexStatus: IndexStatus | null;
+  /** Id of the todo currently in_progress; trace rows are grouped under it. */
+  activeTaskId?: string;
 };
 
 export function createInitialState(): AppState {
@@ -74,11 +76,39 @@ export function createInitialState(): AppState {
     tools: [],
     providerLogins: {},
     indexStatus: null,
+    activeTaskId: undefined,
   };
 }
 
 function updateTimelineItem(timeline: TimelineItem[], id: string, update: (item: TimelineItem) => TimelineItem): TimelineItem[] {
   return timeline.map((item) => (item.id === id ? update(item) : item));
+}
+
+/**
+ * Update the last timeline divider carrying `fromLabel` in place. Used to
+ * promote a started (compacting/retrying) divider to its completed state.
+ */
+type DividerItem = Extract<TimelineItem, { kind: "divider" }>;
+type DividerLabel = DividerItem["label"];
+
+/**
+ * Update the last timeline divider carrying `fromLabel` in place. Used to
+ * promote a started (compacting/retrying) divider to its completed state.
+ */
+function updateLastDivider(
+  timeline: TimelineItem[],
+  fromLabel: DividerLabel,
+  update: (item: DividerItem) => DividerItem,
+): TimelineItem[] {
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const item = timeline[i]!;
+    if (item.kind === "divider" && item.label === fromLabel) {
+      const next = [...timeline];
+      next[i] = update(item);
+      return next;
+    }
+  }
+  return timeline;
 }
 
 export function reducePiEvent(state: AppState, event: PiEvent): AppState {
@@ -100,6 +130,7 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
         toolCalls: {},
         queue: { steering: [], followUp: [] },
         lastError: undefined,
+        activeTaskId: undefined,
       };
     case "user_message_created": {
       // Mirror sidebar naming: until an explicit name exists, use first user text as title.
@@ -155,7 +186,7 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
         ...state,
         timeline: [
           ...state.timeline,
-          { id: event.payload.messageId, kind: "thinking", content: "", status: "streaming", startedAt: event.timestamp },
+          { id: event.payload.messageId, kind: "thinking", content: "", status: "streaming", startedAt: event.timestamp, ...(state.activeTaskId ? { taskId: state.activeTaskId } : {}) },
         ],
       };
     case "thinking_delta":
@@ -183,6 +214,7 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
             input: tool.input,
             status: tool.status,
             startedAt: event.timestamp,
+            ...(state.activeTaskId ? { taskId: state.activeTaskId } : {}),
           },
         ],
       };
@@ -267,16 +299,63 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
       };
     case "agent_started":
     case "turn_started":
-    case "compaction_started":
-    case "auto_retry_started":
       return { ...state, session: { ...state.session, status: "running" } };
+    case "compaction_started":
+      return {
+        ...state,
+        session: { ...state.session, status: "running" },
+        timeline: [
+          ...state.timeline,
+          {
+            id: event.eventId,
+            kind: "divider",
+            label: "compacting",
+            status: "running",
+            startedAt: event.timestamp,
+          },
+        ],
+      };
+    case "auto_retry_started":
+      return {
+        ...state,
+        session: { ...state.session, status: "running" },
+        timeline: [
+          ...state.timeline,
+          {
+            id: event.eventId,
+            kind: "divider",
+            label: "retrying",
+            status: "running",
+            startedAt: event.timestamp,
+          },
+        ],
+      };
     case "turn_completed":
       return { ...state, session: { ...state.session, status: "completed" } };
     // Compaction and retry are sub-steps of an active agent run. Their end
-    // must not make the global run indicator appear finished before agent_end.
+    // promotes the divider to its finished state but must not make the global
+    // run indicator appear finished before agent_end.
     case "compaction_completed":
+      return {
+        ...state,
+        timeline: updateLastDivider(state.timeline, "compacting", (item) => ({
+          ...item,
+          label: "compacted",
+          status: "completed",
+          completedAt: event.timestamp,
+          ...(event.payload.summary ? { detail: event.payload.summary } : {}),
+        })),
+      };
     case "auto_retry_completed":
-      return state;
+      return {
+        ...state,
+        timeline: updateLastDivider(state.timeline, "retrying", (item) => ({
+          ...item,
+          label: "retried",
+          status: "completed",
+          completedAt: event.timestamp,
+        })),
+      };
     case "model_select":
       return { ...state, session: { ...state.session, model: event.payload.model ?? state.session.model, provider: event.payload.provider ?? state.session.provider } };
     case "session_completed":
@@ -336,8 +415,10 @@ export function reducePiEvent(state: AppState, event: PiEvent): AppState {
       const currentRevision = state.session.todosRevision ?? 0;
       const incomingRevision = event.payload.revision ?? currentRevision;
       if (incomingRevision < currentRevision) return state;
+      const activeTaskId = event.payload.todos.find((todo) => todo.status === "in_progress")?.id;
       return {
         ...state,
+        activeTaskId,
         session: {
           ...state.session,
           todos: event.payload.todos,
@@ -479,6 +560,7 @@ export const useAppStore = create<AppStore>((set) => {
           timeline: snapshot.timeline ?? [],
           toolCalls: snapshot.toolCalls ?? {},
           session: nextSession,
+          activeTaskId: nextSession.todos?.find((todo) => todo.status === "in_progress")?.id,
         };
       });
     },

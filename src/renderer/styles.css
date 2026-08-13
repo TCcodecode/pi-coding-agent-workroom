@@ -2320,6 +2320,25 @@ input[type="checkbox"]:focus-visible {
 .markdown img { max-width: 100%; border-radius: 6px; }
 .turn { min-width: 0; }
 .turn + .turn { margin-top: 8px; padding-top: 6px; border-top: 1px solid #2a2a30; }
+.timeline-divider { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 2px 4px; color: #6f7580; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.timeline-divider-line { flex: 1; min-width: 8px; height: 1px; background: #2a2a30; }
+.timeline-divider-label { display: inline-flex; align-items: center; gap: 5px; flex: none; max-width: 100%; white-space: nowrap; }
+.timeline-divider-label .timeline-icon,
+.timeline-divider-label svg { flex: none; }
+.timeline-divider-detail { overflow: hidden; color: #8f96a3; font-size: 10px; font-weight: 500; letter-spacing: 0; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+.timeline-divider.running .timeline-divider-label { animation: timeline-pulse 1.2s ease-in-out infinite; }
+.timeline-task { min-width: 0; margin: 3px 0 1px; }
+.timeline-task-header { display: flex; align-items: center; gap: 7px; min-height: 22px; padding: 2px 4px; border-radius: 6px; color: #d3d6dd; background: rgba(255, 255, 255, .04); font-size: 11px; }
+.timeline-task-mark { display: inline-grid; place-items: center; width: 14px; height: 14px; color: #8f96a3; flex: none; }
+.timeline-task-mark.completed { color: #73c998; }
+.timeline-task-mark.in_progress { color: #e0b461; animation: timeline-pulse 1.2s ease-in-out infinite; }
+.timeline-task-mark.cancelled { color: #e49b8d; }
+.timeline-task-title { flex: 1; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-task-state { flex: none; padding: 1px 5px; border-radius: 4px; color: #8f96a3; background: #23252b; font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.timeline-task-state.in_progress { color: #e0b461; background: #30271a; }
+.timeline-task-state.completed { color: #73c998; background: #1c2a22; }
+.timeline-task-state.cancelled { color: #e49b8d; background: #2b1d1b; }
+.timeline-task-body { display: grid; gap: 2px; min-width: 0; margin: 2px 0 2px 12px; padding-left: 10px; border-left: 1px solid #2f3238; }
 .thinking-summary { flex: 1; min-width: 0; overflow: hidden; color: #8f96a3; font-size: 10px; font-style: italic; text-overflow: ellipsis; white-space: nowrap; }
 .thinking-body { margin: 4px 4px 4px 27px; padding: 5px 9px; border-left: 1px solid #484052; color: #aaa5bb; font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .thinking-item.streaming .timeline-icon.thinking { animation: timeline-pulse 1.2s ease-in-out infinite; }
@@ -4298,6 +4317,17 @@ html.motion-disabled *::after {
 .theme-light .tool-inline-preview { color: var(--text-secondary); }
 .theme-light .thinking-summary,
 .theme-light .thinking-body { color: var(--text-secondary); }
+.theme-light .timeline-divider,
+.theme-light .timeline-divider-detail { color: var(--text-secondary); }
+.theme-light .timeline-divider-line { background: var(--border-subtle); }
+.theme-light .timeline-task-header { color: var(--text-primary); background: var(--surface-hover); }
+.theme-light .timeline-task-body { border-left-color: var(--border-subtle); }
+.theme-light .timeline-task-state { color: var(--text-secondary); background: var(--surface-code); }
+.theme-light .timeline-task-state.in_progress { color: var(--warning); background: #f7eeda; }
+.theme-light .timeline-task-state.completed { color: var(--success); background: #e2f1e8; }
+.theme-light .timeline-task-state.cancelled { color: var(--danger); background: #f9e5e1; }
+.theme-light .timeline-task-mark.completed { color: var(--success); }
+.theme-light .timeline-task-mark.in_progress { color: var(--warning); }
 .theme-light .thinking-body { border-left-color: var(--border-strong); }
 .theme-light .timeline-item-heading.toggleable:hover { color: var(--text-primary); background: var(--surface-hover); }
 .theme-light .timeline-item-heading.toggleable:focus-visible { outline-color: var(--accent-primary); background: var(--accent-soft); }

@@ -1501,6 +1501,7 @@ export function App() {
   const planConversation = state.timeline.length > 0 ? (
     <Timeline
       items={state.timeline}
+      todos={state.session.todos}
       onReviewChanges={openChanges}
       reviewOpen={inspectorOpen && rightPane === "changes"}
       selectedReviewPath={selectedChangePath}

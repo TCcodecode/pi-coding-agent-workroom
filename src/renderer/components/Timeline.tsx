@@ -1,10 +1,12 @@
-import { memo, useState } from "react";
-import type { FileChangeSummary, TimelineItem } from "../../shared/protocol";
+import { Fragment, memo, useState } from "react";
+import type { FileChangeSummary, SessionTodoItem, TimelineItem } from "../../shared/protocol";
 import { Markdown } from "./Markdown";
 import { AppIcon, type AppIconName } from "./icons";
 
 export interface TimelineProps {
   items: TimelineItem[];
+  /** Current session checklist; used to label task-grouped trace rows. */
+  todos?: SessionTodoItem[];
   onReviewChanges?: (path?: string) => void;
   reviewOpen?: boolean;
   selectedReviewPath?: string;
@@ -14,6 +16,7 @@ export interface TimelineProps {
 
 export const Timeline = memo(function Timeline({
   items,
+  todos = [],
   onReviewChanges,
   reviewOpen = false,
   selectedReviewPath,
@@ -31,6 +34,7 @@ export const Timeline = memo(function Timeline({
         <Turn
           key={turn[0]?.id ?? "turn"}
           items={turn}
+          todos={todos}
           onReviewChanges={onReviewChanges}
           reviewOpen={reviewOpen}
           selectedReviewPath={selectedReviewPath}
@@ -46,6 +50,7 @@ export const Timeline = memo(function Timeline({
   // status/queue/diagnostics events no longer force this subtree to render.
   return (
     prev.items === next.items &&
+    prev.todos === next.todos &&
     prev.reviewOpen === next.reviewOpen &&
     prev.selectedReviewPath === next.selectedReviewPath
   );
@@ -74,12 +79,15 @@ export interface ToolGroup {
   id: string;
   category: ToolCategory;
   items: ToolItem[];
+  /** Completed thinking blocks absorbed from between the tools; shown expanded. */
+  thinking: TimelineItem[];
 }
 
 type TimelineEntry = TimelineItem | ToolGroup;
 
 const Turn = memo(function Turn({
   items,
+  todos,
   onReviewChanges,
   reviewOpen,
   selectedReviewPath,
@@ -87,6 +95,7 @@ const Turn = memo(function Turn({
   onUndoChanges,
 }: {
   items: TimelineItem[];
+  todos: SessionTodoItem[];
   onReviewChanges?: (path?: string) => void;
   reviewOpen: boolean;
   selectedReviewPath?: string;
@@ -96,11 +105,24 @@ const Turn = memo(function Turn({
   const trace = mergeTimelineToolCalls(items);
   const changes = summarizeFileChanges(trace);
   const entries = groupTimelineTools(trace);
+  const todosById = new Map(todos.map((todo) => [todo.id, todo]));
   return (
     <div className="turn">
-      {entries.map((entry) => entry.kind === "toolGroup"
-        ? <ToolGroupView key={entry.id} group={entry} />
-        : <TimelineItemView key={entry.id} item={entry} />)}
+      {groupEntriesByTask(entries).map((chunk) => {
+        const body = chunk.entries.map((entry) => entry.kind === "toolGroup"
+          ? <ToolGroupView key={entry.id} group={entry} />
+          : <TimelineItemView key={entry.id} item={entry} />);
+        const todo = chunk.taskId ? todosById.get(chunk.taskId) : undefined;
+        if (!todo) {
+          return <Fragment key={chunk.entries[0]?.id ?? "loose"}>{body}</Fragment>;
+        }
+        return (
+          <div className="timeline-task" key={chunk.taskId}>
+            <TaskHeader todo={todo} />
+            <div className="timeline-task-body">{body}</div>
+          </div>
+        );
+      })}
       {changes && (
         <ChangeSummary
           key="changes"
@@ -127,7 +149,8 @@ const Turn = memo(function Turn({
     prev.reviewOpen === next.reviewOpen &&
     prev.selectedReviewPath === next.selectedReviewPath &&
     prev.onCloseReview === next.onCloseReview &&
-    prev.onUndoChanges === next.onUndoChanges
+    prev.onUndoChanges === next.onUndoChanges &&
+    prev.todos === next.todos
   );
 });
 
@@ -431,40 +454,117 @@ function describeTool(item: ToolItem): ToolPresentation {
  * Collapse consecutive completed tool calls of a noisy category into one
  * expandable row. Hard breaks (user/assistant text, notifications, errors,
  * in-flight tools) and non-aggregatable tools flush any pending group.
+ * Completed thinking blocks between the tools are absorbed into the group
+ * instead of eating their own row; standalone thinking stays visible.
  */
 export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
   const result: TimelineEntry[] = [];
   let group: ToolItem[] = [];
   let groupCategory: ToolCategory | undefined;
+  let groupTaskId: string | undefined;
+  let groupThinking: TimelineItem[] = [];
+  let pendingThinking: TimelineItem[] = [];
 
   const flush = () => {
-    if (group.length === 1) result.push(group[0]!);
-    else if (group.length > 1) {
-      result.push({ kind: "toolGroup", id: `group:${group[0]!.id}`, category: groupCategory!, items: group });
+    if (group.length === 1) {
+      result.push(...groupThinking);
+      result.push(group[0]!);
+    } else if (group.length > 1) {
+      result.push({
+        kind: "toolGroup",
+        id: `group:${group[0]!.id}`,
+        category: groupCategory!,
+        items: group,
+        thinking: groupThinking,
+      });
     }
     group = [];
     groupCategory = undefined;
+    groupTaskId = undefined;
+    groupThinking = [];
+  };
+
+  const flushPendingThinking = () => {
+    if (pendingThinking.length > 0) {
+      result.push(...pendingThinking);
+      pendingThinking = [];
+    }
   };
 
   for (const item of trace) {
+    if (item.kind === "thinking" && item.status !== "streaming") {
+      pendingThinking.push(item);
+      continue;
+    }
     if (item.kind === "tool" && item.status === "completed") {
       const category = describeTool(item).category;
       if (AGGREGATABLE_CATEGORIES.has(category)) {
-        if (groupCategory === category) {
+        // Never merge tools that belong to different todos: the group header
+        // would mislabel half the run under the wrong task.
+        if (groupCategory === category && groupTaskId === item.taskId) {
           group.push(item);
+          groupThinking.push(...pendingThinking);
+          pendingThinking = [];
           continue;
         }
         flush();
         group = [item];
         groupCategory = category;
+        groupTaskId = item.taskId;
+        groupThinking = [...pendingThinking];
+        pendingThinking = [];
         continue;
       }
     }
     flush();
+    flushPendingThinking();
     result.push(item);
   }
   flush();
+  flushPendingThinking();
   return result;
+}
+
+/** The task a trace row belongs to (groups use their first tool's task). */
+function entryTaskId(entry: TimelineEntry): string | undefined {
+  return entry.kind === "toolGroup" ? entry.items[0]?.taskId : entry.taskId;
+}
+
+interface TaskChunk {
+  taskId?: string;
+  entries: TimelineEntry[];
+}
+
+/** Split entries into runs sharing one in-progress todo; loose rows stand alone. */
+function groupEntriesByTask(entries: TimelineEntry[]): TaskChunk[] {
+  const chunks: TaskChunk[] = [];
+  let current: TaskChunk | undefined;
+  for (const entry of entries) {
+    const taskId = entryTaskId(entry);
+    if (!current || current.taskId !== taskId) {
+      current = { taskId, entries: [] };
+      chunks.push(current);
+    }
+    current.entries.push(entry);
+  }
+  return chunks;
+}
+
+function TaskHeader({ todo }: { todo: SessionTodoItem }) {
+  const icon: AppIconName =
+    todo.status === "completed" ? "circleCheck"
+    : todo.status === "in_progress" ? "circleDot"
+    : todo.status === "cancelled" ? "x"
+    : "circle";
+  return (
+    <div className="timeline-task-header" title={todo.content}>
+      <span className={`timeline-task-mark ${todo.status}`} aria-hidden>
+        <AppIcon name={icon} size="xs" />
+      </span>
+      <span className="timeline-task-title">{todo.content}</span>
+      <span className={`timeline-task-state ${todo.status}`}>{todo.status}</span>
+    </div>
+  );
 }
 
 function oneLine(text: string, limit = 120): string | undefined {
@@ -540,6 +640,7 @@ function ToolGroupView({ group }: { group: ToolGroup }) {
       </div>
       {expanded && (
         <div className="tool-group-body">
+          {group.thinking.map((thinking) => <TimelineItemView key={thinking.id} item={thinking} />)}
           {group.items.map((tool) => <TimelineItemView key={tool.id} item={tool} />)}
         </div>
       )}
@@ -550,6 +651,25 @@ function ToolGroupView({ group }: { group: ToolGroup }) {
 const TimelineItemView = memo(function TimelineItemView({ item }: { item: TimelineItem }) {
   const [expanded, setExpanded] = useState(false);
   const toggle = () => setExpanded((value) => !value);
+  if (item.kind === "divider") {
+    const retry = item.label.startsWith("retry");
+    const labelText =
+      item.label === "compacting" ? "Compacting context…"
+      : item.label === "compacted" ? "Context compacted"
+      : item.label === "retrying" ? "Retrying…"
+      : "Auto-retried";
+    return (
+      <div className={`timeline-divider ${item.status}`} role="status">
+        <span className="timeline-divider-line" aria-hidden />
+        <span className="timeline-divider-label">
+          <AppIcon name={retry ? "circleDot" : "history"} size="xs" />
+          {labelText}
+          {item.detail && <span className="timeline-divider-detail" title={item.detail}>{item.detail}</span>}
+        </span>
+        <span className="timeline-divider-line" aria-hidden />
+      </div>
+    );
+  }
   if (item.kind === "tool") {
     const presentation = describeTool(item);
     const preview = presentation.preview || toolPreview(item.input) || toolPreview(item.output ?? "");
@@ -593,8 +713,9 @@ const TimelineItemView = memo(function TimelineItemView({ item }: { item: Timeli
   }
 
   if (item.kind === "thinking") {
-    const summary = thinkingSummary(item.content);
     const duration = timelineDuration(item);
+    const summary = thinkingSummary(item.content);
+    const label = duration ? `Thinking · ${duration}` : "Thinking";
     return (
       <article className={`timeline-item thinking-item ${item.status}`}>
         <div
@@ -605,11 +726,10 @@ const TimelineItemView = memo(function TimelineItemView({ item }: { item: Timeli
           aria-label={`${expanded ? "Collapse" : "Expand"} thinking`}
           onClick={toggle}
           onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
+          title={summary}
         >
           <span className="timeline-icon thinking" aria-hidden><AppIcon name="brain" size="xs" /></span>
-          <strong>Thinking</strong>
-          {summary && <span className="thinking-summary">{summary}</span>}
-          {duration && <span className="timeline-duration">{duration}</span>}
+          <strong>{label}</strong>
           {item.status === "streaming" && <span className="timeline-status">running</span>}
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </div>

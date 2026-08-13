@@ -195,6 +195,8 @@ export type TimelineItem =
       kind: "user" | "assistant" | "thinking" | "notification" | "error";
       content: string;
       status: "streaming" | "completed" | "error";
+      /** Id of the in-progress todo this row belongs to, if any. */
+      taskId?: string;
       /** Event time from the host; absent for older persisted sessions. */
       startedAt?: string;
       completedAt?: string;
@@ -208,7 +210,22 @@ export type TimelineItem =
       output?: string;
       status: "running" | "completed" | "error";
       change?: FileChangeSummary;
+      /** Id of the in-progress todo this trace row belongs to, if any. */
+      taskId?: string;
       /** Event time from the host; absent for older persisted sessions. */
+      startedAt?: string;
+      completedAt?: string;
+    }
+  | {
+      id: string;
+      kind: "divider";
+      /** Why the stream is split: context compaction or an auto retry. */
+      label: "compacting" | "compacted" | "retrying" | "retried";
+      /** Compaction summary, when available. */
+      detail?: string;
+      status: "running" | "completed";
+      /** Id of the in-progress todo this row belongs to, if any. */
+      taskId?: string;
       startedAt?: string;
       completedAt?: string;
     };

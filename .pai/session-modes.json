@@ -299,7 +299,7 @@
     "019ff6d0-0e8e-79b0-a84d-e375fd3fbaf2": {
       "mode": "execute",
       "executeProfile": {
-        "modelKey": "deepseek/deepseek-v4-pro",
+        "modelKey": "deepseek/deepseek-v4-flash",
         "thinkingLevel": "high"
       },
       "planProfile": {

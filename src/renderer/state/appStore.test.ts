@@ -95,10 +95,74 @@ describe("reducePiEvent", () => {
     let state = createInitialState();
     state = reducePiEvent(state, event("compaction_started", {}));
     expect(state.session.status).toBe("running");
-    state = reducePiEvent(state, event("compaction_completed", { summary: "done" }));
+    expect(state.timeline[0]).toEqual(expect.objectContaining({
+      id: "compaction_started-1",
+      kind: "divider",
+      label: "compacting",
+      status: "running",
+    }));
+    state = reducePiEvent(state, event("compaction_completed", { summary: "kept key decisions" }));
     expect(state.session.status).toBe("running");
+    expect(state.timeline[0]).toEqual(expect.objectContaining({
+      kind: "divider",
+      label: "compacted",
+      status: "completed",
+      detail: "kept key decisions",
+    }));
     state = reducePiEvent(state, event("auto_retry_completed", {}));
     expect(state.session.status).toBe("running");
+  });
+
+  test("adds a retry divider when the agent auto-retries", () => {
+    let state = createInitialState();
+    state = reducePiEvent(state, event("auto_retry_started", {}));
+    expect(state.timeline.at(-1)).toEqual(expect.objectContaining({
+      kind: "divider",
+      label: "retrying",
+      status: "running",
+    }));
+    state = reducePiEvent(state, event("auto_retry_completed", {}));
+    expect(state.timeline.at(-1)).toEqual(expect.objectContaining({
+      kind: "divider",
+      label: "retried",
+      status: "completed",
+    }));
+    expect(state.timeline).toHaveLength(1);
+  });
+
+  test("tags trace rows with the active in-progress todo id", () => {
+    let state = createInitialState();
+    state = reducePiEvent(state, event("todos_updated", {
+      todos: [
+        { id: "task-1", content: "Explore", status: "in_progress", priority: "high" },
+        { id: "task-2", content: "Implement", status: "pending", priority: "medium" },
+      ],
+      revision: 1,
+    }));
+    expect(state.activeTaskId).toBe("task-1");
+
+    state = reducePiEvent(state, event("tool_call_started", {
+      toolCallId: "tool-1",
+      toolName: "read",
+      input: '{"path":"a.ts"}',
+    }));
+    expect(state.timeline.at(-1)).toEqual(expect.objectContaining({ kind: "tool", taskId: "task-1" }));
+
+    // Moving in_progress to the next task re-tags subsequent rows.
+    state = reducePiEvent(state, event("todos_updated", {
+      todos: [
+        { id: "task-1", content: "Explore", status: "completed", priority: "high" },
+        { id: "task-2", content: "Implement", status: "in_progress", priority: "medium" },
+      ],
+      revision: 2,
+    }));
+    expect(state.activeTaskId).toBe("task-2");
+    state = reducePiEvent(state, event("tool_call_started", {
+      toolCallId: "tool-2",
+      toolName: "edit",
+      input: '{"path":"a.ts"}',
+    }));
+    expect(state.timeline.at(-1)).toEqual(expect.objectContaining({ kind: "tool", taskId: "task-2" }));
   });
 
   test("first user message becomes session title when still Untitled", () => {
