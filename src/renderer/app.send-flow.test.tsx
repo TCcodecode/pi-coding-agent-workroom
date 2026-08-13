@@ -617,6 +617,31 @@ describe("Pi Desktop end-to-end send flow", () => {
     delete (window as unknown as { pi?: PiApi }).pi;
   });
 
+  test("runs a skill command selected from the slash picker through the session prompt", async () => {
+    const { api } = makeFakeApi();
+    vi.mocked(api.getCommands).mockResolvedValue([
+      { id: "skill:watch", name: "/skill:watch", description: "Watch a video", source: "skill" },
+    ]);
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: { ...createInitialState().session, sessionId: "s1", cwd: "/tmp/project" },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    render(<App />);
+    const input = screen.getByRole("textbox", { name: /message/i });
+    fireEvent.change(input, { target: { value: "/skill:watch" } });
+    fireEvent.click(await screen.findByRole("option", { name: /skill:watch/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(api.prompt).toHaveBeenCalledWith("/skill:watch", expect.objectContaining({ sessionKey: expect.any(String) })));
+    expect(api.executeCommand).not.toHaveBeenCalled();
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
   test("shows project tree with nested sessions", async () => {
     const { api } = makeFakeApi();
     (window as unknown as { pi: PiApi }).pi = api;
@@ -634,6 +659,42 @@ describe("Pi Desktop end-to-end send flow", () => {
     expect(screen.getByRole("searchbox", { name: /search sessions/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select project project" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByRole("button", { name: /new task in project/i }).length).toBeGreaterThan(0);
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+});
+
+describe("Timeline jump-to-latest pill", () => {
+  test("appears when the user scrolls away from the bottom and dismisses on jump", async () => {
+    const { api } = makeFakeApi();
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: { ...createInitialState().session, cwd: "/tmp/project" },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+      timeline: [
+        { id: "u1", kind: "user", content: "Hello", status: "completed" },
+        { id: "a1", kind: "assistant", content: "Hi there", status: "completed" },
+      ],
+    });
+
+    const { container } = render(<App />);
+    const wrap = container.querySelector(".timeline-wrap")!;
+    expect(wrap).not.toBeNull();
+    // jsdom reports 0 layout; simulate a tall scrollable list.
+    Object.defineProperty(wrap, "scrollHeight", { value: 5000, configurable: true });
+    Object.defineProperty(wrap, "clientHeight", { value: 600, configurable: true });
+    Object.defineProperty(wrap, "scrollTop", { value: 4000, configurable: true });
+    wrap.scrollTo = vi.fn();
+
+    expect(screen.queryByRole("button", { name: /jump to latest/i })).not.toBeInTheDocument();
+    fireEvent.scroll(wrap);
+    expect(screen.getByRole("button", { name: /jump to latest/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /jump to latest/i }));
+    expect(wrap.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+    expect(screen.queryByRole("button", { name: /jump to latest/i })).not.toBeInTheDocument();
 
     delete (window as unknown as { pi?: PiApi }).pi;
   });

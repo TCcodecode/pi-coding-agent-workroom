@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { PiHost, type PiRuntimeLike, type PiSessionLike } from "./piHost.js";
 import { PlanModeStore } from "./planMode.js";
 
-function createFakeRuntime(cwd = "/tmp/project") {
+function createFakeRuntime(cwd = "/tmp/project", history: unknown[] = []) {
   const listeners = new Set<(event: unknown) => void>();
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  const customEntries: Array<{ customType: string; content: string; display: boolean; details?: unknown }> = [];
   let streaming = false;
   let steeringQueue: string[] = [];
   let followUpQueue: string[] = [];
@@ -38,7 +39,7 @@ function createFakeRuntime(cwd = "/tmp/project") {
     model: { provider: "openai", id: "gpt-5" },
     thinkingLevel: "medium",
     get isStreaming() { return streaming; },
-    get messages() { return []; },
+    get messages() { return history; },
     getActiveToolNames: () => activeToolNames,
     getAllTools: () => toolNames.map((name) => ({ name })),
     getSessionStats: () => ({ sessionFile: "/tmp/session.jsonl", sessionId: "session-1", userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }),
@@ -63,6 +64,15 @@ function createFakeRuntime(cwd = "/tmp/project") {
     reload: async () => { calls.push({ method: "reload", args: [] }); },
     getLastAssistantText: () => "",
     exportToJsonl: () => "",
+    sessionManager: {
+      getTree: () => [],
+      buildSessionContext: () => ({ messages: history }),
+      appendCustomMessageEntry: (customType: string, content: string, display: boolean, details?: unknown) => {
+        calls.push({ method: "appendCustomMessageEntry", args: [customType, content, display, details] });
+        customEntries.push({ customType, content, display, details });
+        return `custom-${customEntries.length}`;
+      },
+    },
   };
   const runtime: PiRuntimeLike = {
     session,
@@ -77,6 +87,7 @@ function createFakeRuntime(cwd = "/tmp/project") {
     runtime,
     session,
     calls,
+    customEntries,
     setStreaming: (value: boolean) => { streaming = value; },
     emit: (event: unknown) => listeners.forEach((listener) => listener(event)),
   };
@@ -1130,6 +1141,55 @@ describe("PiHost", () => {
     expect(resources.extensions[0].name).toBe("index");
   });
 
+  test("getCommands lists builtins plus extension, skill, and prompt-template commands", () => {
+    const fake = createFakeRuntime();
+    fake.session.resourceLoader = {
+      getAgentsFiles: () => ({ agentsFiles: [] }),
+      getSkills: () => ({
+        skills: [
+          { name: "watch", description: "Watch a video", filePath: "/s/watch/SKILL.md" },
+          { name: "supabase", description: "Supabase work", filePath: "/s/supabase/SKILL.md" },
+        ],
+      }),
+      getPrompts: () => ({
+        prompts: [
+          { name: "release-notes", description: "Write release notes", filePath: "/p/release-notes.md" },
+        ],
+      }),
+      getThemes: () => ({ themes: [] }),
+      getExtensions: () => ({ extensions: [], errors: [] }),
+    };
+    fake.session.extensionRunner = {
+      getRegisteredCommands: () => [
+        { name: "hello", invocationName: "hello", description: "Say hi" },
+      ],
+    };
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+    const commands = host.getCommands();
+    const names = commands.map((command) => command.name);
+    expect(names).toContain("/compact");
+    expect(names).toContain("/hello");
+    expect(names).toContain("/skill:watch");
+    expect(names).toContain("/skill:supabase");
+    expect(names).toContain("/release-notes");
+    expect(commands.find((command) => command.name === "/skill:watch")).toMatchObject({
+      source: "skill",
+      description: "Watch a video",
+    });
+    expect(commands.find((command) => command.name === "/release-notes")).toMatchObject({
+      source: "prompt",
+      description: "Write release notes",
+    });
+    expect(commands.find((command) => command.name === "/hello")).toMatchObject({ source: "extension" });
+    // Skill names without a name are skipped; builtin ids stay unique.
+    expect(new Set(commands.map((command) => command.id)).size).toBe(commands.length);
+  });
+
+  test("getCommands without a runtime returns only the builtin commands", () => {
+    const host = new PiHost({ workspaceId: "workspace-1" });
+    expect(host.getCommands().map((command) => command.name)).toEqual(["/compact", "/export", "/copy", "/reload"]);
+  });
+
   test("warmupTools pre-fetches rg and fd without throwing", async () => {
     const host = new PiHost({ workspaceId: "workspace-1" });
     await expect(host.warmupTools()).resolves.toBeUndefined();
@@ -1402,6 +1462,193 @@ describe("PiHost todo nudge", () => {
     fake.emit({ type: "tool_execution_end", toolCallId: "tr2", toolName: "todoread", isError: false, result: {} });
     fake.emit({ type: "tool_execution_end", toolCallId: "tr3", toolName: "todoread", isError: false, result: {} });
     expect(fake.session.getSteeringMessages()).toEqual([]);
+  });
+});
+
+describe("PiHost todo reconcile on turn end", () => {
+  const todoResult = (todos: Array<{ id: string; content: string; status: string }>) => ({
+    content: [{ type: "text", text: "ok" }],
+    details: { todos, updatedAt: "2026-08-08T00:00:00.000Z" },
+  });
+
+  test("closes an in_progress todo when a worked turn settles normally", async () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+    const events: Array<{ type: string; payload?: unknown }> = [];
+    host.subscribe((event) => events.push({ type: event.type, payload: event.payload }));
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: todoResult([
+        { id: "t1", content: "Explore", status: "in_progress" },
+        { id: "t2", content: "Implement", status: "completed" },
+      ]),
+    });
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "w1", toolName: "bash", isError: false, result: "ok" });
+
+    fake.emit({ type: "agent_end", messages: [{ role: "assistant", stopReason: "stop" }], willRetry: false });
+
+    expect(host.snapshot().session.todos?.map((t) => t.status)).toEqual(["completed", "completed"]);
+    const last = events.filter((e) => e.type === "todos_updated").at(-1)?.payload as { todos: Array<{ status: string }> };
+    expect(last.todos.map((t) => t.status)).toEqual(["completed", "completed"]);
+    expect(fake.session.getSteeringMessages().join(" ")).toContain("todoupdate");
+  });
+
+  test("persists the reconciled list into the session trace", async () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: todoResult([{ id: "t1", content: "Explore", status: "in_progress" }]),
+    });
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "w1", toolName: "bash", isError: false, result: "ok" });
+
+    fake.emit({ type: "agent_end", messages: [{ role: "assistant", stopReason: "stop" }], willRetry: false });
+
+    expect(fake.customEntries).toHaveLength(1);
+    const entry = fake.customEntries[0]!;
+    expect(entry.customType).toBe("session-todo");
+    expect(entry.display).toBe(false);
+    expect(entry.content).toContain("reconciled");
+    const todos = (entry.details as { todos: Array<{ status: string }> }).todos;
+    expect(todos.map((t) => t.status)).toEqual(["completed"]);
+  });
+
+  test("leaves todos untouched when the turn errors out", async () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: todoResult([{ id: "t1", content: "Explore", status: "in_progress" }]),
+    });
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "w1", toolName: "bash", isError: false, result: "ok" });
+
+    fake.emit({ type: "agent_end", messages: [{ role: "assistant", stopReason: "error", errorMessage: "boom" }], willRetry: false });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("in_progress");
+    expect(fake.session.getSteeringMessages()).toEqual([]);
+  });
+
+  test("does not reconcile when the turn did no real work", async () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: todoResult([{ id: "t1", content: "Explore", status: "in_progress" }]),
+    });
+    fake.emit({ type: "agent_end", messages: [{ role: "assistant", stopReason: "stop" }], willRetry: false });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("in_progress");
+  });
+
+  test("reconciles even when the final model segment had no tools", async () => {
+    const fake = createFakeRuntime();
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    fake.emit({
+      type: "tool_execution_end",
+      toolCallId: "td",
+      toolName: "todowrite",
+      isError: false,
+      result: todoResult([{ id: "t1", content: "Explore", status: "in_progress" }]),
+    });
+    fake.emit({ type: "agent_start" });
+    fake.emit({ type: "turn_start" });
+    fake.emit({ type: "tool_execution_end", toolCallId: "w1", toolName: "bash", isError: false, result: "ok" });
+    // Pi emits turn_start per model call; the final segment (summary only) has
+    // no tools, so a per-turn counter would be 0 here and skip the reconcile.
+    fake.emit({ type: "turn_start" });
+
+    fake.emit({ type: "agent_end", messages: [{ role: "assistant", stopReason: "stop" }], willRetry: false });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("completed");
+  });
+});
+
+describe("PiHost todo reconcile on session open", () => {
+  const todoHistory = (overrides: {
+    trailing?: unknown[];
+    workAfterWrite?: boolean;
+    stopReason?: string;
+  } = {}) => {
+    const messages: unknown[] = [
+      {
+        role: "toolResult",
+        toolName: "todowrite",
+        isError: false,
+        details: {
+          todos: [
+            { id: "f1", content: "Fix flicker", status: "in_progress", priority: "high" },
+            { id: "f2", content: "Verify", status: "pending", priority: "medium" },
+          ],
+          updatedAt: "2026-08-13T00:00:00.000Z",
+        },
+      },
+    ];
+    if (overrides.workAfterWrite !== false) {
+      messages.push({ role: "toolResult", toolName: "bash", isError: false, content: "ok" });
+    }
+    messages.push({
+      role: "assistant",
+      content: [{ type: "text", text: "Done." }],
+      stopReason: overrides.stopReason ?? "stop",
+    });
+    if (overrides.trailing) messages.push(...overrides.trailing);
+    return messages;
+  };
+
+  test("closes a stale in_progress todo when the last turn settled", () => {
+    const fake = createFakeRuntime("/tmp/project", todoHistory());
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    expect(host.snapshot().session.todos?.map((t) => t.status)).toEqual(["completed", "pending"]);
+    expect(fake.customEntries).toHaveLength(1);
+    const todos = (fake.customEntries[0]!.details as { todos: Array<{ status: string }> }).todos;
+    expect(todos.map((t) => t.status)).toEqual(["completed", "pending"]);
+  });
+
+  test("leaves todos untouched when a user message follows the settled answer", () => {
+    const fake = createFakeRuntime("/tmp/project", todoHistory({
+      trailing: [{ role: "user", content: "keep going" }],
+    }));
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("in_progress");
+    expect(fake.customEntries).toHaveLength(0);
+  });
+
+  test("leaves todos untouched when the last turn stopped mid-tools", () => {
+    const fake = createFakeRuntime("/tmp/project", todoHistory({ stopReason: "toolUse" }));
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("in_progress");
+    expect(fake.customEntries).toHaveLength(0);
+  });
+
+  test("leaves todos untouched when no tool work happened after the todo write", () => {
+    const fake = createFakeRuntime("/tmp/project", todoHistory({ workAfterWrite: false }));
+    const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
+
+    expect(host.snapshot().session.todos?.[0]?.status).toBe("in_progress");
+    expect(fake.customEntries).toHaveLength(0);
   });
 });
 

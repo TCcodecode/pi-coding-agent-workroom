@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import type { TimelineItem } from "../../shared/protocol";
 import { Timeline } from "./Timeline";
@@ -214,8 +214,8 @@ describe("Timeline", () => {
     ];
     render(<Timeline items={items} />);
 
-    expect(screen.getByText("Ran")).toBeInTheDocument();
-    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.getByText("Running…")).toBeInTheDocument();
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
     expect(screen.getAllByText("running")).toHaveLength(2);
   });
 
@@ -490,8 +490,7 @@ describe("Timeline dividers", () => {
   });
 });
 
-describe("Timeline task grouping", () => {
-  const taskTodo = (id: string, content: string, status: "pending" | "in_progress" | "completed") => ({ id, content, status, priority: "high" as const });
+describe("Timeline tool grouping", () => {
   const bash = (id: string, command: string, taskId?: string): TimelineItem => ({
     id,
     kind: "tool",
@@ -502,22 +501,19 @@ describe("Timeline task grouping", () => {
     ...(taskId ? { taskId } : {}),
   });
 
-  test("groups tool rows under the in-progress todo header", () => {
-    render(<Timeline
-      items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-1")]}
-      todos={[taskTodo("task-1", "Explore the repo", "in_progress")]}
-    />);
+  test("collapses consecutive commands without task labels", () => {
+    render(<Timeline items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-1")]} />);
 
-    expect(screen.getByText("Explore the repo")).toBeInTheDocument();
-    expect(screen.getByText("in_progress")).toBeInTheDocument();
     expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
-    const task = screen.getByText("Explore the repo").closest(".timeline-task");
-    expect(task).not.toBeNull();
-    expect(task!.querySelector(".timeline-task-body")).not.toBeNull();
+    // Task names and statuses belong to the Todos panel, not the trace.
+    expect(screen.queryByText("Explore the repo")).not.toBeInTheDocument();
+    expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("completed")).not.toBeInTheDocument();
+    expect(document.querySelector(".timeline-task")).toBeNull();
   });
 
-  test("keeps rows without a matching todo ungrouped", () => {
-    render(<Timeline items={[bash("bash-1", "a")]} todos={[]} />);
+  test("keeps loose tool rows ungrouped and label-free", () => {
+    render(<Timeline items={[bash("bash-1", "a")]} />);
 
     expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
     expect(screen.queryByText("completed")).not.toBeInTheDocument();
@@ -525,21 +521,225 @@ describe("Timeline task grouping", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  test("starts a new task section when the trace moves to another todo", () => {
+  test("merges consecutive same-category tools across task boundaries", () => {
+    render(<Timeline items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-2")]} />);
+
+    // No task headers exist anymore, so different taskIds no longer split a run.
+    expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
+  });
+});
+
+describe("Timeline virtualization", () => {
+  const longItems = (turns: number): TimelineItem[] => {
+    const items: TimelineItem[] = [];
+    for (let i = 0; i < turns; i += 1) {
+      items.push({ id: `user-${i}`, kind: "user", content: `Q${i}`, status: "completed" });
+      items.push({ id: `tool-${i}`, kind: "tool", toolCallId: `tool-${i}`, toolName: "bash", input: `{"command":"echo ${i}"}`, status: "completed" });
+    }
+    return items;
+  };
+
+  /** jsdom reports zero for layout; give the virtualizer a real viewport. */
+  const mockScrollElement = () => {
+    const el = document.createElement("div");
+    Object.defineProperty(el, "offsetWidth", { value: 760, configurable: true });
+    Object.defineProperty(el, "offsetHeight", { value: 600, configurable: true });
+    Object.defineProperty(el, "clientHeight", { value: 600 });
+    Object.defineProperty(el, "scrollHeight", { value: 20000 });
+    return { current: el };
+  };
+
+  test("virtualizes long timelines when a scroll container is provided", async () => {
+    const scrollRef = mockScrollElement();
+    const { container } = render(<Timeline items={longItems(22)} scrollElementRef={scrollRef} />);
+
+    await waitFor(() => {
+      const vc = container.querySelector(".timeline.is-virtualized");
+      expect(vc).not.toBeNull();
+      const rendered = vc!.querySelectorAll(".turn").length;
+      expect(rendered).toBeGreaterThan(0);
+      expect(rendered).toBeLessThan(22);
+    });
+  });
+
+  test("stays flat without a scroll container even for long timelines", () => {
+    const { container } = render(<Timeline items={longItems(22)} />);
+
+    expect(container.querySelector(".timeline.is-virtualized")).toBeNull();
+    expect(container.querySelectorAll(".turn")).toHaveLength(22);
+  });
+});
+
+describe("Timeline dangerous tools", () => {
+  test("marks delete and destructive bash commands as dangerous", () => {
+    render(<Timeline items={[
+      { id: "del-1", kind: "tool", toolCallId: "del-1", toolName: "delete_file", input: '{"path":"a.ts"}', status: "completed" },
+      { id: "rm-1", kind: "tool", toolCallId: "rm-1", toolName: "bash", input: '{"command":"rm -rf node_modules"}', status: "completed" },
+      { id: "read-1", kind: "tool", toolCallId: "read-1", toolName: "read", input: '{"path":"a.ts"}', status: "completed" },
+    ]} />);
+
+    expect(screen.getByText("Deleted").closest(".tool-item")).toHaveClass("is-dangerous");
+    expect(screen.getByText("Ran").closest(".tool-item")).toHaveClass("is-dangerous"); // rm -rf
+    expect(screen.getByText("Read").closest(".tool-item")).not.toHaveClass("is-dangerous");
+  });
+});
+
+describe("Timeline running labels", () => {
+  test("shows a present-tense label while a tool runs, then the result verb", () => {
+    const { rerender } = render(<Timeline items={[
+      { id: "r1", kind: "tool", toolCallId: "r1", toolName: "read", input: '{"path":"a.ts"}', status: "running" },
+    ]} />);
+
+    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.queryByText("Read")).not.toBeInTheDocument();
+
+    rerender(<Timeline items={[
+      { id: "r1", kind: "tool", toolCallId: "r1", toolName: "read", input: '{"path":"a.ts"}', status: "completed" },
+    ]} />);
+
+    expect(screen.getByText("Read")).toBeInTheDocument();
+    expect(screen.queryByText("Reading…")).not.toBeInTheDocument();
+  });
+});
+
+describe("Timeline inline diff", () => {
+  test("shows a capped inline diff with stats when a tool changed a file", () => {
+    const { container } = render(<Timeline items={[
+      {
+        id: "edit-1",
+        kind: "tool",
+        toolCallId: "edit-1",
+        toolName: "edit",
+        input: '{"path":"src/App.tsx"}',
+        status: "completed",
+        change: { path: "src/App.tsx", additions: 2, deletions: 1, diff: "--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1,3 +1,4 @@\n-old line\n+new line\n+another new line\n context" },
+      },
+    ]} />);
+
+    // Collapsed: the inline diff body is not rendered.
+    expect(container.querySelector(".tool-diff")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand edited \(edit\)/i }));
+    const diffEl = container.querySelector(".tool-diff");
+    expect(diffEl).not.toBeNull();
+    expect(diffEl!.querySelector(".tool-diff-path")).toHaveTextContent("src/App.tsx");
+    expect(diffEl!.querySelector(".tool-diff-stats")).toHaveTextContent("+2");
+    expect(diffEl!.querySelector(".tool-diff-stats")).toHaveTextContent("−1");
+    expect(diffEl!.querySelector(".tool-diff-line.added")).toHaveTextContent("+new line");
+    expect(diffEl!.querySelector(".tool-diff-line.removed")).toHaveTextContent("-old line");
+  });
+});
+
+describe("Timeline copy button", () => {
+  test("copies tool input and output via the copy button", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<Timeline items={[
+      { id: "bash-1", kind: "tool", toolCallId: "bash-1", toolName: "bash", input: '{"command":"ls -la"}', output: "total 4", status: "completed" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /expand ran \(bash\)/i }));
+
+    const copyButtons = screen.getAllByRole("button", { name: /^copy /i });
+    expect(copyButtons).toHaveLength(2); // input + output
+
+    fireEvent.click(copyButtons[0]!);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('{"command":"ls -la"}'));
+
+    fireEvent.click(copyButtons[1]!);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("total 4"));
+  });
+});
+
+describe("Timeline change summary timing", () => {
+  const edit = (status: "running" | "completed"): TimelineItem => ({
+    id: "edit-1",
+    kind: "tool",
+    toolCallId: "edit-1",
+    toolName: "edit",
+    input: '{"path":"a.ts"}',
+    status,
+    change: { path: "a.ts", additions: 1, deletions: 0, diff: "@@\n+new" },
+  });
+
+  test("hides the summary on the active turn while the session is running", () => {
+    // All rows are completed here — exactly the gap between tool executions
+    // where a per-row status check would flash the card open and closed.
+    const items: TimelineItem[] = [
+      { id: "user-1", kind: "user", content: "Fix it", status: "completed" },
+      edit("completed"),
+    ];
+    const { rerender } = render(<Timeline items={items} sessionStatus="running" />);
+    expect(screen.queryByRole("region", { name: "File changes" })).not.toBeInTheDocument();
+
+    rerender(<Timeline items={items} sessionStatus="completed" />);
+    expect(screen.getByRole("region", { name: "File changes" })).toBeInTheDocument();
+  });
+
+  test("only suppresses the last turn while running, not finished history turns", () => {
+    const items: TimelineItem[] = [
+      { id: "user-1", kind: "user", content: "First", status: "completed" },
+      { id: "edit-1", kind: "tool", toolCallId: "edit-1", toolName: "edit", input: '{"path":"a.ts"}', status: "completed", change: { path: "a.ts", additions: 1, deletions: 0, diff: "@@\n+new" } },
+      { id: "user-2", kind: "user", content: "Second", status: "completed" },
+      edit("completed"),
+    ];
+    render(<Timeline items={items} sessionStatus="running" />);
+
+    // The finished first turn keeps its summary; the active second turn hides it.
+    const regions = screen.getAllByRole("region", { name: "File changes" });
+    expect(regions).toHaveLength(1);
+  });
+
+  test("shows the summary for a finished turn when the session is idle", () => {
+    render(<Timeline items={[
+      { id: "user-1", kind: "user", content: "Fix it", status: "completed" },
+      edit("completed"),
+    ]} sessionStatus="completed" />);
+    expect(screen.getByRole("region", { name: "File changes" })).toBeInTheDocument();
+  });
+});
+
+describe("Timeline todo tool rows", () => {
+  test("does not render todo-list tool rows in the trace", () => {
+    render(<Timeline items={[
+      {
+        id: "tw-1",
+        kind: "tool",
+        toolCallId: "tw-1",
+        toolName: "todowrite",
+        input: JSON.stringify({ todos: [
+          { id: "t1", content: "Alpha", status: "completed", priority: "high" },
+          { id: "t2", content: "Beta", status: "in_progress", priority: "medium" },
+        ] }),
+        status: "completed",
+      },
+    ]} />);
+
+    // The checklist lives in the Todos panel; plan updates are meta noise here.
+    expect(screen.queryByText("Updated plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("1/2 done")).not.toBeInTheDocument();
+    expect(document.querySelector(".tool-item")).toBeNull();
+  });
+
+  test("todo updates vanish without splitting the surrounding tool run", () => {
     render(<Timeline
-      items={[bash("bash-1", "a", "task-1"), bash("bash-2", "b", "task-2")]}
-      todos={[
-        taskTodo("task-1", "Explore", "completed"),
-        taskTodo("task-2", "Implement", "in_progress"),
+      items={[
+        { id: "bash-1", kind: "tool", toolCallId: "bash-1", toolName: "bash", input: '{"command":"a"}', status: "completed", taskId: "task-1" },
+        {
+          id: "tw-1",
+          kind: "tool",
+          toolCallId: "tw-1",
+          toolName: "todoupdate",
+          input: '{"id":"task-1","status":"completed"}',
+          status: "completed",
+          taskId: "task-1",
+        },
+        { id: "bash-2", kind: "tool", toolCallId: "bash-2", toolName: "bash", input: '{"command":"b"}', status: "completed", taskId: "task-1" },
       ]}
     />);
 
-    const headers = screen.getAllByText(/^(Explore|Implement)$/);
-    expect(headers).toHaveLength(2);
-    // Tools from different todos are not merged into one group.
-    const firstTask = headers[0]!.closest(".timeline-task")!;
-    const secondTask = headers[1]!.closest(".timeline-task")!;
-    expect(firstTask.querySelectorAll(".tool-item")).toHaveLength(1);
-    expect(secondTask.querySelectorAll(".tool-item")).toHaveLength(1);
+    expect(screen.queryByText("Updated plan")).not.toBeInTheDocument();
+    expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
   });
 });

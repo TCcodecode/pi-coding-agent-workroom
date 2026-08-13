@@ -1,14 +1,33 @@
-import { Fragment, memo, useMemo, useState, type KeyboardEvent } from "react";
-import type { FileChangeSummary, SessionTodoItem, TimelineItem } from "../../shared/protocol";
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { FileChangeSummary, SessionStatus, TimelineItem } from "../../shared/protocol";
 import { Markdown } from "./Markdown";
 import { AppIcon, type AppIconName } from "./icons";
 
 type UserTimelineItem = TimelineItem & { kind: "user" };
 
+/** Only long sessions pay the virtualization complexity; short ones stay flat. */
+const VIRTUALIZE_MIN_TURNS = 20;
+
+/** Props shared by every turn row (flat and virtualized paths). */
+interface TurnProps {
+  onReviewChanges?: (path?: string) => void;
+  reviewOpen: boolean;
+  selectedReviewPath?: string;
+  onCloseReview?: () => void;
+  onUndoChanges?: (paths: string[]) => void | Promise<void>;
+  interruptedUserMessageIds: ReadonlySet<string>;
+  onCopyInterruptedMessage?: (item: UserTimelineItem) => void | Promise<void>;
+  onEditInterruptedMessage?: (item: UserTimelineItem) => void;
+  editingInterruptedMessage?: { messageId: string; text: string } | null;
+  interruptedEditSaving?: boolean;
+  onInterruptedMessageTextChange?: (text: string) => void;
+  onSaveInterruptedMessageEdit?: () => void | Promise<void>;
+  onCancelInterruptedMessageEdit?: () => void;
+}
+
 export interface TimelineProps {
   items: TimelineItem[];
-  /** Current session checklist; used to label task-grouped trace rows. */
-  todos?: SessionTodoItem[];
   onReviewChanges?: (path?: string) => void;
   reviewOpen?: boolean;
   selectedReviewPath?: string;
@@ -23,11 +42,14 @@ export interface TimelineProps {
   onInterruptedMessageTextChange?: (text: string) => void;
   onSaveInterruptedMessageEdit?: () => void | Promise<void>;
   onCancelInterruptedMessageEdit?: () => void;
+  /** Scroll container that owns the timeline; enables virtualization for long sessions. */
+  scrollElementRef?: RefObject<HTMLDivElement | null>;
+  /** Session run state; gates the per-turn change summary on the active turn. */
+  sessionStatus?: SessionStatus;
 }
 
 export const Timeline = memo(function Timeline({
   items,
-  todos = [],
   onReviewChanges,
   reviewOpen = false,
   selectedReviewPath,
@@ -41,6 +63,8 @@ export const Timeline = memo(function Timeline({
   onInterruptedMessageTextChange,
   onSaveInterruptedMessageEdit,
   onCancelInterruptedMessageEdit,
+  scrollElementRef,
+  sessionStatus,
 }: TimelineProps) {
   const interruptedUserMessageIdSet = useMemo(
     () => new Set(interruptedUserMessageIds),
@@ -51,27 +75,30 @@ export const Timeline = memo(function Timeline({
   }
 
   const turns = groupTurns(items);
+  const sessionActive = sessionStatus === "running" || sessionStatus === "awaiting_approval";
+  const activeTurnIndex = sessionActive ? turns.length - 1 : undefined;
+  const turnProps: TurnProps = {
+    onReviewChanges,
+    reviewOpen,
+    selectedReviewPath,
+    onCloseReview,
+    onUndoChanges,
+    interruptedUserMessageIds: interruptedUserMessageIdSet,
+    onCopyInterruptedMessage,
+    onEditInterruptedMessage,
+    editingInterruptedMessage,
+    interruptedEditSaving,
+    onInterruptedMessageTextChange,
+    onSaveInterruptedMessageEdit,
+    onCancelInterruptedMessageEdit,
+  };
+  if (scrollElementRef && turns.length >= VIRTUALIZE_MIN_TURNS) {
+    return <VirtualizedTurns turns={turns} scrollElementRef={scrollElementRef} turnProps={turnProps} activeTurnIndex={activeTurnIndex} />;
+  }
   return (
     <div className="timeline">
-      {turns.map((turn) => (
-        <Turn
-          key={turn[0]?.id ?? "turn"}
-          items={turn}
-          todos={todos}
-          onReviewChanges={onReviewChanges}
-          reviewOpen={reviewOpen}
-          selectedReviewPath={selectedReviewPath}
-          onCloseReview={onCloseReview}
-          onUndoChanges={onUndoChanges}
-          interruptedUserMessageIds={interruptedUserMessageIdSet}
-          onCopyInterruptedMessage={onCopyInterruptedMessage}
-          onEditInterruptedMessage={onEditInterruptedMessage}
-          editingInterruptedMessage={editingInterruptedMessage}
-          interruptedEditSaving={interruptedEditSaving}
-          onInterruptedMessageTextChange={onInterruptedMessageTextChange}
-          onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
-          onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
-        />
+      {turns.map((turn, index) => (
+        <Turn key={turn[0]?.id ?? "turn"} items={turn} {...turnProps} isActiveTurn={index === activeTurnIndex} />
       ))}
     </div>
   );
@@ -81,7 +108,6 @@ export const Timeline = memo(function Timeline({
   // status/queue/diagnostics events no longer force this subtree to render.
   return (
     prev.items === next.items &&
-    prev.todos === next.todos &&
     prev.reviewOpen === next.reviewOpen &&
     prev.selectedReviewPath === next.selectedReviewPath &&
     prev.interruptedUserMessageIds === next.interruptedUserMessageIds &&
@@ -91,9 +117,67 @@ export const Timeline = memo(function Timeline({
     prev.interruptedEditSaving === next.interruptedEditSaving &&
     prev.onInterruptedMessageTextChange === next.onInterruptedMessageTextChange &&
     prev.onSaveInterruptedMessageEdit === next.onSaveInterruptedMessageEdit &&
-    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit
+    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit &&
+    prev.scrollElementRef === next.scrollElementRef &&
+    prev.sessionStatus === next.sessionStatus
   );
 });
+
+/**
+ * Long sessions render turns through a windowed virtualizer so the DOM stays
+ * proportional to the viewport instead of the transcript length. Turns scroll
+ * out of view are unmounted (their local expand state resets), which is the
+ * accepted trade-off for keeping the timeline smooth.
+ */
+function VirtualizedTurns({
+  turns,
+  scrollElementRef,
+  turnProps,
+  activeTurnIndex,
+}: {
+  turns: TimelineItem[][];
+  scrollElementRef: RefObject<HTMLDivElement | null>;
+  turnProps: TurnProps;
+  activeTurnIndex?: number;
+}) {
+  const virtualizer = useVirtualizer({
+    count: turns.length,
+    getScrollElement: () => scrollElementRef.current,
+    estimateSize: () => 140,
+    overscan: 8,
+  });
+  // New turns render at the 140px estimate and measureElement later corrects
+  // the real height asynchronously (ResizeObserver). If the user is pinned to
+  // the bottom, re-stick after a measurement — otherwise the corrected total
+  // height leaves a gap of blank space below the viewport that only the next
+  // streamed delta would close. Mirrors App's stick-to-bottom threshold.
+  const lastTotalSizeRef = useRef(0);
+  useEffect(() => {
+    const scrollElement = scrollElementRef.current;
+    if (!scrollElement) return;
+    const totalSize = virtualizer.getTotalSize();
+    const grew = totalSize > lastTotalSizeRef.current;
+    lastTotalSizeRef.current = totalSize;
+    if (!grew) return;
+    const nearBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight < 100;
+    if (nearBottom) scrollElement.scrollTop = scrollElement.scrollHeight;
+  });
+  return (
+    <div className="timeline is-virtualized" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+      {virtualizer.getVirtualItems().map((row) => (
+        <div
+          key={row.key}
+          data-index={row.index}
+          ref={virtualizer.measureElement}
+          className="timeline-virtual-item"
+          style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}
+        >
+          <Turn key={turns[row.index]![0]?.id ?? row.index} items={turns[row.index]!} {...turnProps} isActiveTurn={row.index === activeTurnIndex} />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Split the flat item stream into turns at user-message boundaries. */
 function groupTurns(items: TimelineItem[]): TimelineItem[][] {
@@ -126,7 +210,7 @@ type TimelineEntry = TimelineItem | ToolGroup;
 
 const Turn = memo(function Turn({
   items,
-  todos,
+  isActiveTurn = false,
   onReviewChanges,
   reviewOpen,
   selectedReviewPath,
@@ -140,58 +224,37 @@ const Turn = memo(function Turn({
   onInterruptedMessageTextChange,
   onSaveInterruptedMessageEdit,
   onCancelInterruptedMessageEdit,
-}: {
-  items: TimelineItem[];
-  todos: SessionTodoItem[];
-  onReviewChanges?: (path?: string) => void;
-  reviewOpen: boolean;
-  selectedReviewPath?: string;
-  onCloseReview?: () => void;
-  onUndoChanges?: (paths: string[]) => void | Promise<void>;
-  interruptedUserMessageIds: ReadonlySet<string>;
-  onCopyInterruptedMessage?: (item: UserTimelineItem) => void | Promise<void>;
-  onEditInterruptedMessage?: (item: UserTimelineItem) => void;
-  editingInterruptedMessage?: { messageId: string; text: string } | null;
-  interruptedEditSaving?: boolean;
-  onInterruptedMessageTextChange?: (text: string) => void;
-  onSaveInterruptedMessageEdit?: () => void | Promise<void>;
-  onCancelInterruptedMessageEdit?: () => void;
-}) {
-  const trace = mergeTimelineToolCalls(items);
+}: TurnProps & { items: TimelineItem[]; isActiveTurn?: boolean }) {
+  // Todo-list tools are pure meta rows: the session checklist lives in the
+  // right-hand Todos panel, so plan updates add nothing but noise here.
+  const trace = mergeTimelineToolCalls(items.filter(
+    (item) => item.kind !== "tool" || describeTool(item).category !== "plan",
+  ));
   const changes = summarizeFileChanges(trace);
   const entries = groupTimelineTools(trace);
-  const todosById = new Map(todos.map((todo) => [todo.id, todo]));
+  // The change summary is a per-turn recap. It is suppressed only while the
+  // session is still running on THIS turn — deciding from per-row statuses
+  // would flash the card in the gap between one tool ending and the next
+  // starting. Mid-turn edits stay visible via each tool's inline diff.
   return (
     <div className="turn">
-      {groupEntriesByTask(entries).map((chunk) => {
-        const body = chunk.entries.map((entry) => entry.kind === "toolGroup"
-          ? <ToolGroupView key={entry.id} group={entry} />
-          : (
-              <TimelineItemView
-                key={entry.id}
-                item={entry}
-                interruptedUserMessageIds={interruptedUserMessageIds}
-                onCopyInterruptedMessage={onCopyInterruptedMessage}
-                onEditInterruptedMessage={onEditInterruptedMessage}
-                editingInterruptedMessage={editingInterruptedMessage}
-                interruptedEditSaving={interruptedEditSaving}
-                onInterruptedMessageTextChange={onInterruptedMessageTextChange}
-                onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
-                onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
-              />
-            ));
-        const todo = chunk.taskId ? todosById.get(chunk.taskId) : undefined;
-        if (!todo) {
-          return <Fragment key={chunk.entries[0]?.id ?? "loose"}>{body}</Fragment>;
-        }
-        return (
-          <div className="timeline-task" key={chunk.taskId}>
-            <TaskHeader todo={todo} />
-            <div className="timeline-task-body">{body}</div>
-          </div>
-        );
-      })}
-      {changes && (
+      {entries.map((entry) => entry.kind === "toolGroup"
+        ? <ToolGroupView key={entry.id} group={entry} />
+        : (
+            <TimelineItemView
+              key={entry.id}
+              item={entry}
+              interruptedUserMessageIds={interruptedUserMessageIds}
+              onCopyInterruptedMessage={onCopyInterruptedMessage}
+              onEditInterruptedMessage={onEditInterruptedMessage}
+              editingInterruptedMessage={editingInterruptedMessage}
+              interruptedEditSaving={interruptedEditSaving}
+              onInterruptedMessageTextChange={onInterruptedMessageTextChange}
+              onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
+              onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
+            />
+          ))}
+      {!isActiveTurn && changes && (
         <ChangeSummary
           key="changes"
           changes={changes}
@@ -218,7 +281,6 @@ const Turn = memo(function Turn({
     prev.selectedReviewPath === next.selectedReviewPath &&
     prev.onCloseReview === next.onCloseReview &&
     prev.onUndoChanges === next.onUndoChanges &&
-    prev.todos === next.todos &&
     prev.interruptedUserMessageIds === next.interruptedUserMessageIds &&
     prev.onCopyInterruptedMessage === next.onCopyInterruptedMessage &&
     prev.onEditInterruptedMessage === next.onEditInterruptedMessage &&
@@ -226,7 +288,8 @@ const Turn = memo(function Turn({
     prev.interruptedEditSaving === next.interruptedEditSaving &&
     prev.onInterruptedMessageTextChange === next.onInterruptedMessageTextChange &&
     prev.onSaveInterruptedMessageEdit === next.onSaveInterruptedMessageEdit &&
-    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit
+    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit &&
+    prev.isActiveTurn === next.isActiveTurn
   );
 });
 
@@ -415,6 +478,8 @@ interface ToolPresentation {
   category: ToolCategory;
   icon: AppIconName;
   preview?: string;
+  /** Present-tense label shown while the tool is still running. */
+  runningLabel?: string;
 }
 
 /**
@@ -474,6 +539,29 @@ function parsedToolInput(input: string): Record<string, unknown> | undefined {
   }
 }
 
+/**
+ * Compact preview for todo-list tools. The raw input carries the whole todo
+ * array; dumping it would repeat every task title on the trace row. Show the
+ * progress delta instead, which is the only new information the call adds.
+ */
+function todoToolPreview(toolName: string, input: string): string | undefined {
+  const parsed = parsedToolInput(input);
+  if (!parsed) return undefined;
+  if (toolName === "todocreate") {
+    const content = typeof parsed.content === "string" ? parsed.content.trim() : "";
+    return content ? `added “${content.slice(0, 40)}”` : undefined;
+  }
+  if (toolName === "todoupdate") {
+    const content = typeof parsed.content === "string" ? parsed.content.trim() : "";
+    return content ? `updated “${content.slice(0, 40)}”` : undefined;
+  }
+  if (toolName === "todoread") return undefined;
+  const todos = Array.isArray(parsed.todos) ? parsed.todos : [];
+  if (todos.length === 0) return "cleared";
+  const done = todos.filter((todo) => todo && typeof todo === "object" && (todo as { status?: string }).status === "completed").length;
+  return `${done}/${todos.length} done`;
+}
+
 function stringInput(input: Record<string, unknown> | undefined, keys: string[]): string | undefined {
   if (!input) return undefined;
   for (const key of keys) {
@@ -494,36 +582,50 @@ function mcpTarget(toolName: string, input: string): string | undefined {
   return [server, tool].filter(Boolean).join(" · ") || undefined;
 }
 
+/** Destructive tools get a warning treatment so they are not lost in the trace. */
+function isDangerousTool(item: ToolItem): boolean {
+  const name = item.toolName.toLowerCase();
+  if (["delete", "remove", "rm", "delete_file", "unlink"].includes(name)) return true;
+  if (name === "bash" || name === "shell") {
+    const command = toolPreview(item.input, ["command", "script", "cmd"])?.toLowerCase() ?? "";
+    // Keep the matchers narrow: bare words like "format" or "del" appear in
+    // harmless commands (git format-patch, echo del), so require command-shaped
+    // context instead of matching the word alone.
+    return /\brm\s+(?:-[a-z]*r[a-z]*|--recursive)\b|\brmdir\s+\/s\b|\bshred\b|\bdd\s+of=|\bmkfs(?:\.\w+)?\b|\bdrop\s+table\b|\bgit\s+(?:clean\s+-[a-z]*f[a-z]*|reset\s+--hard|push\s+-f)\b|\bformat\s+[a-z]:/.test(command);
+  }
+  return false;
+}
+
 function describeTool(item: ToolItem): ToolPresentation {
   const name = item.toolName.toLowerCase();
   if (isMcpTool(name)) {
-    return { label: "MCP", category: "mcp", icon: "wrench", preview: mcpTarget(item.toolName, item.input) };
+    return { label: "MCP", category: "mcp", icon: "wrench", preview: mcpTarget(item.toolName, item.input), runningLabel: "Calling MCP…" };
   }
   if (["bash", "shell", "exec", "execute", "terminal", "command"].includes(name)) {
-    return { label: "Ran", category: "shell", icon: "play", preview: toolPreview(item.input, ["command", "script", "cmd"]) };
+    return { label: "Ran", category: "shell", icon: "play", preview: toolPreview(item.input, ["command", "script", "cmd"]), runningLabel: "Running…" };
   }
   if (["read", "cat", "open_file", "view_file", "list", "ls", "list_files"].includes(name)) {
-    return { label: "Read", category: "read", icon: "fileText", preview: toolPreview(item.input, ["path", "file", "filePath", "directory", "glob"]) };
+    return { label: "Read", category: "read", icon: "fileText", preview: toolPreview(item.input, ["path", "file", "filePath", "directory", "glob"]), runningLabel: "Reading…" };
   }
   if (["grep", "rg", "search", "find", "glob", "code_search", "mcp_search"].includes(name)) {
-    return { label: "Searched", category: "search", icon: "search", preview: toolPreview(item.input, ["pattern", "query", "glob", "path", "file"]) };
+    return { label: "Searched", category: "search", icon: "search", preview: toolPreview(item.input, ["pattern", "query", "glob", "path", "file"]), runningLabel: "Searching…" };
   }
   if (["edit", "patch", "apply_patch", "replace"].includes(name)) {
-    return { label: "Edited", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+    return { label: "Edited", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]), runningLabel: "Editing…" };
   }
   if (["write", "create", "create_file"].includes(name)) {
-    return { label: "Wrote", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+    return { label: "Wrote", category: "change", icon: "fileCode2", preview: toolPreview(item.input, ["path", "file", "filePath"]), runningLabel: "Writing…" };
   }
   if (["delete", "remove", "rm", "delete_file"].includes(name)) {
-    return { label: "Deleted", category: "change", icon: "trash", preview: toolPreview(item.input, ["path", "file", "filePath"]) };
+    return { label: "Deleted", category: "change", icon: "trash", preview: toolPreview(item.input, ["path", "file", "filePath"]), runningLabel: "Deleting…" };
   }
   if (["web", "browser", "fetch", "http", "http_request"].includes(name)) {
-    return { label: "Browsed", category: "web", icon: "globe", preview: toolPreview(item.input, ["url", "query", "path"]) };
+    return { label: "Browsed", category: "web", icon: "globe", preview: toolPreview(item.input, ["url", "query", "path"]), runningLabel: "Browsing…" };
   }
-  if (["todowrite", "todo", "update_todos"].includes(name)) {
-    return { label: "Updated plan", category: "plan", icon: "check", preview: toolPreview(item.input, ["content", "summary", "name"]) };
+  if (["todowrite", "todocreate", "todoupdate", "todoread", "todo", "update_todos"].includes(name)) {
+    return { label: "Updated plan", category: "plan", icon: "check", preview: todoToolPreview(name, item.input), runningLabel: "Updating plan…" };
   }
-  return { label: "Used tool", category: "other", icon: "wrench", preview: toolPreview(item.input) };
+  return { label: "Used tool", category: "other", icon: "wrench", preview: toolPreview(item.input), runningLabel: "Using tool…" };
 }
 
 /**
@@ -537,7 +639,6 @@ export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
   const result: TimelineEntry[] = [];
   let group: ToolItem[] = [];
   let groupCategory: ToolCategory | undefined;
-  let groupTaskId: string | undefined;
   let groupThinking: TimelineItem[] = [];
   let pendingThinking: TimelineItem[] = [];
 
@@ -556,7 +657,6 @@ export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
     }
     group = [];
     groupCategory = undefined;
-    groupTaskId = undefined;
     groupThinking = [];
   };
 
@@ -575,9 +675,7 @@ export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
     if (item.kind === "tool" && item.status === "completed") {
       const category = describeTool(item).category;
       if (AGGREGATABLE_CATEGORIES.has(category)) {
-        // Never merge tools that belong to different todos: the group header
-        // would mislabel half the run under the wrong task.
-        if (groupCategory === category && groupTaskId === item.taskId) {
+        if (groupCategory === category) {
           group.push(item);
           groupThinking.push(...pendingThinking);
           pendingThinking = [];
@@ -586,7 +684,6 @@ export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
         flush();
         group = [item];
         groupCategory = category;
-        groupTaskId = item.taskId;
         groupThinking = [...pendingThinking];
         pendingThinking = [];
         continue;
@@ -599,48 +696,6 @@ export function groupTimelineTools(trace: TimelineItem[]): TimelineEntry[] {
   flush();
   flushPendingThinking();
   return result;
-}
-
-/** The task a trace row belongs to (groups use their first tool's task). */
-function entryTaskId(entry: TimelineEntry): string | undefined {
-  return entry.kind === "toolGroup" ? entry.items[0]?.taskId : entry.taskId;
-}
-
-interface TaskChunk {
-  taskId?: string;
-  entries: TimelineEntry[];
-}
-
-/** Split entries into runs sharing one in-progress todo; loose rows stand alone. */
-function groupEntriesByTask(entries: TimelineEntry[]): TaskChunk[] {
-  const chunks: TaskChunk[] = [];
-  let current: TaskChunk | undefined;
-  for (const entry of entries) {
-    const taskId = entryTaskId(entry);
-    if (!current || current.taskId !== taskId) {
-      current = { taskId, entries: [] };
-      chunks.push(current);
-    }
-    current.entries.push(entry);
-  }
-  return chunks;
-}
-
-function TaskHeader({ todo }: { todo: SessionTodoItem }) {
-  const icon: AppIconName =
-    todo.status === "completed" ? "circleCheck"
-    : todo.status === "in_progress" ? "circleDot"
-    : todo.status === "cancelled" ? "x"
-    : "circle";
-  return (
-    <div className="timeline-task-header" title={todo.content}>
-      <span className={`timeline-task-mark ${todo.status}`} aria-hidden>
-        <AppIcon name={icon} size="xs" />
-      </span>
-      <span className="timeline-task-title">{todo.content}</span>
-      <span className={`timeline-task-state ${todo.status}`}>{todo.status}</span>
-    </div>
-  );
 }
 
 function oneLine(text: string, limit = 120): string | undefined {
@@ -688,15 +743,67 @@ function thinkingSummary(content: string): string | undefined {
   return firstLine.length > 96 ? `${firstLine.slice(0, 95)}…` : firstLine;
 }
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    // No clipboard access (restricted environments, non-secure context): do not
+    // claim success — awaiting `undefined` would happily show "Copied".
+    if (!navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Clipboard can be unavailable in restricted environments; stay quiet.
+    }
+  };
+  return (
+    <button type="button" className="tool-copy" aria-label={`Copy ${label}`} title={`Copy ${label}`} onClick={() => void copy()}>
+      <AppIcon name={copied ? "check" : "copy"} size="xs" />
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+/** Inline unified-diff preview for a file mutation, capped to stay compact. */
+function ToolDiff({ change }: { change: FileChangeSummary }) {
+  const MAX_LINES = 14;
+  const lines = change.diff.split("\n");
+  const visible = lines.slice(0, MAX_LINES);
+  const truncated = lines.length > MAX_LINES;
+  return (
+    <div className="tool-diff">
+      <div className="tool-diff-head">
+        <span className="tool-diff-path">{change.path}</span>
+        <span className="tool-diff-stats">
+          <span className="change-additions">+{change.additions}</span>
+          <span className="change-deletions">−{change.deletions}</span>
+        </span>
+      </div>
+      <pre className="tool-diff-code">
+        {visible.map((line, index) => {
+          const cls = line.startsWith("+") && !line.startsWith("+++") ? "added"
+            : line.startsWith("-") && !line.startsWith("---") ? "removed"
+            : line.startsWith("@@") ? "hunk"
+            : "";
+          return <span key={index} className={`tool-diff-line ${cls}`}>{line}{"\n"}</span>;
+        })}
+        {truncated && <span className="tool-diff-more">…</span>}
+      </pre>
+    </div>
+  );
+}
+
 function ToolGroupView({ group }: { group: ToolGroup }) {
   const [expanded, setExpanded] = useState(false);
   const first = group.items[0]!;
   const presentation = describeTool(first);
   const label = CATEGORY_GROUP_LABEL[group.category](group.items.length);
   const duration = groupDuration(group.items);
+  const dangerous = group.items.some(isDangerousTool);
   const toggle = () => setExpanded((value) => !value);
   return (
-    <article className="timeline-item tool-item tool-group completed">
+    <article className={`timeline-item tool-item tool-group completed ${dangerous ? "is-dangerous" : ""}`}>
       <div
         className="timeline-item-heading toggleable"
         role="button"
@@ -774,10 +881,12 @@ const TimelineItemView = memo(function TimelineItemView({
     const resultSummary = toolResultSummary(item, presentation);
     const hasInput = item.input.trim() !== "";
     const hasOutput = Boolean(item.output && item.output.trim() !== "");
+    const hasChange = Boolean(item.change);
     const duration = timelineDuration(item);
+    const dangerous = isDangerousTool(item);
     const status = item.status === "running" ? "running" : item.status === "error" ? "failed" : undefined;
     return (
-      <article className={`timeline-item tool-item ${item.status}`}>
+      <article className={`timeline-item tool-item ${item.status} ${dangerous ? "is-dangerous" : ""}`}>
         <div
           className="timeline-item-heading toggleable"
           role="button"
@@ -791,7 +900,9 @@ const TimelineItemView = memo(function TimelineItemView({
             <AppIcon name={item.status === "error" ? "circleAlert" : item.status === "completed" ? "circleCheck" : "circleDot"} size="xs" />
           </span>
           <span className={`timeline-icon tool-action tool-action-${presentation.category}`} aria-hidden><AppIcon name={presentation.icon} size="xs" /></span>
-          <strong className="tool-name" title={item.toolName}>{presentation.label}</strong>
+          <strong className={`tool-name ${item.status === "running" && presentation.runningLabel ? "is-running" : ""}`} title={item.toolName}>
+            {item.status === "running" && presentation.runningLabel ? presentation.runningLabel : presentation.label}
+          </strong>
           {isMcpTool(item.toolName) && <span className="mcp-tag">via MCP</span>}
           <span className="tool-sep">·</span>
           <span className="tool-inline-preview">{preview || item.status}</span>
@@ -800,10 +911,21 @@ const TimelineItemView = memo(function TimelineItemView({
           {status && <span className={`timeline-status ${item.status === "error" ? "failed" : ""}`}>{status}</span>}
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </div>
-        {expanded && (hasInput || hasOutput) && (
+        {expanded && (hasInput || hasOutput || hasChange) && (
           <div className="tool-body">
-            {hasInput && <code>{item.input}</code>}
-            {hasOutput && <pre>{item.output}</pre>}
+            {hasChange && item.change && <ToolDiff change={item.change} />}
+            {hasInput && (
+              <div className="tool-body-block">
+                <CopyButton text={item.input} label="input" />
+                <code>{item.input}</code>
+              </div>
+            )}
+            {hasOutput && (
+              <div className="tool-body-block">
+                <CopyButton text={item.output!} label="output" />
+                <pre>{item.output}</pre>
+              </div>
+            )}
           </div>
         )}
       </article>

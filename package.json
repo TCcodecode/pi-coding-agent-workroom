@@ -31,6 +31,7 @@
     "@pi-desk/session-todo": "*",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-context-menu": "^2.3.7",
+    "@tanstack/react-virtual": "^3.14.9",
     "@vitejs/plugin-react": "^5.0.4",
     "electron-vite": "^4.0.0",
     "lucide-react": "^1.30.0",
@@ -68,17 +69,31 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "dmg": {
       "title": "Pi Desk",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "win": {
-      "target": ["nsis", "zip"]
+      "target": [
+        "nsis",
+        "zip"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -87,7 +102,11 @@
     },
     "linux": {
       "category": "Development",
-      "target": ["AppImage", "deb", "tar.gz"]
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ]
     }
   }
 }

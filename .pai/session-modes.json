@@ -375,6 +375,46 @@
         "http_run_test",
         "http_list_run_history"
       ]
+    },
+    "019ffb8f-df07-724e-89a4-37b1d19d3132": {
+      "mode": "execute",
+      "executeProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "planProfile": {
+        "modelKey": "deepseek/deepseek-v4-flash",
+        "thinkingLevel": "high"
+      },
+      "executeToolNames": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "grep",
+        "find",
+        "ls",
+        "index_codebase",
+        "index_status",
+        "search_symbols",
+        "find_usages",
+        "todowrite",
+        "todocreate",
+        "todoupdate",
+        "todoread",
+        "plan_save",
+        "plan_list",
+        "plan_read",
+        "mcpScript",
+        "mcp",
+        "http_workspace_info",
+        "http_create_folder",
+        "http_create_test",
+        "http_read_test",
+        "http_update_test",
+        "http_run_test",
+        "http_list_run_history"
+      ]
     }
   }
 }

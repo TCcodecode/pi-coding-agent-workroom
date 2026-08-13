@@ -88,3 +88,49 @@ describe("ChangeInspector", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ChangeInspector large sessions", () => {
+  const manyChanges = (count: number): Array<{ path: string; additions: number; deletions: number; diff: string }> =>
+    Array.from({ length: count }, (_, i) => ({
+      path: `src/modules/mod${i}/file${i}.ts`,
+      additions: i + 1,
+      deletions: i,
+      diff: `@@\n+line ${i}`,
+    }));
+
+  test("collapses folders by default for large sessions and shows directory stats", () => {
+    render(
+      <ChangeInspector
+        changes={manyChanges(24)}
+        selectedPath="src/modules/mod0/file0.ts"
+        onSelect={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenInspector={vi.fn()}
+      />,
+    );
+
+    // Top-level folder rows with counts are visible; individual files are not.
+    expect(screen.getByText("src")).toBeInTheDocument();
+    expect(screen.getAllByText("24 files").length).toBeGreaterThan(0);
+    expect(screen.queryByText("file0.ts")).not.toBeInTheDocument();
+
+    // Expand all reveals the files.
+    fireEvent.click(screen.getByRole("button", { name: "Expand all folders" }));
+    expect(screen.getByText("file0.ts")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse all folders" })).toBeInTheDocument();
+  });
+
+  test("keeps small sessions fully expanded", () => {
+    render(
+      <ChangeInspector
+        changes={manyChanges(3)}
+        selectedPath="src/modules/mod0/file0.ts"
+        onSelect={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenInspector={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("file0.ts")).toBeInTheDocument();
+  });
+});

@@ -121,6 +121,45 @@ describe("session-todo extension", () => {
     );
   });
 
+  it("rebuilds the reconciled state from a host-persisted custom_message entry", async () => {
+    const onBranchChanged = vi.fn();
+    const pi = { registerTool: vi.fn(), on: vi.fn() };
+    registerSessionTodoTools(pi as never, onBranchChanged);
+    const handler = pi.on.mock.calls.find(([event]) => event === "session_tree")?.[1] as
+      | ((event: unknown, ctx: { sessionManager: { getBranch: () => unknown[] } }) => Promise<void>)
+      | undefined;
+    const sessionManager = {
+      getBranch: () => [
+        {
+          type: "message",
+          message: {
+            role: "toolResult",
+            toolName: "todowrite",
+            details: {
+              todos: [{ id: "t1", content: "Fix flicker", status: "in_progress", priority: "high" }],
+            },
+          },
+        },
+        {
+          type: "custom_message",
+          customType: "session-todo",
+          content: "Todo list reconciled after the turn ended:",
+          display: false,
+          details: {
+            todos: [{ id: "t1", content: "Fix flicker", status: "completed", priority: "high" }],
+          },
+        },
+      ],
+    };
+
+    await handler?.({}, { sessionManager });
+
+    expect(onBranchChanged).toHaveBeenCalledWith(
+      [{ id: "t1", content: "Fix flicker", status: "completed", priority: "high" }],
+      sessionManager,
+    );
+  });
+
   it("creates and updates one item without replacing other todos", async () => {
     const tools = new Map<string, (id: string, params: any) => Promise<any>>();
     const pi = {

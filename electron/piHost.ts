@@ -44,8 +44,10 @@ import type {
 } from "../src/shared/protocol.js";
 import type { IndexStatus } from "@pi-desk/code-index";
 import {
+  formatTodoListText,
   isTodoToolName,
   reconstructTodosFromMessages,
+  SESSION_TODO_CUSTOM_TYPE,
   sessionTodoExtension,
   todosFromToolResult,
 } from "@pi-desk/session-todo";
@@ -99,6 +101,7 @@ export interface PiSessionLike {
     buildSessionContext?: () => { messages?: unknown[] };
     getSessionName?(): string | undefined;
     appendSessionInfo?(name: string): string;
+    appendCustomMessageEntry?(customType: string, content: string, display: boolean, details?: unknown): string;
     getSessionFile?(): string | undefined;
     getLeafId?(): string | null;
   };
@@ -169,8 +172,8 @@ export interface PiSessionLike {
   };
   resourceLoader?: {
     getAgentsFiles(): { agentsFiles: Array<{ path: string }> };
-    getSkills(): { skills: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
-    getPrompts(): { prompts: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
+    getSkills(): { skills: Array<{ name?: string; description?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
+    getPrompts(): { prompts: Array<{ name?: string; description?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
     getThemes(): { themes: Array<{ name?: string; filePath?: string; path?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }> };
     getExtensions(): { extensions: Array<{ path?: string; name?: string; sourceInfo?: { source?: string; origin?: string; baseDir?: string } }>; errors: Array<{ path: string; error: string }> };
   };
@@ -224,6 +227,8 @@ interface RuntimeSlot {
   /** Tool calls completed in the current turn (for the todo nudge). */
   turnToolCount: number;
   turnNudged: boolean;
+  /** Non-todo tools executed since agent_start; survives per-call turn resets. */
+  runToolCount: number;
   sessionGeneration: number;
   status: SessionStatus;
   pendingFileMutations: Map<string, { path: string; absolutePath: string; before?: string }>;
@@ -943,8 +948,23 @@ export class PiHost {
   }
 
   getCommands(): PiCommand[] {
+    const loader = this.runtime?.session.resourceLoader;
     const extensionCommands = this.runtime?.session.extensionRunner?.getRegisteredCommands() ?? [];
-    return mergePiCommands(extensionCommands.map((command) => ({ name: command.invocationName ?? command.name, description: command.description, source: command.sourceInfo?.path })));
+    // Skill commands (/skill:<name>) and prompt templates (/<template>) are
+    // expanded by AgentSession.prompt itself — see _expandSkillCommand and
+    // expandPromptTemplate in pi-coding-agent — so listing them here is enough
+    // for the slash picker; the renderer sends them through api.prompt().
+    const skillCommands = (loader?.getSkills().skills ?? [])
+      .filter((skill) => skill.name)
+      .map((skill) => ({ name: `skill:${skill.name}`, description: skill.description, source: "skill" as const }));
+    const promptCommands = (loader?.getPrompts().prompts ?? [])
+      .filter((prompt) => prompt.name)
+      .map((prompt) => ({ name: prompt.name!, description: prompt.description, source: "prompt" as const }));
+    return mergePiCommands([
+      ...extensionCommands.map((command) => ({ name: command.invocationName ?? command.name, description: command.description, source: "extension" as const })),
+      ...skillCommands,
+      ...promptCommands,
+    ]);
   }
 
   getModels(): ModelOption[] {
@@ -1862,6 +1882,7 @@ export class PiHost {
       todoRevision: 0,
       turnToolCount: 0,
       turnNudged: false,
+      runToolCount: 0,
       sessionGeneration: 0,
       status: "idle",
       pendingFileMutations: new Map(),
@@ -1884,6 +1905,7 @@ export class PiHost {
       slot.todoRevision = 0;
       slot.turnToolCount = 0;
       slot.turnNudged = false;
+      slot.runToolCount = 0;
       const fallback = defaultModeState(
         this.modelName(session) || undefined,
         (session.thinkingLevel || "medium") as ThinkingLevel,
@@ -2090,6 +2112,86 @@ export class PiHost {
       messages = (session?.sessionManager?.buildSessionContext?.().messages ?? []) as unknown[];
     }
     slot.sessionTodos = reconstructTodosFromMessages(messages);
+    this.reconcileSettledSession(slot, messages);
+  }
+
+  /**
+   * Close stale in_progress todos on sessions whose last turn already settled
+   * with a final answer. The turn-end reconcile only runs while the agent is
+   * live, so a session that finished before this feature existed (or that was
+   * reopened from disk) would otherwise keep showing a stale in_progress item
+   * forever. Same rules as the turn-end reconcile: only when the run really
+   * settled (last assistant message stopReason "stop") and did real tool work.
+   */
+  private reconcileSettledSession(slot: RuntimeSlot, messages: unknown[]): void {
+    if (slot.sessionTodos.length === 0) return;
+    const active = slot.sessionTodos.find((todo) => todo.status === "in_progress");
+    if (!active) return;
+    // The very last conversational message must be a settled assistant answer.
+    // A trailing user message means the user has a pending request for this
+    // in_progress task — do not close it behind their back.
+    let lastMeaningful: Record<string, unknown> | undefined;
+    for (const raw of messages) {
+      if (!raw || typeof raw !== "object") continue;
+      const message = raw as Record<string, unknown>;
+      if (message.role === "user" || message.role === "assistant") lastMeaningful = message;
+    }
+    if (!lastMeaningful || lastMeaningful.role !== "assistant" || lastMeaningful.stopReason !== "stop") return;
+    // Require real tool work after the last todo state write (todoread does
+    // not change state, so it does not count as a write).
+    let lastTodoWriteIndex = -1;
+    for (let index = 0; index < messages.length; index += 1) {
+      const raw = messages[index] as Record<string, unknown> | undefined;
+      const toolName = typeof raw?.toolName === "string" ? raw.toolName : undefined;
+      if (toolName && isTodoToolName(toolName) && toolName !== "todoread" && !raw?.isError) {
+        lastTodoWriteIndex = index;
+      }
+    }
+    // A todoread-only history has no attributable write; leave it untouched.
+    if (lastTodoWriteIndex < 0) return;
+    const didWork = messages.some((raw, index) => {
+      if (index <= lastTodoWriteIndex) return false;
+      const message = raw as Record<string, unknown> | undefined;
+      const toolName = typeof message?.toolName === "string" ? message.toolName : undefined;
+      return Boolean(toolName && !isTodoToolName(toolName) && !message?.isError);
+    });
+    if (!didWork) return;
+    if (!this.markActiveTodosCompleted(slot)) return;
+    this.persistTodosToSession(slot, slot.sessionTodos);
+  }
+
+  /** Mark every in_progress todo completed. Returns true when anything changed. */
+  private markActiveTodosCompleted(slot: RuntimeSlot): boolean {
+    if (slot.sessionTodos.length === 0) return false;
+    if (!slot.sessionTodos.some((todo) => todo.status === "in_progress")) return false;
+    slot.sessionTodos = slot.sessionTodos.map((todo) =>
+      todo.status === "in_progress" ? { ...todo, status: "completed" } : todo,
+    );
+    slot.todoRevision += 1;
+    return true;
+  }
+
+  /**
+   * Write the reconciled checklist into the session trace as a hidden custom
+   * message entry, so the panel and the extension's replay reconstruct the
+   * same state after a reload. The entry projects into the model's context as
+   * a non-interactive note (role "custom"), keeping the model's view aligned
+   * with the panel without fabricating a fake tool result.
+   */
+  private persistTodosToSession(slot: RuntimeSlot, todos: SessionTodoItem[]): void {
+    const manager = slot.runtime.session.sessionManager as
+      | { appendCustomMessageEntry?: (customType: string, content: string, display: boolean, details?: unknown) => string }
+      | undefined;
+    try {
+      manager?.appendCustomMessageEntry?.(
+        SESSION_TODO_CUSTOM_TYPE,
+        `Todo list reconciled after the turn ended:\n${formatTodoListText(todos)}`,
+        false,
+        { todos, updatedAt: new Date().toISOString() },
+      );
+    } catch {
+      // Persistence is best-effort; never break the live panel update.
+    }
   }
 
   private applyTodosFromBranch(todos: SessionTodoItem[], sessionManager: unknown): void {
@@ -2141,6 +2243,35 @@ export class PiHost {
       "Reminder: this turn has made several tool calls without a todo list.",
       "Call todowrite to break the remaining work into a checklist",
       "(pending / in_progress / completed), then continue one task at a time.",
+    ].join(" ");
+    void slot.runtime.session.steer(message).catch(() => undefined);
+  }
+
+  /**
+   * A turn that finishes normally should leave the checklist consistent. The
+   * model often plans tasks with todowrite but forgets to close its
+   * in_progress item, so the panel would keep showing stale "0/N done". Close
+   * it in the mirrored view immediately, persist the reconciled list into the
+   * session trace (so reloads and the model's next-turn context see the same
+   * state), and steer the model to update its own copy via todoupdate.
+   * Failed/retried runs skip this on purpose — an unfinished turn must keep
+   * its marker.
+   */
+  private reconcileTodosAfterTurn(slot: RuntimeSlot): void {
+    if (slot.sessionTodos.length === 0 || slot.runToolCount === 0) return;
+    const active = slot.sessionTodos.find((todo) => todo.status === "in_progress");
+    if (!active) return;
+    if (!this.markActiveTodosCompleted(slot)) return;
+    this.emit(
+      "todos_updated",
+      { todos: slot.sessionTodos, revision: slot.todoRevision },
+      undefined,
+      slot.key,
+    );
+    this.persistTodosToSession(slot, slot.sessionTodos);
+    const message = [
+      `Task "${active.content}" was left marked in_progress when the turn ended and has been marked completed.`,
+      "Call todoupdate to confirm this is correct, or restore it to in_progress if the work is genuinely unfinished.",
     ].join(" ");
     void slot.runtime.session.steer(message).catch(() => undefined);
   }
@@ -2263,6 +2394,7 @@ export class PiHost {
         this.applyTodosFromToolResult(slot, event.toolName, event.result, Boolean(event.isError));
         if (!event.toolName || !isTodoToolName(event.toolName)) {
           slot.turnToolCount += 1;
+          slot.runToolCount += 1;
           this.maybeNudgeForTodos(slot);
         }
         break;
@@ -2318,6 +2450,7 @@ export class PiHost {
         }
         slot.status = "completed";
         this.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
+        this.reconcileTodosAfterTurn(slot);
         this.emit(
           "session_completed",
           {
@@ -2348,6 +2481,7 @@ export class PiHost {
       }
       case "agent_start":
         slot.status = "running";
+        slot.runToolCount = 0;
         this.emit("agent_started", {}, raw, key);
         this.emitLiveSessionsChanged();
         break;

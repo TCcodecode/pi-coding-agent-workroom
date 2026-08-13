@@ -168,6 +168,7 @@ export function App() {
   const initialRestoredRef = useRef(false);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
   const openTabsRef = useRef(openTabs);
   const activeTabIdRef = useRef(activeTabId);
   const liveSessionsRef = useRef(liveSessions);
@@ -336,6 +337,15 @@ export function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [state.timeline]);
+
+  const jumpToLatest = useCallback(() => {
+    const wrap = timelineWrapRef.current;
+    // Do not force stickToBottom here: the streamed rAF re-stick would cut the
+    // smooth animation short. Let the scroll settle at the bottom; the scroll
+    // event handler then sees atBottom and re-engages stick-to-bottom.
+    setScrolledFromBottom(false);
+    if (wrap) wrap.scrollTo({ top: wrap.scrollHeight, behavior: "smooth" });
+  }, []);
 
   const patchTabStatus = useCallback((sessionKey: string, status: SessionStatus) => {
     if (status === "running" || status === "awaiting_approval") {
@@ -1378,9 +1388,10 @@ export function App() {
         setEditingInterruptedMessage(null);
         return true;
       }
-      if (command?.source === "extension") {
-        // AgentSession.prompt executes registered extension commands immediately,
-        // including while another turn is streaming. They must not be queued.
+      if (command?.source && command.source !== "builtin") {
+        // AgentSession.prompt executes registered extension commands immediately
+        // and expands /skill:<name> and /<template> commands, including while
+        // another turn is streaming. They must not be queued.
         promoteTab(sessionKey);
         await api.prompt(resolved, opts);
         setEditingInterruptedMessage(null);
@@ -1576,7 +1587,8 @@ export function App() {
   const planConversation = state.timeline.length > 0 ? (
     <Timeline
       items={state.timeline}
-      todos={state.session.todos}
+      scrollElementRef={timelineWrapRef}
+      sessionStatus={state.session.status}
       onReviewChanges={openChanges}
       reviewOpen={inspectorOpen && rightPane === "changes"}
       selectedReviewPath={selectedChangePath}
@@ -1785,7 +1797,9 @@ export function App() {
           onScroll={() => {
             const wrap = timelineWrapRef.current;
             if (!wrap) return;
-            stickToBottomRef.current = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+            const atBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+            stickToBottomRef.current = atBottom;
+            setScrolledFromBottom(!atBottom);
           }}
         >
           <div className="chat-column">
@@ -1824,6 +1838,18 @@ export function App() {
               </div>
             )}
           </div>
+          {scrolledFromBottom && state.timeline.length > 0 && (
+            <button
+              type="button"
+              className="timeline-jump-latest"
+              aria-label="Jump to latest"
+              title="Jump to the latest messages"
+              onClick={jumpToLatest}
+            >
+              <AppIcon name="chevronDown" size="sm" />
+              New messages
+            </button>
+          )}
         </div>
 
         <div className="composer-dock">
@@ -1930,6 +1956,13 @@ export function App() {
         onClose={() => setPaletteOpen(false)}
         onSelect={async (command) => {
           setPaletteOpen(false);
+          if (command.source && command.source !== "builtin") {
+            // Extension, skill, and prompt-template commands are executed by
+            // AgentSession.prompt (extension dispatch + /skill: /<template>
+            // expansion) — executeCommand has no handler for them.
+            await submit({ text: command.name, attachments: [] });
+            return;
+          }
           await api?.executeCommand(command.name);
           // Reload (and other state-mutating commands) change main-process
           // resources (extensions/skills/prompts). Re-pull the snapshot so

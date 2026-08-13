@@ -113,6 +113,63 @@ describe("reconstructTodosFromMessages", () => {
       { id: "1", content: "First", status: "completed", priority: "medium" },
     ]);
   });
+
+  it("applies host-persisted reconcile messages (role custom, session-todo type)", () => {
+    const todos = reconstructTodosFromMessages([
+      {
+        role: "toolResult",
+        toolName: "todowrite",
+        details: { todos: [{ id: "1", content: "Fix", status: "in_progress", priority: "high" }] },
+      },
+      {
+        role: "custom",
+        customType: "session-todo",
+        content: "Todo list reconciled after the turn ended:",
+        display: false,
+        details: { todos: [{ id: "1", content: "Fix", status: "completed", priority: "high" }] },
+      },
+    ]);
+    expect(todos).toEqual([{ id: "1", content: "Fix", status: "completed", priority: "high" }]);
+  });
+
+  it("applies raw custom_message branch entries with the session-todo type", () => {
+    const todos = reconstructTodosFromMessages([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolName: "todowrite",
+          details: { todos: [{ id: "1", content: "Fix", status: "in_progress", priority: "high" }] },
+        },
+      },
+      {
+        type: "custom_message",
+        customType: "session-todo",
+        content: "Todo list reconciled after the turn ended:",
+        display: false,
+        details: { todos: [{ id: "1", content: "Fix", status: "completed", priority: "high" }] },
+      },
+    ]);
+    expect(todos).toEqual([{ id: "1", content: "Fix", status: "completed", priority: "high" }]);
+  });
+
+  it("ignores custom messages with other custom types", () => {
+    const todos = reconstructTodosFromMessages([
+      {
+        role: "toolResult",
+        toolName: "todowrite",
+        details: { todos: [{ id: "1", content: "Fix", status: "in_progress", priority: "high" }] },
+      },
+      {
+        role: "custom",
+        customType: "some-other-extension",
+        content: "note",
+        display: true,
+        details: { todos: [{ id: "1", content: "Fix", status: "completed", priority: "high" }] },
+      },
+    ]);
+    expect(todos[0]?.status).toBe("in_progress");
+  });
 });
 
 describe("format + progress", () => {

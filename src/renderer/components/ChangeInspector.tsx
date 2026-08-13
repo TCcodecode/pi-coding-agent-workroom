@@ -18,9 +18,16 @@ interface FileTreeNode {
   path: string;
   change?: FileChangeSummary;
   children: FileTreeNode[];
+  /** Changed files under this subtree (including the node itself). */
+  fileCount: number;
+  totalAdditions: number;
+  totalDeletions: number;
 }
 
-interface MutableFileTreeNode extends Omit<FileTreeNode, "children"> {
+interface MutableFileTreeNode {
+  name: string;
+  path: string;
+  change?: FileChangeSummary;
   children: Map<string, MutableFileTreeNode>;
 }
 
@@ -49,12 +56,19 @@ function buildFileTree(changes: FileChangeSummary[]): FileTreeNode[] {
         const bFile = b.change ? 1 : 0;
         return aFile - bFile || a.name.localeCompare(b.name);
       })
-      .map((node) => ({
-        name: node.name,
-        path: node.path,
-        change: node.change,
-        children: materialize(node.children),
-      }));
+      .map((node) => {
+        const children = materialize(node.children);
+        const fileCount = (node.change ? 1 : 0) + children.reduce((sum, child) => sum + child.fileCount, 0);
+        return {
+          name: node.name,
+          path: node.path,
+          change: node.change,
+          children,
+          fileCount,
+          totalAdditions: (node.change?.additions ?? 0) + children.reduce((sum, child) => sum + child.totalAdditions, 0),
+          totalDeletions: (node.change?.deletions ?? 0) + children.reduce((sum, child) => sum + child.totalDeletions, 0),
+        };
+      });
 
   return materialize(root);
 }
@@ -62,6 +76,7 @@ function buildFileTree(changes: FileChangeSummary[]): FileTreeNode[] {
 function FileTreeNodeView({
   node,
   level,
+  defaultOpen,
   selectedPath,
   onSelect,
   onOpenFile,
@@ -69,12 +84,16 @@ function FileTreeNodeView({
 }: {
   node: FileTreeNode;
   level: number;
+  defaultOpen: boolean;
   selectedPath?: string;
   onSelect: (path: string) => void;
   onOpenFile: (path: string) => void;
   reviewedPaths: ReadonlySet<string>;
 }) {
-  const [open, setOpen] = useState(true);
+  // Folders that merely wrap one deeper folder add nothing to a collapsed
+  // tree, so walk through them automatically instead of asking for a click.
+  const isChainNode = node.children.length === 1 && !node.children[0].change;
+  const [open, setOpen] = useState(defaultOpen || isChainNode);
   if (node.change) {
     return (
       <button
@@ -115,12 +134,18 @@ function FileTreeNodeView({
         <AppIcon name="chevronRight" size="xs" className={`change-tree-chevron ${open ? "open" : ""}`} />
         <AppIcon name="folder" size="xs" />
         <span className="change-tree-name">{node.name}</span>
+        <span className="change-tree-folder-stats">
+          <span className="change-tree-folder-count">{node.fileCount} {node.fileCount === 1 ? "file" : "files"}</span>
+          <span className="change-additions">+{node.totalAdditions}</span>
+          <span className="change-deletions">-{node.totalDeletions}</span>
+        </span>
       </button>
       {open && node.children.map((child) => (
         <FileTreeNodeView
           key={child.path}
           node={child}
           level={level + 1}
+          defaultOpen={defaultOpen}
           selectedPath={selectedPath}
           onSelect={onSelect}
           onOpenFile={onOpenFile}
@@ -155,6 +180,14 @@ export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, o
   const selectedChange = changes.find((change) => change.path === selectedPath) ?? changes[0];
   const [reviewedPaths, setReviewedPaths] = useState<Set<string>>(() => new Set());
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(() => new Set());
+  // Small sessions stay fully visible; large ones start collapsed so the tree
+  // reads as a directory overview instead of an endless file list.
+  const [expanded, setExpanded] = useState<boolean>(() => changes.length <= 10);
+  const [treeVersion, setTreeVersion] = useState(0);
+  const toggleAll = () => {
+    setExpanded((value) => !value);
+    setTreeVersion((value) => value + 1);
+  };
 
   useEffect(() => {
     const paths = new Set(changes.map((change) => change.path));
@@ -222,14 +255,25 @@ export function ChangeInspector({ changes, selectedPath, onSelect, onOpenFile, o
           <div className="change-inspector-section-heading">
             <span>This Session</span>
             {changes.length > 0 && <span className="section-count">{changes.length}</span>}
+            {changes.length > 1 && (
+              <button
+                type="button"
+                className="change-tree-toggle-all"
+                aria-label={expanded ? "Collapse all folders" : "Expand all folders"}
+                onClick={toggleAll}
+              >
+                {expanded ? "Collapse all" : "Expand all"}
+              </button>
+            )}
           </div>
           {tree.length > 0 ? (
-            <div className="change-tree" aria-label="Changed files">
+            <div className="change-tree" key={treeVersion} aria-label="Changed files">
               {tree.map((node) => (
                 <FileTreeNodeView
                   key={node.path}
                   node={node}
                   level={0}
+                  defaultOpen={expanded}
                   selectedPath={selectedChange?.path}
                   onSelect={handleFileSelect}
                   onOpenFile={onOpenFile}

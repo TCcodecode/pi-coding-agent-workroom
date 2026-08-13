@@ -4,6 +4,15 @@ import type { SessionTodoItem, TodoDetails, TodoPriority, TodoStatus } from "./t
 const STATUSES = new Set<TodoStatus>(["pending", "in_progress", "completed", "cancelled"]);
 const PRIORITIES = new Set<TodoPriority>(["high", "medium", "low"]);
 
+/**
+ * Custom entry/message type used by the host to persist todo reconciles into
+ * the session trace. The host writes a `custom_message` entry (via
+ * SessionManager.appendCustomMessageEntry) when it closes a stale
+ * in_progress item after a settled turn, so the reconciled list survives
+ * session reloads and the extension rebuilds the same state on replay.
+ */
+export const SESSION_TODO_CUSTOM_TYPE = "session-todo";
+
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -73,9 +82,23 @@ export function reconstructTodosFromMessages(messages: unknown[]): SessionTodoIt
       continue;
     }
 
+    // Host-persisted reconcile messages (role "custom" from custom_message
+    // entries projected into agent messages).
+    if (role === "custom" && message.customType === SESSION_TODO_CUSTOM_TYPE) {
+      const fromDetails = todosFromToolResult(message);
+      if (fromDetails) latest = fromDetails;
+      continue;
+    }
+
     // Some hosts may only keep tool result objects without role
     if (toolName && isTodoToolName(toolName)) {
       if (message.isError) continue;
+      const parsed = todosFromToolResult(message);
+      if (parsed) latest = parsed;
+    }
+
+    // Raw custom_message branch entries (extensions scan getBranch() directly).
+    if (message.type === "custom_message" && message.customType === SESSION_TODO_CUSTOM_TYPE) {
       const parsed = todosFromToolResult(message);
       if (parsed) latest = parsed;
     }
