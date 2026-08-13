@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
 import { execFile } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { dirname, join, resolve } from "node:path";
+import { persistComposerImage } from "./composerAttachments.js";
 import { PiHost } from "./piHost.js";
 import { setProjectCatalogPath } from "./projectCatalog.js";
 import { CodeIndexService } from "./indexService.js";
@@ -58,6 +59,26 @@ function registerPiIpc() {
   ipcMain.handle("pi:chooseFile", async () => {
     const result = await dialog.showOpenDialog({ properties: ["openFile"] });
     return result.canceled ? undefined : result.filePaths[0];
+  });
+  ipcMain.handle("pi:chooseAttachmentFiles", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Select image attachments",
+      buttonLabel: "Attach images",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"] },
+      ],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle("pi:persistImageAttachment", async (_event, input) => {
+    const rootDir = join(app.getPath("temp"), "pi-desk", "composer-attachments");
+    return persistComposerImage({ rootDir, ...input });
+  });
+  ipcMain.handle("pi:loadImagePreview", async (_event, targetPath: string) => {
+    if (typeof targetPath !== "string" || !targetPath.trim()) return undefined;
+    const image = nativeImage.createFromPath(targetPath);
+    return image.isEmpty() ? undefined : image.toDataURL();
   });
   ipcMain.handle(
     "pi:startSession",

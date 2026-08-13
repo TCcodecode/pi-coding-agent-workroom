@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ModelOption,
+  ComposerImageAttachmentFile,
   ProjectFileEntry,
   ProjectSummary,
   SessionSummary,
@@ -15,9 +16,28 @@ import type { PaletteCommand } from "./commandTypes";
 import { AppIcon } from "./icons";
 
 const DEFAULT_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i;
+
+interface ImageAttachment {
+  id: string;
+  name: string;
+  path: string;
+  previewUrl: string;
+  source: "picker" | "paste";
+}
+
+export interface ComposerSubmitAttachment {
+  name: string;
+  path: string;
+}
+
+export interface ComposerSubmitPayload {
+  text: string;
+  attachments: ComposerSubmitAttachment[];
+}
 
 export interface ComposerProps {
-  onSubmit: (text: string) => Promise<boolean>;
+  onSubmit: (payload: ComposerSubmitPayload) => Promise<boolean>;
   onAbort: () => void;
   onPickFile: () => Promise<string | undefined>;
   /** Previously submitted user messages from the active conversation. */
@@ -96,12 +116,69 @@ export function Composer({
   const [commandHighlighted, setCommandHighlighted] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyDraftRef = useRef("");
   const historyCaretRef = useRef<number | null>(null);
   const atCaretRef = useRef(0);
   const commandTokenRef = useRef<{ start: number; end: number; query: string } | null>(null);
   const commandCaretRef = useRef<number | null>(null);
+  const attachmentIdRef = useRef(0);
+
+  const nextAttachmentId = () => {
+    attachmentIdRef.current += 1;
+    return `attachment-${attachmentIdRef.current}`;
+  };
+
+  const isImagePath = (path: string) => IMAGE_PATH_RE.test(path);
+
+  const loadPreviewUrl = async (path: string): Promise<string> => {
+    const preview = await window.pi?.loadImagePreview?.(path);
+    if (preview) return preview;
+    if (path.startsWith("file://")) return path;
+    return new URL(`file://${path}`).toString();
+  };
+
+  const buildAttachment = async (
+    file: ComposerImageAttachmentFile | { path: string; name: string },
+    source: ImageAttachment["source"],
+  ): Promise<ImageAttachment> => ({
+    id: nextAttachmentId(),
+    name: file.name || file.path.split("/").pop() || "image",
+    path: file.path,
+    previewUrl: await loadPreviewUrl(file.path),
+    source,
+  });
+
+  const addImageAttachments = async (
+    files: Array<ComposerImageAttachmentFile | { path: string; name: string }>,
+    source: ImageAttachment["source"],
+  ) => {
+    if (files.length === 0) return;
+    const next = await Promise.all(files.map((file) => buildAttachment(file, source)));
+    setAttachments((current) => [...current, ...next]);
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((current) => current.filter((item) => item.id !== id));
+  };
+
+  const appendPathsToText = (paths: string[]) => {
+    if (paths.length === 0) return;
+    setText((current) => [current, ...paths].filter(Boolean).join(" ").trim());
+  };
+
+  const readBlobBytes = async (blob: Blob): Promise<Uint8Array> => {
+    if (typeof blob.arrayBuffer === "function") {
+      return new Uint8Array(await blob.arrayBuffer());
+    }
+    return await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error("Failed to read clipboard image"));
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.readAsArrayBuffer(blob);
+    });
+  };
 
   const historyEntries = useMemo(() => {
     const persisted = history.filter((item) => item.trim().length > 0);
@@ -142,18 +219,25 @@ export function Composer({
 
   const submit = async () => {
     const value = text.trim();
-    if (!value || sending) return;
+    if ((value.length === 0 && attachments.length === 0) || sending) return;
     setSending(true);
     // Clear optimistically so the box never keeps sent text while the agent
     // runs; restore only when the send is rejected before starting.
     const snapshot = text;
     setText("");
     try {
-      const sent = await onSubmit(value);
+      const sent = await onSubmit({
+        text: value,
+        attachments: attachments.map((attachment) => ({
+          name: attachment.name,
+          path: attachment.path,
+        })),
+      });
       if (!sent) {
         setText(snapshot);
       } else {
-        setSubmittedHistory((current) => [...current, value]);
+        if (value) setSubmittedHistory((current) => [...current, value]);
+        setAttachments([]);
         setHistoryIndex(-1);
         historyDraftRef.current = "";
       }
@@ -169,6 +253,7 @@ export function Composer({
     setSubmittedHistory([]);
     setHistoryIndex(-1);
     historyDraftRef.current = "";
+    setAttachments([]);
   }, [conversationId]);
 
   useEffect(() => {
@@ -310,17 +395,52 @@ export function Composer({
     if (session.sessionFile) replaceAtMarker(`@session:${session.sessionFile}`);
   };
 
-  const pickFile = async () => {
+  const pickReferenceFile = async () => {
     const path = await onPickFile();
     if (!path) return;
     if (atPickerOpen && text.slice(0, atCaretRef.current).includes("@")) {
       replaceAtMarker(`@${path}`);
       return;
     }
-    setText((current) => (current ? `${current} ${path}` : path));
+    appendPathsToText([path]);
     setAtPickerOpen(false);
     setAtQuery("");
     textareaRef.current?.focus();
+  };
+
+  const pickAttachment = async () => {
+    const path = await onPickFile();
+    if (!path) return;
+    if (isImagePath(path)) {
+      await addImageAttachments([{ path, name: path.split("/").pop() ?? "image" }], "picker");
+      textareaRef.current?.focus();
+      return;
+    }
+    appendPathsToText([path]);
+    textareaRef.current?.focus();
+  };
+
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageItems = Array.from(event.clipboardData.items).filter(
+      (item) => item.kind === "file" && item.type.startsWith("image/"),
+    );
+    if (imageItems.length === 0) return;
+
+    const persistImageAttachment = window.pi?.persistImageAttachment;
+    if (!persistImageAttachment) return;
+
+    event.preventDefault();
+
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const saved = await persistImageAttachment({
+        name: file.name || "pasted-image.png",
+        mimeType: file.type || "image/png",
+        bytes: await readBlobBytes(file),
+      });
+      await addImageAttachments([saved], "paste");
+    }
   };
 
   const pickFileEntry = (file: ProjectFileEntry) => {
@@ -471,6 +591,9 @@ export function Composer({
           aria-label="Message"
           value={text}
           placeholder={isRunning ? "Queue a follow-up..." : placeholder ?? "Ask Pi anything about this workspace..."}
+          onPaste={(event) => {
+            void handlePaste(event);
+          }}
           onChange={(event) => {
             const next = event.target.value;
             setText(next);
@@ -572,7 +695,7 @@ export function Composer({
               {filesLoading ? (
                 <div className="at-picker-empty">Loading files…</div>
               ) : filteredFiles.length === 0 ? (
-                <button type="button" className="at-picker-item" onClick={() => void pickFile()}>
+                <button type="button" className="at-picker-item" onClick={() => void pickReferenceFile()}>
                   <span className="at-picker-icon" aria-hidden>
                     <AppIcon name="folder" size="sm" />
                   </span>
@@ -617,13 +740,38 @@ export function Composer({
             </div>
           </div>
         )}
+        {attachments.length > 0 && (
+          <div className="composer-attachments" aria-label="Selected image attachments">
+            {attachments.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="composer-attachment-card"
+                aria-label={`Attachment preview ${attachment.name}`}
+              >
+                <img src={attachment.previewUrl} alt={attachment.name} />
+                <div className="composer-attachment-meta">
+                  <span className="composer-attachment-name">{attachment.name}</span>
+                  <span className="composer-attachment-source">{attachment.source}</span>
+                </div>
+                <button
+                  type="button"
+                  className="composer-attachment-remove"
+                  aria-label={`Remove attachment ${attachment.name}`}
+                  onClick={() => removeAttachment(attachment.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="composer-toolbar">
           <div className="composer-primary-tools composer-tools">
             <ControlBox
               as="button"
               className="ctrl-box"
               ariaLabel="Attach file"
-              buttonProps={{ onClick: () => void pickFile() }}
+              buttonProps={{ onClick: () => void pickAttachment() }}
             >
               <AppIcon name="plus" size="sm" />
             </ControlBox>

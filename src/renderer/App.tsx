@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Composer } from "./components/Composer";
+import { Composer, type ComposerSubmitPayload } from "./components/Composer";
 import { collectFileChanges, Timeline } from "./components/Timeline";
 import { ChangeInspector } from "./components/ChangeInspector";
 import { ResourceInspector } from "./components/ResourceInspector";
@@ -68,6 +68,8 @@ const SESSION_SCOPED_EVENT_TYPES = new Set<PiEvent["type"]>([
 ]);
 
 type RightPane = "inspector" | "plan" | "changes";
+type EditingInterruptedMessage = { messageId: string; text: string } | null;
+const EMPTY_INTERRUPTED_MESSAGE_IDS: readonly string[] = [];
 
 function canBePreview(status?: SessionStatus): boolean {
   // A session's persisted history is not evidence that the user has started
@@ -156,6 +158,8 @@ export function App() {
   const [openTabs, setOpenTabs] = useState<SessionTab[]>(() => loadOpenTabs().tabs);
   const [activeTabId, setActiveTabId] = useState<string | undefined>(() => loadOpenTabs().activeTabId);
   const [liveSessions, setLiveSessions] = useState<LiveSessionSummary[]>([]);
+  const [editingInterruptedMessage, setEditingInterruptedMessage] = useState<EditingInterruptedMessage>(null);
+  const [savingInterruptedMessageEdit, setSavingInterruptedMessageEdit] = useState(false);
   const sessionChanges = useMemo(() => collectFileChanges(state.timeline), [state.timeline]);
   const composerHistory = useMemo(
     () => state.timeline.flatMap((item) => (item.kind === "user" ? [item.content] : [])),
@@ -184,6 +188,40 @@ export function App() {
     setRightPane("changes");
     setInspectorOpen(true);
   }, [sessionChanges]);
+
+  const activeConversationId = activeTabId ?? state.session.sessionId;
+  const interruptedUserMessageIds = useMemo<readonly string[]>(() => {
+    if (state.session.status === "running") return EMPTY_INTERRUPTED_MESSAGE_IDS;
+    for (let i = state.timeline.length - 1; i >= 0; i -= 1) {
+      const item = state.timeline[i];
+      if (item.kind === "user") return [item.id];
+    }
+    return EMPTY_INTERRUPTED_MESSAGE_IDS;
+  }, [state.session.status, state.timeline]);
+
+  useEffect(() => {
+    setEditingInterruptedMessage(null);
+    setSavingInterruptedMessageEdit(false);
+  }, [activeConversationId]);
+
+  const copyInterruptedMessage = useCallback(async (item: { content: string }) => {
+    try {
+      await navigator.clipboard?.writeText(item.content);
+    } catch (error) {
+      pushError(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  const editInterruptedMessage = useCallback((item: { id: string; content: string }) => {
+    setEditingInterruptedMessage({ messageId: item.id, text: item.content });
+  }, []);
+
+  const formatPromptWithAttachments = useCallback((payload: ComposerSubmitPayload): string => (
+    [payload.text.trim(), ...payload.attachments.map((attachment) => `@${attachment.path}`)]
+      .filter(Boolean)
+      .join("\n")
+      .trim()
+  ), []);
 
   const undoChange = useCallback(async (path: string) => {
     if (!api?.undoFileChange) return;
@@ -584,6 +622,26 @@ export function App() {
       if (tab.sessionFile) {
         const byFile = live.find((item) => item.sessionFile === tab.sessionFile);
         if (byFile) return byFile;
+      }
+      const current = useAppStore.getState().session;
+      if (
+        activeTabIdRef.current === tab.id &&
+        current.sessionId &&
+        (
+          (tab.sessionFile && current.sessionFile && tab.sessionFile === current.sessionFile) ||
+          (tab.sessionId && tab.sessionId === current.sessionId) ||
+          (!tab.sessionFile && !tab.sessionId)
+        )
+      ) {
+        return {
+          sessionKey: tab.id,
+          sessionId: current.sessionId,
+          sessionFile: current.sessionFile,
+          cwd: current.cwd,
+          projectId: tab.projectId,
+          name: current.name,
+          status: current.status,
+        };
       }
       return undefined;
     },
@@ -1299,13 +1357,15 @@ export function App() {
     void api?.revealInFolder?.(path);
   };
 
-  const submit = async (text: string): Promise<boolean> => {
+  const submit = async (payload: ComposerSubmitPayload): Promise<boolean> => {
     if (!api) return false;
     try {
       if (!(await ensureSession())) return false;
+      const sessionKey = activeTabIdRef.current ? await ensureActiveTabRuntime() : undefined;
       const mode = useAppStore.getState().session.status === "running" ? "followUp" : "prompt";
-      const resolved = await resolveSessionReferences(text);
-      const sessionKey = activeTabIdRef.current;
+      const prompt = formatPromptWithAttachments(payload);
+      const resolved = await resolveSessionReferences(prompt);
+      if (!resolved) return false;
       const opts = sessionKey ? { sessionKey } : undefined;
 
       const commandMatch = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(resolved.trim());
@@ -1315,6 +1375,7 @@ export function App() {
       if (command?.source === "builtin") {
         await api.executeCommand(command.name, commandMatch?.[2] ?? "");
         applySnapshot(await api.getSnapshot());
+        setEditingInterruptedMessage(null);
         return true;
       }
       if (command?.source === "extension") {
@@ -1322,6 +1383,7 @@ export function App() {
         // including while another turn is streaming. They must not be queued.
         promoteTab(sessionKey);
         await api.prompt(resolved, opts);
+        setEditingInterruptedMessage(null);
         return true;
       }
 
@@ -1336,6 +1398,7 @@ export function App() {
         openTabsRef.current = touched;
         setOpenTabs(touched);
       }
+      setEditingInterruptedMessage(null);
       return true;
     } catch (error) {
       pushError(error instanceof Error ? error.message : String(error));
@@ -1343,12 +1406,24 @@ export function App() {
     }
   };
 
+  const saveInterruptedMessageEdit = useCallback(async (): Promise<void> => {
+    const current = editingInterruptedMessage;
+    if (!current || savingInterruptedMessageEdit) return;
+    setSavingInterruptedMessageEdit(true);
+    try {
+      const ok = await submit({ text: current.text, attachments: [] });
+      if (!ok) return;
+    } finally {
+      setSavingInterruptedMessageEdit(false);
+    }
+  }, [editingInterruptedMessage, savingInterruptedMessageEdit, submit]);
+
   const editFollowUp = async (index: number, text: string): Promise<boolean> => {
     if (!api?.editFollowUp) return false;
     try {
       if (!(await ensureSession())) return false;
+      const sessionKey = activeTabIdRef.current ? await ensureActiveTabRuntime() : undefined;
       const resolved = await resolveSessionReferences(text);
-      const sessionKey = activeTabIdRef.current;
       const expectedText = useAppStore.getState().queue.followUp[index];
       await api.editFollowUp(index, resolved, sessionKey ? { sessionKey } : undefined, expectedText);
       return true;
@@ -1362,7 +1437,7 @@ export function App() {
     if (!api?.sendFollowUpNow) return false;
     try {
       if (!(await ensureSession())) return false;
-      const sessionKey = activeTabIdRef.current;
+      const sessionKey = activeTabIdRef.current ? await ensureActiveTabRuntime() : undefined;
       const expectedText = useAppStore.getState().queue.followUp[index];
       await api.sendFollowUpNow(index, sessionKey ? { sessionKey } : undefined, expectedText);
       return true;
@@ -1507,6 +1582,14 @@ export function App() {
       selectedReviewPath={selectedChangePath}
       onCloseReview={() => setInspectorOpen(false)}
       onUndoChanges={undoChanges}
+      interruptedUserMessageIds={interruptedUserMessageIds}
+      onCopyInterruptedMessage={copyInterruptedMessage}
+      onEditInterruptedMessage={editInterruptedMessage}
+      editingInterruptedMessage={editingInterruptedMessage}
+      interruptedEditSaving={savingInterruptedMessageEdit}
+      onInterruptedMessageTextChange={(text) => setEditingInterruptedMessage((current) => (current ? { ...current, text } : current))}
+      onSaveInterruptedMessageEdit={() => void saveInterruptedMessageEdit()}
+      onCancelInterruptedMessageEdit={() => setEditingInterruptedMessage(null)}
     />
   ) : undefined;
 
@@ -1522,7 +1605,7 @@ export function App() {
       <Composer
         onSubmit={submit}
         history={composerHistory}
-        conversationId={activeTabId ?? state.session.sessionId}
+        conversationId={activeConversationId}
         onAbort={() => void api?.abort(activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined)}
         onPickFile={() => api?.chooseFile() ?? Promise.resolve(undefined)}
         sessions={state.sessions}
@@ -1748,7 +1831,7 @@ export function App() {
             <Composer
               onSubmit={submit}
               history={composerHistory}
-              conversationId={activeTabId ?? state.session.sessionId}
+              conversationId={activeConversationId}
               onAbort={() =>
                 void api?.abort(
                   activeTabIdRef.current ? { sessionKey: activeTabIdRef.current } : undefined,

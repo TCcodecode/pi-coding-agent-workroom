@@ -1,7 +1,9 @@
-import { Fragment, memo, useState } from "react";
+import { Fragment, memo, useMemo, useState, type KeyboardEvent } from "react";
 import type { FileChangeSummary, SessionTodoItem, TimelineItem } from "../../shared/protocol";
 import { Markdown } from "./Markdown";
 import { AppIcon, type AppIconName } from "./icons";
+
+type UserTimelineItem = TimelineItem & { kind: "user" };
 
 export interface TimelineProps {
   items: TimelineItem[];
@@ -12,6 +14,15 @@ export interface TimelineProps {
   selectedReviewPath?: string;
   onCloseReview?: () => void;
   onUndoChanges?: (paths: string[]) => void | Promise<void>;
+  /** User message ids that represent interrupted prompts and can expose inline actions. */
+  interruptedUserMessageIds?: readonly string[];
+  onCopyInterruptedMessage?: (item: UserTimelineItem) => void | Promise<void>;
+  onEditInterruptedMessage?: (item: UserTimelineItem) => void;
+  editingInterruptedMessage?: { messageId: string; text: string } | null;
+  interruptedEditSaving?: boolean;
+  onInterruptedMessageTextChange?: (text: string) => void;
+  onSaveInterruptedMessageEdit?: () => void | Promise<void>;
+  onCancelInterruptedMessageEdit?: () => void;
 }
 
 export const Timeline = memo(function Timeline({
@@ -22,7 +33,19 @@ export const Timeline = memo(function Timeline({
   selectedReviewPath,
   onCloseReview,
   onUndoChanges,
+  interruptedUserMessageIds = [],
+  onCopyInterruptedMessage,
+  onEditInterruptedMessage,
+  editingInterruptedMessage = null,
+  interruptedEditSaving = false,
+  onInterruptedMessageTextChange,
+  onSaveInterruptedMessageEdit,
+  onCancelInterruptedMessageEdit,
 }: TimelineProps) {
+  const interruptedUserMessageIdSet = useMemo(
+    () => new Set(interruptedUserMessageIds),
+    [interruptedUserMessageIds],
+  );
   if (items.length === 0) {
     return <div className="timeline-empty"><div className="empty-glyph"><AppIcon name="messageSquare" size="lg" /></div><p>Pi is ready when you are.</p></div>;
   }
@@ -40,6 +63,14 @@ export const Timeline = memo(function Timeline({
           selectedReviewPath={selectedReviewPath}
           onCloseReview={onCloseReview}
           onUndoChanges={onUndoChanges}
+          interruptedUserMessageIds={interruptedUserMessageIdSet}
+          onCopyInterruptedMessage={onCopyInterruptedMessage}
+          onEditInterruptedMessage={onEditInterruptedMessage}
+          editingInterruptedMessage={editingInterruptedMessage}
+          interruptedEditSaving={interruptedEditSaving}
+          onInterruptedMessageTextChange={onInterruptedMessageTextChange}
+          onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
+          onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
         />
       ))}
     </div>
@@ -52,7 +83,15 @@ export const Timeline = memo(function Timeline({
     prev.items === next.items &&
     prev.todos === next.todos &&
     prev.reviewOpen === next.reviewOpen &&
-    prev.selectedReviewPath === next.selectedReviewPath
+    prev.selectedReviewPath === next.selectedReviewPath &&
+    prev.interruptedUserMessageIds === next.interruptedUserMessageIds &&
+    prev.onCopyInterruptedMessage === next.onCopyInterruptedMessage &&
+    prev.onEditInterruptedMessage === next.onEditInterruptedMessage &&
+    prev.editingInterruptedMessage === next.editingInterruptedMessage &&
+    prev.interruptedEditSaving === next.interruptedEditSaving &&
+    prev.onInterruptedMessageTextChange === next.onInterruptedMessageTextChange &&
+    prev.onSaveInterruptedMessageEdit === next.onSaveInterruptedMessageEdit &&
+    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit
   );
 });
 
@@ -93,6 +132,14 @@ const Turn = memo(function Turn({
   selectedReviewPath,
   onCloseReview,
   onUndoChanges,
+  interruptedUserMessageIds,
+  onCopyInterruptedMessage,
+  onEditInterruptedMessage,
+  editingInterruptedMessage,
+  interruptedEditSaving,
+  onInterruptedMessageTextChange,
+  onSaveInterruptedMessageEdit,
+  onCancelInterruptedMessageEdit,
 }: {
   items: TimelineItem[];
   todos: SessionTodoItem[];
@@ -101,6 +148,14 @@ const Turn = memo(function Turn({
   selectedReviewPath?: string;
   onCloseReview?: () => void;
   onUndoChanges?: (paths: string[]) => void | Promise<void>;
+  interruptedUserMessageIds: ReadonlySet<string>;
+  onCopyInterruptedMessage?: (item: UserTimelineItem) => void | Promise<void>;
+  onEditInterruptedMessage?: (item: UserTimelineItem) => void;
+  editingInterruptedMessage?: { messageId: string; text: string } | null;
+  interruptedEditSaving?: boolean;
+  onInterruptedMessageTextChange?: (text: string) => void;
+  onSaveInterruptedMessageEdit?: () => void | Promise<void>;
+  onCancelInterruptedMessageEdit?: () => void;
 }) {
   const trace = mergeTimelineToolCalls(items);
   const changes = summarizeFileChanges(trace);
@@ -111,7 +166,20 @@ const Turn = memo(function Turn({
       {groupEntriesByTask(entries).map((chunk) => {
         const body = chunk.entries.map((entry) => entry.kind === "toolGroup"
           ? <ToolGroupView key={entry.id} group={entry} />
-          : <TimelineItemView key={entry.id} item={entry} />);
+          : (
+              <TimelineItemView
+                key={entry.id}
+                item={entry}
+                interruptedUserMessageIds={interruptedUserMessageIds}
+                onCopyInterruptedMessage={onCopyInterruptedMessage}
+                onEditInterruptedMessage={onEditInterruptedMessage}
+                editingInterruptedMessage={editingInterruptedMessage}
+                interruptedEditSaving={interruptedEditSaving}
+                onInterruptedMessageTextChange={onInterruptedMessageTextChange}
+                onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
+                onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
+              />
+            ));
         const todo = chunk.taskId ? todosById.get(chunk.taskId) : undefined;
         if (!todo) {
           return <Fragment key={chunk.entries[0]?.id ?? "loose"}>{body}</Fragment>;
@@ -150,7 +218,15 @@ const Turn = memo(function Turn({
     prev.selectedReviewPath === next.selectedReviewPath &&
     prev.onCloseReview === next.onCloseReview &&
     prev.onUndoChanges === next.onUndoChanges &&
-    prev.todos === next.todos
+    prev.todos === next.todos &&
+    prev.interruptedUserMessageIds === next.interruptedUserMessageIds &&
+    prev.onCopyInterruptedMessage === next.onCopyInterruptedMessage &&
+    prev.onEditInterruptedMessage === next.onEditInterruptedMessage &&
+    prev.editingInterruptedMessage === next.editingInterruptedMessage &&
+    prev.interruptedEditSaving === next.interruptedEditSaving &&
+    prev.onInterruptedMessageTextChange === next.onInterruptedMessageTextChange &&
+    prev.onSaveInterruptedMessageEdit === next.onSaveInterruptedMessageEdit &&
+    prev.onCancelInterruptedMessageEdit === next.onCancelInterruptedMessageEdit
   );
 });
 
@@ -640,15 +716,37 @@ function ToolGroupView({ group }: { group: ToolGroup }) {
       </div>
       {expanded && (
         <div className="tool-group-body">
-          {group.thinking.map((thinking) => <TimelineItemView key={thinking.id} item={thinking} />)}
-          {group.items.map((tool) => <TimelineItemView key={tool.id} item={tool} />)}
+          {group.thinking.map((thinking) => <TimelineItemView key={thinking.id} item={thinking} interruptedUserMessageIds={EMPTY_MESSAGE_ID_SET} />)}
+          {group.items.map((tool) => <TimelineItemView key={tool.id} item={tool} interruptedUserMessageIds={EMPTY_MESSAGE_ID_SET} />)}
         </div>
       )}
     </article>
   );
 }
 
-const TimelineItemView = memo(function TimelineItemView({ item }: { item: TimelineItem }) {
+const EMPTY_MESSAGE_ID_SET = new Set<string>();
+
+const TimelineItemView = memo(function TimelineItemView({
+  item,
+  interruptedUserMessageIds = EMPTY_MESSAGE_ID_SET,
+  onCopyInterruptedMessage,
+  onEditInterruptedMessage,
+  editingInterruptedMessage,
+  interruptedEditSaving = false,
+  onInterruptedMessageTextChange,
+  onSaveInterruptedMessageEdit,
+  onCancelInterruptedMessageEdit,
+}: {
+  item: TimelineItem;
+  interruptedUserMessageIds?: ReadonlySet<string>;
+  onCopyInterruptedMessage?: (item: UserTimelineItem) => void | Promise<void>;
+  onEditInterruptedMessage?: (item: UserTimelineItem) => void;
+  editingInterruptedMessage?: { messageId: string; text: string } | null;
+  interruptedEditSaving?: boolean;
+  onInterruptedMessageTextChange?: (text: string) => void;
+  onSaveInterruptedMessageEdit?: () => void | Promise<void>;
+  onCancelInterruptedMessageEdit?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const toggle = () => setExpanded((value) => !value);
   if (item.kind === "divider") {
@@ -741,13 +839,96 @@ const TimelineItemView = memo(function TimelineItemView({ item }: { item: Timeli
   if (item.content.trim() === "") return null;
 
   if (item.kind === "user") {
+    const userItem = item as UserTimelineItem;
+    const isEditingInterruptedMessage = editingInterruptedMessage?.messageId === item.id;
+    const showInterruptedActions =
+      !isEditingInterruptedMessage &&
+      interruptedUserMessageIds.has(item.id) &&
+      (Boolean(onCopyInterruptedMessage) || Boolean(onEditInterruptedMessage));
+    const handleEditKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancelInterruptedMessageEdit?.();
+        return;
+      }
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void onSaveInterruptedMessageEdit?.();
+      }
+    };
     return (
-      <article className="timeline-item message-item user">
-        <div className="timeline-item-heading">
-          <span className="timeline-icon user"><AppIcon name="user" size="sm" /></span>
-          <strong>You</strong>
+      <article className={`timeline-item message-item user${showInterruptedActions ? " is-interrupted-actionable" : ""}`}>
+        <div className="timeline-item-heading timeline-message-heading">
+          <div className="timeline-message-heading-main">
+            <span className="timeline-icon user"><AppIcon name="user" size="sm" /></span>
+            <strong>You</strong>
+          </div>
         </div>
-        <div className="message-content"><Markdown content={item.content} /></div>
+        {isEditingInterruptedMessage ? (
+          <div className="timeline-inline-editor">
+            <textarea
+              className="timeline-inline-editor-input"
+              aria-label="Edit interrupted message"
+              value={editingInterruptedMessage.text}
+              rows={Math.max(3, Math.min(10, editingInterruptedMessage.text.split("\n").length))}
+              onChange={(event) => onInterruptedMessageTextChange?.(event.target.value)}
+              onKeyDown={handleEditKeyDown}
+              autoFocus
+            />
+            <div className="timeline-message-actions timeline-message-actions-inline" aria-label="Interrupted message edit actions">
+              <button
+                type="button"
+                className="timeline-message-action timeline-message-action-icon"
+                aria-label="Save interrupted message"
+                title="Save interrupted message"
+                disabled={interruptedEditSaving || editingInterruptedMessage.text.trim().length === 0}
+                onClick={() => void onSaveInterruptedMessageEdit?.()}
+              >
+                <AppIcon name="save" size="xs" />
+              </button>
+              <button
+                type="button"
+                className="timeline-message-action timeline-message-action-icon"
+                aria-label="Cancel interrupted message edit"
+                title="Cancel interrupted message edit"
+                disabled={interruptedEditSaving}
+                onClick={() => onCancelInterruptedMessageEdit?.()}
+              >
+                <AppIcon name="x" size="xs" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="message-content"><Markdown content={item.content} /></div>
+            {showInterruptedActions && (
+              <div className="timeline-message-actions timeline-message-actions-below" aria-label="Interrupted message actions">
+                {onCopyInterruptedMessage && (
+                  <button
+                    type="button"
+                    className="timeline-message-action timeline-message-action-icon"
+                    aria-label="Copy interrupted message"
+                    title="Copy interrupted message"
+                    onClick={() => void onCopyInterruptedMessage(userItem)}
+                  >
+                    <AppIcon name="copy" size="xs" />
+                  </button>
+                )}
+                {onEditInterruptedMessage && (
+                  <button
+                    type="button"
+                    className="timeline-message-action timeline-message-action-icon"
+                    aria-label="Edit interrupted message"
+                    title="Edit interrupted message"
+                    onClick={() => onEditInterruptedMessage(userItem)}
+                  >
+                    <AppIcon name="pencil" size="xs" />
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </article>
     );
   }

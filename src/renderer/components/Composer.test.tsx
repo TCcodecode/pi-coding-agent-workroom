@@ -1,6 +1,21 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Composer } from "./Composer";
+import type { PiApi } from "../../shared/protocol";
+
+const originalPi = window.pi;
+
+function installPiApi(overrides: Partial<PiApi> = {}) {
+  Object.defineProperty(window, "pi", {
+    configurable: true,
+    value: {
+      chooseAttachmentFiles: vi.fn(async () => []),
+      persistImageAttachment: vi.fn(async (input) => ({ path: `/tmp/${input.name}`, name: input.name })),
+      loadImagePreview: vi.fn(async (path: string) => `data:image/png;base64,preview-${btoa(path)}`),
+      ...overrides,
+    },
+  });
+}
 
 function renderComposer(overrides: Partial<Parameters<typeof Composer>[0]> = {}) {
   const props = {
@@ -15,13 +30,24 @@ function renderComposer(overrides: Partial<Parameters<typeof Composer>[0]> = {})
   return { ...render(<Composer {...props} />), props };
 }
 
+beforeEach(() => {
+  installPiApi();
+});
+
+afterEach(() => {
+  Object.defineProperty(window, "pi", {
+    configurable: true,
+    value: originalPi,
+  });
+});
+
 describe("Composer", () => {
   test("submits a message without exposing delivery modes", async () => {
     const { props } = renderComposer();
 
     fireEvent.change(screen.getByRole("textbox", { name: /message/i }), { target: { value: "inspect the tests" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
-    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("inspect the tests"));
+    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({ text: "inspect the tests", attachments: [] }));
     expect(screen.queryByRole("button", { name: /delivery mode/i })).not.toBeInTheDocument();
   });
 
@@ -31,7 +57,7 @@ describe("Composer", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /message/i }), { target: { value: "follow up after this" } });
     fireEvent.click(screen.getByRole("button", { name: /queue follow-up/i }));
 
-    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("follow up after this"));
+    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({ text: "follow up after this", attachments: [] }));
   });
 
   test("shows queue state and lets a running agent be aborted", () => {
@@ -94,6 +120,85 @@ describe("Composer", () => {
     expect(input.value).toBe("/compact ");
   });
 
+  test("shows pasted images in an attachment tray instead of writing file paths into the textarea", async () => {
+    const persistImageAttachment = vi.fn(async () => ({ path: "/tmp/pasted-1.png", name: "pasted-1.png" }));
+    const loadImagePreview = vi.fn(async () => "data:image/png;base64,pasted-preview");
+    installPiApi({ persistImageAttachment, loadImagePreview });
+
+    renderComposer();
+    const input = screen.getByRole("textbox", { name: /message/i });
+    const file = new File([new Uint8Array([1, 2, 3])], "paste.png", { type: "image/png" });
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+      },
+    });
+
+    expect(await screen.findByLabelText(/attachment preview pasted-1\.png/i)).toBeInTheDocument();
+    expect((input as HTMLTextAreaElement).value).toBe("");
+    expect(persistImageAttachment).toHaveBeenCalledTimes(1);
+    expect(loadImagePreview).toHaveBeenCalledWith("/tmp/pasted-1.png");
+    expect(screen.getByRole("img", { name: "pasted-1.png" })).toHaveAttribute("src", "data:image/png;base64,pasted-preview");
+  });
+
+  test("adds selected image files to the attachment tray and lets the user remove one", async () => {
+    const onPickFile = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce("/tmp/a.png")
+      .mockResolvedValueOnce("/tmp/b.jpg");
+    renderComposer({ onPickFile });
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByLabelText(/attachment preview a\.png/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByLabelText(/attachment preview b\.jpg/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /remove attachment a\.png/i }));
+    expect(screen.queryByLabelText(/attachment preview a\.png/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/attachment preview b\.jpg/i)).toBeInTheDocument();
+  });
+
+  test("uses the preview loader for picked images", async () => {
+    const loadImagePreview = vi
+      .fn<(path: string) => Promise<string | undefined>>()
+      .mockResolvedValueOnce("data:image/png;base64,preview-a")
+      .mockResolvedValueOnce("data:image/jpeg;base64,preview-b");
+    installPiApi({ loadImagePreview });
+    const onPickFile = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce("/tmp/a.png")
+      .mockResolvedValueOnce("/tmp/b.jpg");
+
+    renderComposer({ onPickFile });
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByRole("img", { name: "a.png" })).toHaveAttribute("src", "data:image/png;base64,preview-a");
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByRole("img", { name: "b.jpg" })).toHaveAttribute("src", "data:image/jpeg;base64,preview-b");
+    expect(loadImagePreview).toHaveBeenNthCalledWith(1, "/tmp/a.png");
+    expect(loadImagePreview).toHaveBeenNthCalledWith(2, "/tmp/b.jpg");
+  });
+
+  test("submits image attachments as structured payload", async () => {
+    const onPickFile = vi.fn(async () => "/tmp/shot-a.png");
+    const { props } = renderComposer({ onPickFile });
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByLabelText(/attachment preview shot-a\.png/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /message/i }), { target: { value: "describe this" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() =>
+      expect(props.onSubmit).toHaveBeenCalledWith({
+        text: "describe this",
+        attachments: [{ name: "shot-a.png", path: "/tmp/shot-a.png" }],
+      }),
+    );
+  });
+
   test("keeps the typed text when the send is rejected", async () => {
     const { props } = renderComposer({ onSubmit: vi.fn(async () => false) });
 
@@ -111,7 +216,7 @@ describe("Composer", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => expect((screen.getByRole("textbox", { name: /message/i }) as HTMLTextAreaElement).value).toBe(""));
-    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("fire and forget"));
+    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({ text: "fire and forget", attachments: [] }));
   });
 
   test("does not send when Enter is used to confirm an IME candidate", () => {
@@ -132,7 +237,7 @@ describe("Composer", () => {
 
     fireEvent.keyDown(input, { key: "Enter" });
 
-    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith("已确认"));
+    await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({ text: "已确认", attachments: [] }));
   });
 
   test("navigates the active conversation history with the arrow keys", () => {

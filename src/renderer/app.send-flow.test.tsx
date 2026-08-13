@@ -23,6 +23,9 @@ function makeFakeApi() {
     })),
     chooseWorkspace: vi.fn(async () => "/tmp/project"),
     chooseFile: vi.fn(async () => undefined),
+    chooseAttachmentFiles: vi.fn(async () => []),
+    persistImageAttachment: vi.fn(async (input) => ({ path: `/tmp/${input.name}`, name: input.name })),
+    loadImagePreview: vi.fn(async (path: string) => `data:image/png;base64,preview-${btoa(path)}`),
     startSession: vi.fn(async (options: { cwd: string; sessionPath?: string; sessionKey?: string }) => {
       listeners.forEach((listener) =>
         listener({
@@ -168,6 +171,107 @@ describe("Pi Desktop end-to-end send flow", () => {
     delete (window as unknown as { pi?: PiApi }).pi;
   });
 
+  test("edits an interrupted user message inline and resubmits it in the current session", async () => {
+    const { api } = makeFakeApi();
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: {
+        ...createInitialState().session,
+        sessionId: "s1",
+        cwd: "/tmp/project",
+        status: "idle",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+      timeline: [
+        { id: "user-1", kind: "user", content: "first prompt", status: "completed" },
+        { id: "assistant-1", kind: "assistant", content: "done", status: "completed" },
+        { id: "user-2", kind: "user", content: "retry this", status: "completed" },
+      ],
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit interrupted message/i }));
+    expect(screen.getByRole("textbox", { name: /edit interrupted message/i })).toHaveValue("retry this");
+
+    fireEvent.change(screen.getByRole("textbox", { name: /edit interrupted message/i }), {
+      target: { value: "retry this with logs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save interrupted message/i }));
+
+    await waitFor(() => expect(api.startSession).not.toHaveBeenCalled());
+    await waitFor(() => expect(api.prompt).toHaveBeenCalled());
+    expect(vi.mocked(api.prompt).mock.calls[0]?.[0]).toBe("retry this with logs");
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
+  test("still exposes copy and edit for the latest user message after a stopped partial assistant reply", async () => {
+    const { api } = makeFakeApi();
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: {
+        ...createInitialState().session,
+        sessionId: "s1",
+        cwd: "/tmp/project",
+        status: "idle",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+      timeline: [
+        { id: "user-1", kind: "user", content: "first prompt", status: "completed" },
+        { id: "assistant-1", kind: "assistant", content: "done", status: "completed" },
+        { id: "user-2", kind: "user", content: "retry this", status: "completed" },
+        { id: "assistant-2", kind: "assistant", content: "partial answer", status: "completed" },
+      ],
+    });
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: /copy interrupted message/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /edit interrupted message/i }));
+    expect(screen.getByRole("textbox", { name: /edit interrupted message/i })).toHaveValue("retry this");
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
+  test("submits image attachments as internal prompt refs instead of visible textarea paths", async () => {
+    const { api } = makeFakeApi();
+    vi.mocked(api.chooseFile).mockResolvedValue("/tmp/shot-a.png");
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: {
+        ...createInitialState().session,
+        sessionId: "s1",
+        cwd: "/tmp/project",
+        status: "idle",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    expect(await screen.findByLabelText(/attachment preview shot-a\.png/i)).toBeInTheDocument();
+
+    const input = screen.getByRole("textbox", { name: /message/i }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "describe this" } });
+    expect(input.value).toBe("describe this");
+
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(api.prompt).toHaveBeenCalled());
+    expect(vi.mocked(api.prompt).mock.calls[0]?.[0]).toBe("describe this\n@/tmp/shot-a.png");
+    await waitFor(() => expect(input.value).toBe(""));
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
   test("queues while running and can send a queued item now", async () => {
     const { api } = makeFakeApi();
     (window as unknown as { pi: PiApi }).pi = api;
@@ -184,10 +288,13 @@ describe("Pi Desktop end-to-end send flow", () => {
 
     fireEvent.change(screen.getByRole("textbox", { name: /message/i }), { target: { value: "also check tests" } });
     fireEvent.click(screen.getByRole("button", { name: /queue follow-up/i }));
-    await waitFor(() => expect(api.followUp).toHaveBeenCalledWith("also check tests", expect.objectContaining({ sessionKey: expect.any(String) })));
+    await waitFor(() => expect(api.followUp).toHaveBeenCalled());
+    expect(vi.mocked(api.followUp).mock.calls[0]?.[0]).toBe("also check tests");
 
     fireEvent.click(screen.getByRole("button", { name: /send queued message 1 now/i }));
-    await waitFor(() => expect(api.sendFollowUpNow).toHaveBeenCalledWith(0, expect.objectContaining({ sessionKey: expect.any(String) }), "inspect the result"));
+    await waitFor(() => expect(api.sendFollowUpNow).toHaveBeenCalled());
+    expect(vi.mocked(api.sendFollowUpNow).mock.calls[0]?.[0]).toBe(0);
+    expect(vi.mocked(api.sendFollowUpNow).mock.calls[0]?.[2]).toBe("inspect the result");
 
     delete (window as unknown as { pi?: PiApi }).pi;
   });

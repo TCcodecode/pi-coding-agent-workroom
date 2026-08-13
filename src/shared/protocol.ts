@@ -558,10 +558,24 @@ export interface ProjectFileEntry {
   isDir: boolean;
 }
 
+export interface ComposerImageAttachmentInput {
+  name: string;
+  mimeType: string;
+  bytes: Uint8Array;
+}
+
+export interface ComposerImageAttachmentFile {
+  path: string;
+  name: string;
+}
+
 export interface PiApi {
   getSnapshot(): Promise<PiSnapshot>;
   chooseWorkspace(): Promise<string | undefined>;
   chooseFile(): Promise<string | undefined>;
+  chooseAttachmentFiles(): Promise<string[]>;
+  persistImageAttachment(input: ComposerImageAttachmentInput): Promise<ComposerImageAttachmentFile>;
+  loadImagePreview(path: string): Promise<string | undefined>;
   listProjectFiles(cwd?: string): Promise<ProjectFileEntry[]>;
   startSession(options: {
     cwd: string;

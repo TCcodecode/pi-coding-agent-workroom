@@ -80,6 +80,8 @@ import { registerPlanModeTools } from "./planModeExtension.js";
 
 /** Fast/cheap model ids get a lower todo-nudge threshold (they drift more). */
 const FAST_MODEL_PATTERN = /flash|mini|haiku|lite|nano|small/i;
+const THINKING_LEVEL_ORDER: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const DEFAULT_MODEL_THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high"]);
 
 export interface PiSessionLike {
   sessionId: string;
@@ -736,13 +738,13 @@ export class PiHost {
   async setModeProfile(mode: AgentMode, profile: AgentProfile, opts?: SessionCommandOptions): Promise<SessionModeState> {
     const slot = this.requireSlot(opts?.sessionKey);
     if (slot.runtime.session.isStreaming) throw new Error("Stop the current turn before changing the model profile");
-    const allowed = slot.runtime.session.getAvailableThinkingLevels?.() ?? ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+    const model = profile.modelKey
+      ? this.resolveModel(slot.runtime.session, profile.modelKey)
+      : undefined;
+    const allowed = this.supportedThinkingLevels(slot.runtime.session, model);
     if (!allowed.includes(profile.thinkingLevel)) throw new Error(`Thinking level is not supported: ${profile.thinkingLevel}`);
-    if (profile.modelKey) {
-      const [provider, ...idParts] = profile.modelKey.split("/");
-      if (!provider || !idParts.length || !slot.runtime.session.modelRuntime?.getModel(provider, idParts.join("/"))) {
-        throw new Error(`Model not found: ${profile.modelKey}`);
-      }
+    if (profile.modelKey && !model) {
+      throw new Error(`Model not found: ${profile.modelKey}`);
     }
     slot.modeState = {
       ...slot.modeState,
@@ -1084,6 +1086,21 @@ export class PiHost {
     const settings = this.readSettingsFile();
     const value = settings?.defaultProvider;
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  }
+
+  private writeSettingsFile(next: Record<string, unknown>): void {
+    const settingsPath = join(this.agentDir, "settings.json");
+    writeFileSync(settingsPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  }
+
+  private persistDefaultModelSelection(modelKey: string): void {
+    const [provider, ...idParts] = modelKey.split("/");
+    const id = idParts.join("/");
+    if (!provider || !id) return;
+    const settings = this.readSettingsFile() ?? {};
+    settings.defaultProvider = provider;
+    settings.defaultModel = id;
+    this.writeSettingsFile(settings);
   }
 
   private readSettingsEnabledModels(): string[] | undefined {
@@ -2546,32 +2563,106 @@ export class PiHost {
     const selected = models[0];
     if (!selected?.provider || !selected.id) return;
     const modelKey = `${selected.provider}/${selected.id}`;
-    if (this.modeProfile(slot).modelKey === modelKey && this.modelName(session) === modelKey) return;
+    const selectedModel = session.modelRuntime?.getModel(selected.provider, selected.id);
+    const thinkingLevel = this.normalizeThinkingLevel(
+      this.modeProfile(slot).thinkingLevel,
+      this.supportedThinkingLevels(session, selectedModel),
+    );
+    if (this.modeProfile(slot).modelKey === modelKey && this.modelName(session) === modelKey) {
+      this.persistDefaultModelSelection(modelKey);
+      return;
+    }
     await this.setModeProfile(
       slot.modeState.mode,
-      { ...this.modeProfile(slot), modelKey },
+      { ...this.modeProfile(slot), modelKey, thinkingLevel },
       { sessionKey: slot.key },
     );
+    this.persistDefaultModelSelection(modelKey);
   }
 
   private async syncModelsAfterAuthChange(options: { selectProviderId?: string; selectFallback?: boolean } = {}): Promise<void> {
     const live = this.runtime?.session.modelRuntime;
-    if (live?.refresh) {
-      try {
-        await live.refresh({ allowNetwork: false });
-      } catch {
-        // ignore refresh errors; getAvailable below still runs
+    if (live) {
+      if (live.refresh) {
+        try {
+          await live.refresh({ allowNetwork: false });
+        } catch {
+          // ignore refresh errors; getAvailable below still runs
+        }
+      } else if (live.getAvailable) {
+        try {
+          await live.getAvailable();
+        } catch {
+          // ignore
+        }
       }
-    } else if (live?.getAvailable) {
-      try {
-        await live.getAvailable();
-      } catch {
-        // ignore
-      }
+      await this.refreshAvailableModels();
+      if (options.selectProviderId) await this.selectAvailableModel(options.selectProviderId);
+      else if (options.selectFallback) await this.selectAvailableModel();
+      return;
     }
-    await this.refreshAvailableModels();
-    if (options.selectProviderId) await this.selectAvailableModel(options.selectProviderId);
-    else if (options.selectFallback) await this.selectAvailableModel();
+
+    const runtime = await this.createAuthModelRuntime();
+    try {
+      const preferredProvider = options.selectProviderId
+        ?? (options.selectFallback ? this.readSettingsDefaultProvider() : undefined);
+      const chosen = await this.pickAvailableModel(runtime, preferredProvider)
+        ?? (options.selectFallback ? await this.pickAvailableModel(runtime) : undefined);
+      if (chosen) this.persistDefaultModelSelection(`${chosen.provider}/${chosen.id}`);
+    } catch {
+      // keep existing settings if the detached auth runtime cannot resolve a model
+    }
+  }
+
+  private async pickAvailableModel(
+    runtime: ModelRuntime,
+    providerId?: string,
+  ): Promise<{ provider: string; id: string } | undefined> {
+    let models: ReadonlyArray<{ provider?: string; id?: string }>;
+    try {
+      models = await runtime.getAvailable(providerId);
+    } catch {
+      return undefined;
+    }
+    const selected = models.find((model) => model.provider && model.id);
+    if (!selected?.provider || !selected.id) return undefined;
+    return { provider: selected.provider, id: selected.id };
+  }
+
+  private resolveModel(session: PiSessionLike, modelKey: string): unknown {
+    const [provider, ...idParts] = modelKey.split("/");
+    if (!provider || idParts.length === 0) return undefined;
+    return session.modelRuntime?.getModel(provider, idParts.join("/"));
+  }
+
+  private supportedThinkingLevels(session: PiSessionLike, model?: unknown): ThinkingLevel[] {
+    const fallback = (session.getAvailableThinkingLevels?.() ?? THINKING_LEVEL_ORDER)
+      .filter((level): level is ThinkingLevel => THINKING_LEVEL_ORDER.includes(level as ThinkingLevel));
+    const map = (model && typeof model === "object" && "thinkingLevelMap" in model)
+      ? (model as { thinkingLevelMap?: Partial<Record<ThinkingLevel, string | null>> }).thinkingLevelMap
+      : undefined;
+    if (!map) return fallback;
+    const allowed = THINKING_LEVEL_ORDER.filter((level) => {
+      const value = map[level];
+      if (value === null) return false;
+      if (typeof value === "string") return true;
+      return DEFAULT_MODEL_THINKING_LEVELS.has(level);
+    });
+    return allowed.length > 0 ? allowed : fallback;
+  }
+
+  private normalizeThinkingLevel(requested: ThinkingLevel, allowed: ThinkingLevel[]): ThinkingLevel {
+    if (allowed.includes(requested)) return requested;
+    const requestedIndex = THINKING_LEVEL_ORDER.indexOf(requested);
+    const allowedIndices = allowed
+      .map((level) => THINKING_LEVEL_ORDER.indexOf(level))
+      .filter((index) => index >= 0)
+      .sort((left, right) => left - right);
+    const lower = [...allowedIndices].reverse().find((index) => index < requestedIndex);
+    if (lower !== undefined) return THINKING_LEVEL_ORDER[lower]!;
+    const higher = allowedIndices.find((index) => index > requestedIndex);
+    if (higher !== undefined) return THINKING_LEVEL_ORDER[higher]!;
+    return allowed[0] ?? "off";
   }
 
   private modelName(session: PiSessionLike): string {

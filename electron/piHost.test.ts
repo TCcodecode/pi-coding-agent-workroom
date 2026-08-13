@@ -570,7 +570,12 @@ describe("PiHost", () => {
 
   test("uses the live runtime for auth changes and switches to the new provider model", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pi-auth-sync-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "pi-auth-settings-"));
     try {
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+        defaultProvider: "amazon-bedrock",
+        defaultModel: "deepseek.v3.2",
+      }));
       const fake = createFakeRuntime(cwd);
       const configured = new Set(["amazon"]);
       const models = [
@@ -603,7 +608,7 @@ describe("PiHost", () => {
       const authRuntimeFactory = vi.fn(async () => {
         throw new Error("the dedicated auth runtime should not be used while a session is live");
       });
-      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime, authRuntimeFactory });
+      const host = new PiHost({ workspaceId: "workspace-1", agentDir, runtime: fake.runtime, authRuntimeFactory });
 
       await host.logoutProvider("amazon");
       await host.loginWithApiKey("deepseek", "sk-test");
@@ -613,8 +618,107 @@ describe("PiHost", () => {
       expect(login).toHaveBeenCalledWith("deepseek", "api_key", expect.any(Object));
       expect(fake.session.model).toEqual({ provider: "deepseek", id: "deepseek-v4-flash" });
       expect(host.snapshot().session.modeState?.executeProfile.modelKey).toBe("deepseek/deepseek-v4-flash");
+      expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual(expect.objectContaining({
+        defaultProvider: "deepseek",
+        defaultModel: "deepseek-v4-flash",
+      }));
     } finally {
       rmSync(cwd, { recursive: true, force: true });
+      rmSync(agentDir, { recursive: true, force: true });
+    }
+  });
+
+  test("auth-driven model switching clamps unsupported thinking levels", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-auth-thinking-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "pi-auth-thinking-agent-"));
+    try {
+      const fake = createFakeRuntime(cwd);
+      const configured = new Set(["amazon"]);
+      const models = [
+        { provider: "amazon", id: "nova", name: "Amazon Nova" },
+        {
+          provider: "deepseek",
+          id: "deepseek-v4-flash",
+          name: "DeepSeek V4 Flash",
+          thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", max: "max" },
+        },
+      ];
+      fake.session.model = { provider: "amazon", id: "nova" };
+      fake.session.getAvailableThinkingLevels = () => ["off", "low", "high", "max"];
+      fake.session.setModel = async (model: unknown) => {
+        const next = model as { provider?: string; id?: string };
+        fake.session.model = { provider: next.provider, id: next.id };
+        fake.calls.push({ method: "setModel", args: [model] });
+      };
+      fake.session.modelRuntime = {
+        getModels: () => models,
+        getModel: (provider: string, id: string) => models.find((model) => model.provider === provider && model.id === id),
+        getAvailable: async (providerId?: string) => models.filter((model) => configured.has(model.provider) && (!providerId || model.provider === providerId)),
+        getAvailableSnapshot: () => [],
+        hasConfiguredAuth: (providerId: string) => configured.has(providerId),
+        getProvider: (providerId: string) => ({
+          id: providerId,
+          name: providerId === "deepseek" ? "DeepSeek" : "Amazon",
+          auth: { apiKey: { login: async () => ({ type: "api_key", key: "test" }) } },
+        }),
+        login: vi.fn(async (providerId: string) => { configured.add(providerId); }),
+        logout: vi.fn(async () => undefined),
+        refresh: vi.fn(async () => undefined),
+      };
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+        defaultProvider: "amazon-bedrock",
+        defaultModel: "deepseek.v3.2",
+      }));
+      const host = new PiHost({ workspaceId: "workspace-1", agentDir, runtime: fake.runtime });
+
+      await expect(host.loginWithApiKey("deepseek", "sk-test")).resolves.toEqual({ name: "DeepSeek" });
+
+      expect(host.snapshot().session.modeState?.executeProfile.modelKey).toBe("deepseek/deepseek-v4-flash");
+      expect(host.snapshot().session.modeState?.executeProfile.thinkingLevel).toBe("low");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(agentDir, { recursive: true, force: true });
+    }
+  });
+
+  test("login without a live session updates default provider and model in settings", async () => {
+    const agentDir = mkdtempSync(join(tmpdir(), "pi-auth-detached-"));
+    try {
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
+        defaultProvider: "amazon-bedrock",
+        defaultModel: "deepseek.v3.2",
+      }));
+
+      const login = vi.fn(async () => undefined);
+      const authRuntime = {
+        getProvider: (providerId: string) => ({
+          id: providerId,
+          name: providerId === "deepseek" ? "DeepSeek" : providerId,
+          auth: { apiKey: { login: async () => ({ type: "api_key", key: "test" }) } },
+        }),
+        getAvailable: async (providerId?: string) =>
+          providerId === "deepseek"
+            ? [{ provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }]
+            : [{ provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }],
+        login,
+        logout: vi.fn(async () => undefined),
+      };
+
+      const host = new PiHost({
+        workspaceId: "workspace-1",
+        agentDir,
+        authRuntimeFactory: async () => authRuntime as never,
+      });
+
+      await expect(host.loginWithApiKey("deepseek", "sk-test")).resolves.toEqual({ name: "DeepSeek" });
+
+      expect(login).toHaveBeenCalledWith("deepseek", "api_key", expect.any(Object));
+      expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual(expect.objectContaining({
+        defaultProvider: "deepseek",
+        defaultModel: "deepseek-v4-flash",
+      }));
+    } finally {
+      rmSync(agentDir, { recursive: true, force: true });
     }
   });
 

@@ -271,6 +271,78 @@ describe("Timeline", () => {
     expect(screen.getByText("bold")).toBeInTheDocument();
     expect(screen.getByText("code")).toBeInTheDocument();
   });
+
+  test("shows copy and edit only for the specified interrupted user message", () => {
+    const onCopyInterruptedMessage = vi.fn();
+    const onEditInterruptedMessage = vi.fn();
+    const items: TimelineItem[] = [
+      { id: "user-1", kind: "user", content: "First request", status: "completed" },
+      { id: "assistant-1", kind: "assistant", content: "Working on it.", status: "completed" },
+      { id: "user-2", kind: "user", content: "Interrupted follow-up", status: "completed" },
+    ];
+    render(
+      <Timeline
+        items={items}
+        interruptedUserMessageIds={["user-2"]}
+        onCopyInterruptedMessage={onCopyInterruptedMessage}
+        onEditInterruptedMessage={onEditInterruptedMessage}
+      />,
+    );
+
+    const firstUserRow = screen.getByText("First request").closest(".timeline-item") as HTMLElement | null;
+    const interruptedUserRow = screen.getByText("Interrupted follow-up").closest(".timeline-item") as HTMLElement | null;
+
+    expect(firstUserRow).not.toBeNull();
+    expect(interruptedUserRow).not.toBeNull();
+    expect(within(firstUserRow!).queryByRole("button", { name: "Copy interrupted message" })).not.toBeInTheDocument();
+    expect(within(firstUserRow!).queryByRole("button", { name: "Edit interrupted message" })).not.toBeInTheDocument();
+
+    const copyButton = within(interruptedUserRow!).getByRole("button", { name: "Copy interrupted message" });
+    const editButton = within(interruptedUserRow!).getByRole("button", { name: "Edit interrupted message" });
+    const actions = within(interruptedUserRow!).getByLabelText("Interrupted message actions");
+
+    expect(actions).toHaveClass("timeline-message-actions-below");
+    expect(copyButton.textContent).toBe("");
+    expect(editButton.textContent).toBe("");
+    fireEvent.click(copyButton);
+    fireEvent.click(editButton);
+
+    expect(onCopyInterruptedMessage).toHaveBeenCalledWith(items[2]);
+    expect(onEditInterruptedMessage).toHaveBeenCalledWith(items[2]);
+  });
+
+  test("renders an inline editor for the interrupted message and wires save and cancel", () => {
+    const onInterruptedMessageTextChange = vi.fn();
+    const onSaveInterruptedMessageEdit = vi.fn();
+    const onCancelInterruptedMessageEdit = vi.fn();
+    const items: TimelineItem[] = [
+      { id: "user-1", kind: "user", content: "Retry this", status: "completed" },
+    ];
+
+    render(
+      <Timeline
+        items={items}
+        interruptedUserMessageIds={["user-1"]}
+        editingInterruptedMessage={{ messageId: "user-1", text: "Retry this with logs" }}
+        onInterruptedMessageTextChange={onInterruptedMessageTextChange}
+        onSaveInterruptedMessageEdit={onSaveInterruptedMessageEdit}
+        onCancelInterruptedMessageEdit={onCancelInterruptedMessageEdit}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox", { name: "Edit interrupted message" });
+    expect(editor).toHaveValue("Retry this with logs");
+    expect(screen.queryByRole("button", { name: "Copy interrupted message" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit interrupted message" })).not.toBeInTheDocument();
+
+    fireEvent.change(editor, { target: { value: "Retry this cleanly" } });
+    fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
+    fireEvent.keyDown(editor, { key: "Escape" });
+
+    expect(onInterruptedMessageTextChange).toHaveBeenCalledWith("Retry this cleanly");
+    expect(onSaveInterruptedMessageEdit).toHaveBeenCalledTimes(1);
+    expect(onCancelInterruptedMessageEdit).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("Timeline tool grouping", () => {
