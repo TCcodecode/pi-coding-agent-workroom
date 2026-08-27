@@ -38,7 +38,7 @@ function extractRootBlock(source: string): { root: string; rest: string } {
   return { root: "", rest: source };
 }
 
-describe("PI Desk light surface hierarchy", () => {
+describe("Pi Workroom light surface hierarchy", () => {
   it("defines the Codex-inspired light depth palette", () => {
     expect(css).toContain("--surface-center: #ffffff");
     expect(css).toContain("--surface-sidebar: #f5f5f5");

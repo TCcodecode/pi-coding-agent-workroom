@@ -25,7 +25,7 @@ function htmlServer(body = "<html><body>hi</body></html>"): Server {
 }
 
 describe("companion preview probe", () => {
-  test("excludes PI Desk ports and a derived renderer port", () => {
+  test("excludes Pi Workroom ports and a derived renderer port", () => {
     expect(EXCLUDED_PORTS.has(17890)).toBe(true);
     expect(excludedPorts("http://localhost:5173").has(5173)).toBe(true);
     expect(excludedPorts("http://localhost:5173").has(3000)).toBe(false);

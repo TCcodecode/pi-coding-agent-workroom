@@ -360,8 +360,8 @@ export function CompanionApp() {
           <TimelineRow key={item.id} item={item} />
         ))}
         {timelineEntries.length === 0 && (
-          <section className="companion-terminal-welcome" aria-label="PI Desk session ready">
-            <span className="companion-terminal-welcome-title">PI Desk</span>
+          <section className="companion-terminal-welcome" aria-label="Pi Workroom session ready">
+            <span className="companion-terminal-welcome-title">Pi Workroom</span>
             <div className="companion-terminal-welcome-grid">
               <div className="companion-terminal-welcome-profile">
                 <div className="companion-terminal-welcome-content">
@@ -521,7 +521,7 @@ export function CompanionApp() {
     >
       <div className={`companion-status ${status === "open" ? "" : "is-down"}`}>
         <div className="companion-status-line">
-          <strong className="companion-brand">PI Desk</strong>
+          <strong className="companion-brand">Pi Workroom</strong>
           <span className="companion-connection-label" aria-label={status === "open" ? "Connected" : "Offline"}>
             <span className="companion-connection-label-text">{status === "open" ? "Connected" : "Offline"}</span>
           </span>
@@ -558,7 +558,7 @@ export function CompanionApp() {
           onTouchStart={handleViewTouchStart}
           onTouchEnd={handleViewTouchEnd}
         >
-          {!token && <p className="companion-empty">Scan the QR code in PI Desk → Settings → Phone.</p>}
+          {!token && <p className="companion-empty">Scan the QR code in Pi Workroom → Settings → Phone.</p>}
           {mainTab === "session" && sessionPanel}
           {mainTab === "changes" && changesPanel}
         </div>

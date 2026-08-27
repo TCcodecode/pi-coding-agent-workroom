@@ -6,7 +6,7 @@ import { ProjectPickerButton, ProjectPickerDialog } from "./ProjectPicker";
 
 const projects: ProjectSummary[] = [
   { id: "cowinx", name: "Cowinx", path: "/Users/test/work/cowinx", updatedAt: "2026-08-22" },
-  { id: "pi", name: "PI Desk", path: "/Users/test/work/pi-workspace", updatedAt: "2026-08-21" },
+  { id: "pi", name: "Pi Workroom", path: "/Users/test/work/pi-workspace", updatedAt: "2026-08-21" },
 ];
 
 const previousSession: SessionSummary = {
@@ -43,10 +43,10 @@ describe("ProjectPickerDialog", () => {
     );
 
     expect(screen.getByRole("option", { name: /Cowinx/ })).toHaveAttribute("aria-selected", "true");
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "desk" } });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "workroom" } });
 
     expect(screen.queryByRole("option", { name: /Cowinx/ })).toBeNull();
-    expect(screen.getByRole("option", { name: /PI Desk/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Pi Workroom/ })).toBeInTheDocument();
   });
 
   test("opens the selected project's new and previous session choices", async () => {
@@ -65,7 +65,7 @@ describe("ProjectPickerDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("option", { name: /PI Desk/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Pi Workroom/ }));
     await waitFor(() => expect(onLoadSessions).toHaveBeenCalledWith(projects[1]));
     expect(screen.getByRole("heading", { name: "Choose a session" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /New session/ })).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("ProjectPickerDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("option", { name: /PI Desk/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Pi Workroom/ }));
     await screen.findByRole("heading", { name: "Choose a session" });
     expect(onNewSession).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /New session/ }));

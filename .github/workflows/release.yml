@@ -1,4 +1,4 @@
-name: Release Pi Desk
+name: Release Pi Workroom
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pi-desk-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: pi-workroom-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -128,7 +128,7 @@ jobs:
         working-directory: release-dist
         run: |
           set -euo pipefail
-          flags=(--verify-tag --title "Pi Desk ${RELEASE_TAG}" --generate-notes)
+          flags=(--verify-tag --title "Pi Workroom ${RELEASE_TAG}" --generate-notes)
           if [[ "$RELEASE_TAG" == *-* ]]; then
             flags+=(--prerelease)
           fi

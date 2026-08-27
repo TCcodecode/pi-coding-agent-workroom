@@ -284,8 +284,8 @@ export function SessionSidebar({
   return (
     <aside className="sidebar" aria-label="Sidebar">
       <div className="sidebar-top">
-        <div className="sidebar-brand" aria-label="PI Desk">
-          <span className="brand-title">PI Desk</span>
+        <div className="sidebar-brand" aria-label="Pi Workroom">
+          <span className="brand-title">Pi Workroom</span>
         </div>
         <WorkspaceModeSwitcher mode={workspaceMode} onModeChange={onWorkspaceModeChange} />
       </div>

@@ -422,12 +422,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // userData is derived from the app name. The app was renamed pi-desktop → pi-desk,
-  // so carry projects.json over from the legacy directory if the current one is empty.
+  // userData is derived from the app name. The app was renamed pi-desktop → pi-desk →
+  // pi-coding-agent-workroom, so carry projects.json over if the current one is empty.
   const userDataDir = app.getPath("userData");
   const currentProjects = join(userDataDir, "projects.json");
   const legacyCandidates = [
     join(userDataDir, "..", "pi-desktop", "projects.json"),
+    join(userDataDir, "..", "pi-desk", "projects.json"),
     join(homedir(), ".pi-desktop", "projects.json"),
     join(homedir(), ".pi-desk", "projects.json"),
   ];

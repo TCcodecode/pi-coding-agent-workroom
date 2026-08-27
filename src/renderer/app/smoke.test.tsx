@@ -7,11 +7,11 @@ vi.mock("./piApi", () => ({
   getPiApi: () => undefined,
 }));
 
-describe("PI Desk shell", () => {
-  test("renders the PI Desk workspace shell", () => {
+describe("Pi Workroom shell", () => {
+  test("renders the Pi Workroom workspace shell", () => {
     const { container } = render(<App />);
 
-    expect(screen.getAllByText("PI Desk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pi Workroom").length).toBeGreaterThan(0);
     expect(screen.getByRole("textbox", { name: /message/i })).toBeInTheDocument();
     expect(container.querySelector(".welcome-orb svg")).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-# PI Desk
+# Pi Workroom
 
 Desktop GUI host around [Pi](https://github.com/earendil-works/pi). Pi owns agent semantics. This repo is the second screen.
 

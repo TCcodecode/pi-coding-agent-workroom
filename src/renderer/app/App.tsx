@@ -564,7 +564,7 @@ export function App() {
   };
   const changeAgentMode = (mode: AgentMode): void => {
     if (!api?.setMode) {
-      pushError("当前 Pi Desk 进程尚未加载 Plan/Execute 切换接口，请完全重启应用后再试。");
+      pushError("当前 Pi Workroom 进程尚未加载 Plan/Execute 切换接口，请完全重启应用后再试。");
       return;
     }
     const setMode = api.setMode;
@@ -589,7 +589,7 @@ export function App() {
         applyModeState(next);
       })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
     } else {
-      pushError("当前 Pi Desk 进程尚未加载模式配置接口，请完全重启应用后再试。");
+      pushError("当前 Pi Workroom 进程尚未加载模式配置接口，请完全重启应用后再试。");
     }
   };
   const changeAgentThinking = (thinkingLevel: AgentProfile["thinkingLevel"]): void => {
@@ -605,7 +605,7 @@ export function App() {
         applyModeState(next);
       })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
     } else {
-      pushError("当前 Pi Desk 进程尚未加载模式配置接口，请完全重启应用后再试。");
+      pushError("当前 Pi Workroom 进程尚未加载模式配置接口，请完全重启应用后再试。");
     }
   };
   const openPlanReview = (): void => {

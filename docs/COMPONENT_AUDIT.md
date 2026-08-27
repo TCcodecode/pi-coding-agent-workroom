@@ -1,4 +1,4 @@
-# Pi Desk UI 组件与样式审计报告
+# Pi Workroom UI 组件与样式审计报告
 
 > 审计日期：2026-08-16 · 范围：`src/renderer/`（Electron + React 19 + TypeScript）
 > 性质：纯只读审计 + 规范化执行计划。基线：`vitest` 52 个文件 / 513 个测试全绿（可写 HOME），`tsc --noEmit` 通过。

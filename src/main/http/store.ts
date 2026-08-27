@@ -337,7 +337,7 @@ async function readEnvironments(root: string): Promise<HttpEnvironment[]> {
 
 function resolveProject(projects: ProjectSummary[], projectId: string): ProjectSummary {
   const project = projects.find((item) => item.id === projectId || item.path === projectId || item.projectUid === projectId);
-  if (!project) throw new Error("Project is not registered in PI Desk");
+  if (!project) throw new Error("Project is not registered in Pi Workroom");
   return project;
 }
 

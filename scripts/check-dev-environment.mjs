@@ -37,7 +37,7 @@ if (electronDirectory) {
 }
 
 if (problems.length > 0) {
-  console.error("\nPI Desk development environment check failed:\n");
+  console.error("\nPi Workroom development environment check failed:\n");
   for (const problem of problems) {
     console.error(`- ${problem}`);
   }

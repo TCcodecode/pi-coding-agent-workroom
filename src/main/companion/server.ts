@@ -155,8 +155,8 @@ export class CompanionServer {
     if (path === "/companion-manifest.json") {
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({
-        name: "PI Desk",
-        short_name: "PI Desk",
+        name: "Pi Workroom",
+        short_name: "Pi Workroom",
         display: "standalone",
         start_url: "/",
         background_color: "#ffffff",

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const css = readFileSync(resolve(process.cwd(), "src/renderer/app/styles.css"), "utf8");
 
-describe("PI Desk interaction language", () => {
+describe("Pi Workroom interaction language", () => {
   it("defines a shared control and motion scale", () => {
     expect(css).toContain("--control-height: 32px");
     expect(css).toContain("--control-height-compact: 28px");

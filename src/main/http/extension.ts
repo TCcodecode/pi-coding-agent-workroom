@@ -115,7 +115,7 @@ export function registerHttpWorkbenchTools(pi: ExtensionAPI, store: HttpWorkbenc
     async execute(_toolCallId, params, _signal, _onUpdate, ctx: ExtensionContext) {
       try {
         await store.saveFile(ctx.cwd, params.path, params.content);
-        return result(`Updated ${params.path} in the PI Desk application data space`);
+        return result(`Updated ${params.path} in the Pi Workroom application data space`);
       } catch (error) {
         return result(error instanceof Error ? error.message : String(error), true);
       }

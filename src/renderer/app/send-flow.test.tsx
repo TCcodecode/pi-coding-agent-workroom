@@ -196,7 +196,7 @@ function makeFakeApi() {
   return { api };
 }
 
-describe("Pi Desktop end-to-end send flow", () => {
+describe("Pi Workroom end-to-end send flow", () => {
   beforeEach(() => {
     localStorage.clear();
     useWorkspaceStore.setState({ tabs: [], activeTabId: undefined, liveSessions: [] });

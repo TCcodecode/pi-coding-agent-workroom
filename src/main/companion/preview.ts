@@ -7,13 +7,13 @@ import { join } from "node:path";
  * Preview on the phone proxies the project's local Web dev server (Vite,
  * Next, etc.). We probe ports in a strict order and only accept a port that
  * actually answers HTTP with an HTML page, so unrelated local services
- * (APIs, other apps) and PI Desk's own servers never leak into the phone.
+ * (APIs, other apps) and Pi Workroom's own servers never leak into the phone.
  */
 
 /** Fallback candidates when nothing can be inferred from the project. */
 export const PREVIEW_CANDIDATE_PORTS = [3000, 5173, 4173, 8080, 5174, 4321, 3001, 8000, 9000];
 
-/** Ports PI Desk itself listens on — never proxy these. */
+/** Ports Pi Workroom itself listens on — never proxy these. */
 export const EXCLUDED_PORTS = new Set<number>([17890]);
 
 /** Renderer dev-server port (electron-vite), excluded when it can be derived. */

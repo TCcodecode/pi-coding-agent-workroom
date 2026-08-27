@@ -2,7 +2,7 @@ import { createMcpAdapter, MCP_STATUS_EVENT, type McpStatusSnapshot } from "pi-m
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 /**
- * Thin bridge between pi-mcp-adapter and pi-desk's PiHost.
+ * Thin bridge between pi-mcp-adapter and Pi Workroom's PiHost.
  *
  * The adapter runs inside the SDK session runtime as an extension factory —
  * the same injection point as @pi-desk/session-todo. It publishes status

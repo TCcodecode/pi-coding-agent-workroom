@@ -446,7 +446,7 @@ export async function startNewSession(projectId: string): Promise<void> {
 export async function rewindWorkspaceSession(): Promise<string | undefined> {
   const api = getPiApi();
   if (!api?.rewindLastTurn) {
-    throw new Error("This Pi Desk build cannot undo the last turn");
+    throw new Error("This Pi Workroom build cannot undo the last turn");
   }
   const tabId = useWorkspaceStore.getState().activeTabId;
   if (useAppStore.getState().session.status === "running" || useAppStore.getState().session.status === "awaiting_approval") {

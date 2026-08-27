@@ -1,14 +1,27 @@
-# PI Desk
+# Pi Workroom
+
+> A local-first desktop workspace for the [Pi coding agent](https://github.com/earendil-works/pi). Manage projects and sessions, inspect agent runs and diffs, configure MCP servers, search code locally, and run repeatable HTTP tests in one Electron app.
+
+Pi Workroom is a desktop GUI for Pi coding agent sessions. Pi remains the agent runtime; Pi Workroom provides the project workspace, session management, visual review, and local integrations around it. If you are looking for a Pi agent desktop, Pi coding agent GUI, or a durable local workspace for long-running sessions, start here.
+
+[Latest releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
+
+## What is Pi Workroom?
+
+Pi Workroom brings the day-to-day loop of a coding agent into one local desktop workspace:
+
+- **Agent sessions** — manage multiple projects, sessions, forks, tabs, timelines, tools, plans, and follow-ups.
+- **Code review** — inspect file changes and unified diffs as the agent works.
+- **MCP and local code search** — configure project tools and search symbols without sending the index to a cloud service.
+- **HTTP Workbench** — turn API exploration into repeatable `.http` tests with environments, history, and sanitized responses.
 
 > 给 [Pi coding agent](https://github.com/earendil-works/pi) 一个真正可长期使用的桌面工作台。
 
-**PI Desk** 是 Pi 的本地 Electron 客户端。它把会话、Agent 执行过程、代码变更、MCP 与可重复运行的 HTTP 验证汇集到同一个项目工作区，让你不必在终端、编辑器和 API 工具之间来回切换。
+**Pi Workroom** 是 Pi coding agent 的本地 Electron 客户端。它把会话、Agent 执行过程、代码变更、MCP 与可重复运行的 HTTP 验证汇集到同一个项目工作区，让你不必在终端、编辑器和 API 工具之间来回切换。
 
-[下载最新版](https://github.com/TCcodecode/pi-desk/releases) · [提交问题或建议](https://github.com/TCcodecode/pi-desk/issues) · [了解 Pi](https://github.com/earendil-works/pi)
+> **定位边界**：Pi Workroom 不是另一个模型，也不重写 Pi 的 Agent runtime。Pi 继续负责模型、Provider、工具循环、扩展与会话语义；Pi Workroom 专注于桌面工作区、可视化和本地集成。
 
-> **定位边界**：PI Desk 不是另一个模型，也不重写 Pi 的 Agent runtime。Pi 继续负责模型、Provider、工具循环、扩展与会话语义；PI Desk 专注于桌面工作区、可视化和本地集成。
-
-## 为什么是 PI Desk？
+## 为什么是 Pi Workroom？
 
 终端很适合启动一次 Agent 任务；当任务变多、需要恢复上下文、审阅多轮改动和反复验证接口时，桌面工作台更合适。
 
@@ -17,7 +30,7 @@
     → 搜索代码 / 使用 MCP → 运行 HTTP 验证 → 继续迭代
 ```
 
-PI Desk 将这条链路留在本地，并继续使用你熟悉的 Pi 会话与配置体系。
+Pi Workroom 将这条链路留在本地，并继续使用你熟悉的 Pi 会话与配置体系。
 
 ## 主要能力
 
@@ -54,29 +67,29 @@ HTTP 测试、环境和运行历史位于应用数据目录，而非你的代码
 
 ### 安装发布版本
 
-从 [GitHub Releases](https://github.com/TCcodecode/pi-desk/releases) 下载对应系统和架构的安装包。
+从 [GitHub Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) 下载对应系统和架构的安装包。
 
 | 系统 | 推荐安装方式 |
 | --- | --- |
-| macOS | 下载 `.dmg`，将 `Pi Desk.app` 拖入 Applications |
+| macOS | 下载 `.dmg`，将 `Pi Workroom.app` 拖入 Applications |
 | Windows | 运行 `.exe` 安装包；也可使用免安装的 `.zip` |
 | Linux | 使用 `.AppImage`；Debian / Ubuntu 也可安装 `.deb` |
 
-当前 macOS 构建尚未使用 Apple Developer ID 签名。首次启动请在 Finder 中对 `Pi Desk.app` 选择“右键 → 打开”，或在“系统设置 → 隐私与安全性”中选择“仍要打开”。如果系统提示应用“已损坏”，请先核对下载文件的 SHA256 是否与 Release 中的 `SHA256SUMS` 一致；确认无误后，可移除**该应用**的下载隔离标记：
+当前 macOS 构建尚未使用 Apple Developer ID 签名。首次启动请在 Finder 中对 `Pi Workroom.app` 选择“右键 → 打开”，或在“系统设置 → 隐私与安全性”中选择“仍要打开”。如果系统提示应用“已损坏”，请先核对下载文件的 SHA256 是否与 Release 中的 `SHA256SUMS` 一致；确认无误后，可移除**该应用**的下载隔离标记：
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/Pi Desk.app"
+xattr -dr com.apple.quarantine "/Applications/Pi Workroom.app"
 ```
 
-不要为了安装 PI Desk 全局关闭 Gatekeeper。完成 Developer ID 签名和公证后，macOS 将恢复普通双击启动流程。
+不要为了安装 Pi Workroom 全局关闭 Gatekeeper。完成 Developer ID 签名和公证后，macOS 将恢复普通双击启动流程。
 
 ### 从源码运行
 
 准备 Node.js 22.12.0 或更高版本，然后在仓库根目录执行：
 
 ```bash
-git clone https://github.com/TCcodecode/pi-desk.git
-cd pi-desk
+git clone https://github.com/TCcodecode/pi-coding-agent-workroom.git
+cd pi-coding-agent-workroom
 npm install
 npm run dev
 ```
@@ -91,7 +104,7 @@ npm run dev
 
 开发环境不要使用 `--omit=dev`、`--production` 或 `--ignore-scripts`，否则 Electron 的开发依赖或桌面二进制可能不会安装。
 
-启动后选择一个本地项目目录，创建或恢复 Pi 会话，并在设置中配置所需的模型 Provider。PI Desk 会继续使用 Pi 的会话、Provider、skills、extensions 和 MCP 生态。
+启动后选择一个本地项目目录，创建或恢复 Pi 会话，并在设置中配置所需的模型 Provider。Pi Workroom 会继续使用 Pi 的会话、Provider、skills、extensions 和 MCP 生态。
 
 ### 常用命令
 
@@ -117,7 +130,7 @@ Windows 的 NSIS 安装版与 Linux AppImage 会在启动后检查 GitHub Releas
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│                         PI Desk · Electron                   │
+│                       Pi Workroom · Electron                 │
 │                                                              │
 │  React Renderer                                               │
 │  Timeline · Composer · Sessions · HTTP Workbench · Settings   │
@@ -147,12 +160,12 @@ Windows 的 NSIS 安装版与 Linux AppImage 会在启动后检查 GitHub Releas
 | 数据 | 位置 | 事实来源 / 所有者 |
 | --- | --- | --- |
 | Pi 会话 | `~/.pi/agent/sessions/` | Pi coding agent |
-| 项目注册表 | Electron `userData/projects.json` | PI Desk |
-| HTTP Workbench | `<userData>/http-workbench/<project-uid>/` | PI Desk |
-| 代码索引 | `<project>/.code-index/index.db` | PI Desk / code-index extension |
-| MCP 配置 | 用户级 `mcp.json` + 项目 `.mcp.json` / `.pi/mcp.json` | Pi MCP adapter 与 PI Desk |
+| 项目注册表 | Electron `userData/projects.json` | Pi Workroom |
+| HTTP Workbench | `<userData>/http-workbench/<project-uid>/` | Pi Workroom |
+| 代码索引 | `<project>/.code-index/index.db` | Pi Workroom / code-index extension |
+| MCP 配置 | 用户级 `mcp.json` + 项目 `.mcp.json` / `.pi/mcp.json` | Pi MCP adapter 与 Pi Workroom |
 
-PI Desk 不会复制并取代 Pi 的会话数据库。关闭应用后，Pi 的会话文件仍是可恢复的事实来源。
+Pi Workroom 不会复制并取代 Pi 的会话数据库。关闭应用后，Pi 的会话文件仍是可恢复的事实来源。
 
 ## 项目结构
 
@@ -188,31 +201,31 @@ packages/
 
 ## 常见问题
 
-### PI Desk 会替代 Pi CLI 吗？
+### Pi Workroom 会替代 Pi CLI 吗？
 
-不会。PI Desk 是 Pi 的桌面客户端；Pi 仍是 Agent engine。两者共享 Pi 的会话和配置体系，终端工作流可以继续使用。
+不会。Pi Workroom 是 Pi 的桌面客户端；Pi 仍是 Agent engine。两者共享 Pi 的会话和配置体系，终端工作流可以继续使用。
 
 ### 我需要把代码或会话上传到云端吗？
 
-不需要。PI Desk 的项目注册、HTTP Workbench 与代码索引都在本地；Pi 会话也沿用本地文件。模型 Provider 的网络请求则遵循你所选择 Provider 的配置和条款。
+不需要。Pi Workroom 的项目注册、HTTP Workbench 与代码索引都在本地；Pi 会话也沿用本地文件。模型 Provider 的网络请求则遵循你所选择 Provider 的配置和条款。
 
 ### 为什么 HTTP Workbench 不把 `.http` 文件写进项目目录？
 
-环境配置、响应和运行历史通常属于个人本地状态，直接写入项目会制造无关的 Git diff。PI Desk 默认把这类资产按项目保存在应用数据目录；如需团队共享和版本控制，请在仓库中另行维护对应的测试资产。
+环境配置、响应和运行历史通常属于个人本地状态，直接写入项目会制造无关的 Git diff。Pi Workroom 默认把这类资产按项目保存在应用数据目录；如需团队共享和版本控制，请在仓库中另行维护对应的测试资产。
 
-### PI Desk 是安全沙箱吗？
+### Pi Workroom 是安全沙箱吗？
 
 不是。Electron 隔离、窄 IPC 接口和项目信任确认能够减少权限暴露与误操作，但不能替代容器或虚拟机等强隔离环境。
 
 ## 参与和支持
 
-PI Desk 正在积极开发中。欢迎通过 [Issues](https://github.com/TCcodecode/pi-desk/issues) 报告 Bug、提出功能建议或参与讨论。提交问题时，请附上系统版本、PI Desk 版本、复现步骤与相关日志，并注意移除 API key、Cookie、令牌和私有路径等敏感信息。
+Pi Workroom 正在积极开发中。欢迎通过 [Issues](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) 报告 Bug、提出功能建议或参与讨论。提交问题时，请附上系统版本、Pi Workroom 版本、复现步骤与相关日志，并注意移除 API key、Cookie、令牌和私有路径等敏感信息。
 
 ## 许可与上游致谢
 
 本仓库当前尚未声明项目许可证；在复用或分发代码前，请先与维护者确认授权范围。
 
-PI Desk 建立在下列项目之上：
+Pi Workroom 建立在下列项目之上：
 
 - [Pi Agent Harness](https://github.com/earendil-works/pi)
 - [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)

@@ -83,7 +83,7 @@ export interface SessionState {
   todos?: SessionTodoItem[];
   /** Monotonic within-session revision used to reject stale snapshots. */
   todosRevision?: number;
-  /** Optional for backwards-compatible snapshots from older Pi Desk runtimes. */
+  /** Optional for backwards-compatible snapshots from older Pi Workroom runtimes. */
   modeState?: SessionModeState;
   /**
    * User entry id of the in-process last turn. Rewind undoes this turn's

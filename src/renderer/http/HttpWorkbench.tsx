@@ -113,7 +113,7 @@ function TreeNode({
 function WorkspaceBrandBar({ onModeChange }: { onModeChange: (mode: "pi" | "http") => void }) {
   return (
     <div className="http-workbench-brandbar">
-      <span className="http-workbench-brand-name">PI Desk</span>
+      <span className="http-workbench-brand-name">Pi Workroom</span>
       <WorkspaceModeSwitcher mode="http" onModeChange={onModeChange} />
     </div>
   );
@@ -294,7 +294,7 @@ export function HttpWorkbench({
         await api.http.saveEnvironment(activeProject.id, selectedPath, environmentContent);
         setWorkspace(await api.http.workspace(activeProject.id));
       }
-      setMessage("Saved in the PI Desk app data space");
+      setMessage("Saved in the Pi Workroom app data space");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -443,7 +443,7 @@ export function HttpWorkbench({
           <section className="http-empty-state">
             <AppIcon name="folder" size="xl" />
             <h1>Open a project first</h1>
-            <p>HTTP tests and environments always belong to a PI Desk project.</p>
+      <p>HTTP tests and environments always belong to a Pi Workroom project.</p>
             <button type="button" className="welcome-primary" onClick={onOpenProject}>Open project</button>
           </section>
         </div>

@@ -99,7 +99,7 @@ export function SettingsDialog({
   const refreshProviders = useCallback(async () => {
     if (!listProviders) {
       setProviders([]);
-      setProvidersError("Provider API is unavailable. Fully quit and restart Pi Desktop.");
+      setProvidersError("Provider API is unavailable. Fully quit and restart Pi Workroom.");
       return;
     }
     setProvidersLoading(true);
@@ -127,7 +127,7 @@ export function SettingsDialog({
   const refreshMcpConfig = useCallback(async () => {
     if (!getMcpConfig) {
       setMcpConfig(undefined);
-      setMcpError("MCP API is unavailable. Fully quit and restart Pi Desktop.");
+      setMcpError("MCP API is unavailable. Fully quit and restart Pi Workroom.");
       return;
     }
     try {
@@ -387,7 +387,7 @@ export function SettingsDialog({
     <Dialog open={open} onClose={onClose} label="Pi settings" panelClassName="settings-dialog settings-dialog-wide">
       <div className="settings-heading">
           <div>
-            <span className="settings-heading-kicker">PI DESK / SETTINGS</span>
+            <span className="settings-heading-kicker">PI WORKROOM / SETTINGS</span>
             <span className="settings-heading-title">
               <strong>{tabMeta[tab].title}</strong>
               {tab === "providers" && (
@@ -859,4 +859,3 @@ function StatusBadge({ provider }: { provider: ProviderAuthStatus }) {
   }
   return <span className="provider-badge on">Connected</span>;
 }
-
