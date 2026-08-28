@@ -6,7 +6,7 @@
 
 [English README](README.md) · [下载 Release](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [提交问题或建议](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [了解 Pi](https://github.com/earendil-works/pi)
 
-<!-- 截图占位：在这里加入 docs/images/hero.png。拍摄要求见 docs/readme-assets.md。 -->
+![Pi Workroom 中的 Agent 会话、已验证的变更摘要和文件审阅](docs/images/hero.png)
 
 ## 为什么需要 Pi Workroom？
 
@@ -23,7 +23,15 @@ Pi Workroom 是 Pi 外围的桌面层，不会替代 Pi，也不会重新实现�
 | **MCP 与代码搜索** | 项目级 MCP 配置、Cursor MCP 导入、本地符号搜索和引用查找 |
 | **HTTP Workbench** | 可复跑 `.http` 测试、环境、运行历史、耗时、错误和脱敏响应 |
 
-<!-- 截图占位：在此处加入 2×2 功能图。拍摄要求见 docs/readme-assets.md。 -->
+| 审阅一次真实改动 | 将 API 检查随项目保存 |
+| --- | --- |
+| ![Pi Workroom 的统一文件 Diff 审阅](docs/images/changes.png) | ![Pi Workroom HTTP Workbench 中成功返回的 JSON 响应](docs/images/http-workbench.png) |
+
+### 从手机继续跟进
+
+可选 Companion 可在同一 Wi-Fi 下让你在手机上跟进会话，并审阅文件改动。
+
+<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion 在手机上审阅文件 Diff" width="320" />
 
 ## 安装
 
@@ -99,9 +107,9 @@ npm run build
 
 请通过 [Issues](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) 提交 Bug 和聚焦的功能建议。请附上平台、Pi Workroom 版本、复现步骤和相关日志；分享前务必移除 API key、Cookie、令牌和私有路径。
 
-## 后续补充的视觉资产
+## 演示素材
 
-README 的文字结构已经就位。需要拍摄的截图和演示视频清单见 [docs/readme-assets.md](docs/readme-assets.md)。
+上方截图来自一个刻意隔离的本地演示项目。截图拍摄与脱敏清单保存在 [docs/readme-assets.md](docs/readme-assets.md)。
 
 ## 许可与致谢
 

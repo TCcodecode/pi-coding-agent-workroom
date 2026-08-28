@@ -6,7 +6,7 @@ Run and resume Pi sessions, review agent changes, manage MCP tools, search code 
 
 [中文 README](README.zh-CN.md) · [Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
 
-<!-- Screenshot placeholder: add docs/images/hero.png here. See docs/readme-assets.md for the capture plan. -->
+![Pi Workroom showing an agent session, verified change summary, and file review](docs/images/hero.png)
 
 ## Why Pi Workroom?
 
@@ -23,7 +23,15 @@ Pi Workroom is the desktop layer around Pi. It does not replace Pi or create ano
 | **MCP and code search** | Project-aware MCP configuration, Cursor MCP import, local symbol search, and usage lookup |
 | **HTTP Workbench** | Repeatable `.http` tests, environments, run history, timing, errors, and sanitized responses |
 
-<!-- Screenshot placeholder: add a 2×2 feature grid after this table. See docs/readme-assets.md. -->
+| Review a real change | Keep API checks with the project |
+| --- | --- |
+| ![Pi Workroom unified file diff review](docs/images/changes.png) | ![Pi Workroom HTTP Workbench with a successful JSON response](docs/images/http-workbench.png) |
+
+### Continue from your phone
+
+Use the optional Companion on the same Wi-Fi to follow a session and review its changes from a phone.
+
+<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion reviewing a file diff on a phone" width="320" />
 
 ## Install
 
@@ -99,9 +107,9 @@ The project is organized into four product surfaces: `app`, `session`, `workspac
 
 Please use [Issues](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) for bug reports and focused feature proposals. Include your platform, Pi Workroom version, reproduction steps, and relevant logs. Remove API keys, cookies, tokens, and private paths before sharing.
 
-## Visual assets to add
+## Demo assets
 
-The README is ready for real product visuals. The exact screenshots and demo to capture are listed in [docs/readme-assets.md](docs/readme-assets.md).
+The screenshots above use a deliberately isolated local demo project. The capture and redaction checklist is kept in [docs/readme-assets.md](docs/readme-assets.md).
 
 ## License and acknowledgements
 

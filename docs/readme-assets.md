@@ -2,17 +2,20 @@
 
 Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, private paths, customer data, or model credentials.
 
-## Required assets
+## Captured assets
 
-| File | Placement | Recommended size | What it should prove |
+| File | Placement | Actual size | What it proves |
 | --- | --- | --- | --- |
-| `docs/images/hero.png` | Below the README intro | 1600×1000 PNG | The full desktop workspace: project sidebar, active session, tool timeline, and a visible change or plan |
-| `docs/images/sessions.png` | Feature grid | 1200×900 PNG | Multiple projects or sessions and the session tree |
-| `docs/images/changes.png` | Feature grid | 1200×900 PNG | A readable unified diff and review state |
-| `docs/images/mcp-code-search.png` | Feature grid | 1200×900 PNG | MCP settings or local symbol search; use whichever tells the story more clearly |
-| `docs/images/http-workbench.png` | Feature grid | 1200×900 PNG | An HTTP request, an environment, and a sanitized response or history row |
-| `docs/images/demo.gif` or `docs/images/demo.mp4` | After the hero or feature table | 20–30 seconds | Open a project, resume a session, send a follow-up, inspect a diff, and run one HTTP check |
-| GitHub social preview | Repository Settings → Social preview | 1280×640 PNG | Pi Workroom name, a real cropped product screen, and the phrase “Desktop workspace for the Pi coding agent” |
+| `docs/images/hero.png` | Below the README intro | 1224×768 PNG | Desktop session, tool timeline, verified change, and review entry point |
+| `docs/images/changes.png` | Feature grid | 1224×768 PNG | Unified Diff and review state |
+| `docs/images/http-workbench.png` | Feature grid | 1224×768 PNG | A `.http` request with a successful JSON response and run history |
+| `docs/images/companion-mobile.png` | Phone Companion section | 430×932 PNG | A phone-sized Companion reviewing the same file Diff |
+
+## Optional next assets
+
+- `docs/images/mcp-code-search.png`: MCP settings or local symbol search, if it adds a clearer product story.
+- `docs/images/demo.gif` or `docs/images/demo.mp4`: 20–30 seconds showing project → session → diff → HTTP check.
+- GitHub social preview: a 1280×640 PNG uploaded through Repository Settings, using a real cropped product screen and the phrase “Desktop workspace for the Pi coding agent”.
 
 ## Capture rules
 
@@ -25,7 +28,7 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 
 ## README insertion order
 
-1. Add `hero.png` immediately after the language and release links in both README files.
-2. Add the four feature screenshots after the first capability table as a 2×2 grid.
-3. Add the demo after the hero or before Install when its file size is acceptable for GitHub rendering.
-4. Upload the separate social preview through GitHub repository Settings; it does not need to live in this repository.
+1. `hero.png` appears immediately after the language and release links in both README files.
+2. `changes.png` and `http-workbench.png` appear after the capability table.
+3. `companion-mobile.png` appears in the phone Companion section.
+4. A future demo or social preview can be added without changing the current README structure.
