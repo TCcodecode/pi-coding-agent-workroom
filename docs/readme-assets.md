@@ -9,12 +9,12 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 | `docs/images/hero.png` | Below the README intro | 1224×768 PNG | Desktop session, tool timeline, verified change, and review entry point |
 | `docs/images/changes.png` | Feature grid | 1224×768 PNG | Unified Diff and review state |
 | `docs/images/http-workbench.png` | Feature grid | 1224×768 PNG | A `.http` request with a successful JSON response and run history |
-| `docs/images/companion-en-folded.png` | English responsive details | 360×800 PNG | A narrow cover-screen command and follow-up flow |
-| `docs/images/companion-en-slab.png` | English responsive details | 430×844 PNG | A regular phone conversation after Pi creates a release-readiness document |
-| `docs/images/companion-en-unfolded.png` | English responsive details | 960×820 PNG | Chat and the generated file Diff shown side by side |
-| `docs/images/companion-zh-CN-folded.png` | Chinese responsive details | 360×900 PNG | A narrow cover-screen Chinese follow-up about the session changes |
-| `docs/images/companion-zh-CN-slab.png` | Chinese responsive details | 430×844 PNG | A regular phone reviewing the Chinese task and response |
-| `docs/images/companion-zh-CN-unfolded.png` | Chinese responsive details | 960×820 PNG | Chinese chat and the generated Chinese file Diff shown side by side |
+| `docs/images/companion-en-folded.png` | English Companion section · phone card | 360×800 PNG | A narrow cover-screen command and follow-up flow |
+| `docs/images/companion-en-slab.png` | English Companion section · phone card | 430×844 PNG | A regular phone conversation after Pi creates a release-readiness document |
+| `docs/images/companion-en-unfolded.png` | English Companion section · lead image | 960×820 PNG | Chat and the generated file Diff shown side by side |
+| `docs/images/companion-zh-CN-folded.png` | Chinese Companion section · phone card | 360×900 PNG | A narrow cover-screen Chinese follow-up about the session changes |
+| `docs/images/companion-zh-CN-slab.png` | Chinese Companion section · phone card | 430×844 PNG | A regular phone reviewing the Chinese task and response |
+| `docs/images/companion-zh-CN-unfolded.png` | Chinese Companion section · lead image | 960×820 PNG | Chinese chat and the generated Chinese file Diff shown side by side |
 
 ## Optional next assets
 
@@ -35,5 +35,5 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 
 1. `hero.png` appears immediately after the language and release links in both README files.
 2. `changes.png` and `http-workbench.png` appear after the capability table.
-3. The three language-matched Companion screenshots appear directly in each README: folded cover, slab phone, and unfolded foldable.
+3. Each README leads with the unfolded foldable screenshot, followed by two labeled phone cards: folded cover and slab phone.
 4. A future demo or social preview can be added without changing the current README structure.

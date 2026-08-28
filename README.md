@@ -37,14 +37,23 @@ The goal is not simply to accumulate unit tests or edge cases. It is to preserve
 
 The optional, browser-based Companion needs no separate app: on the same Wi-Fi, use your phone's normal keyboard or built-in dictation to send real commands, follow Pi's tool activity, and review file changes. The interface adapts from a narrow foldable cover screen to a regular phone, then opens into a two-pane Chat + Changes workspace on an unfolded foldable.
 
-<p align="center">
-  <img src="docs/images/companion-en-folded.png" alt="Pi Workroom Companion on a narrow folded cover screen" width="220" />
-  <img src="docs/images/companion-en-slab.png" alt="Pi Workroom Companion on a regular slab phone" width="260" />
-</p>
-<p align="center"><sub>Folded cover · one-thumb command and follow-up &nbsp;&nbsp;|&nbsp;&nbsp; Slab phone · full conversation and composer</sub></p>
-
 <p align="center"><img src="docs/images/companion-en-unfolded.png" alt="Pi Workroom Companion on an unfolded foldable with chat and file diff side by side" width="760" /></p>
-<p align="center"><sub>Unfolded foldable · Chat and Changes side by side</sub></p>
+<p align="center"><strong>Unfolded foldable</strong><br /><sub>Keep the conversation open while reviewing the file diff.</sub></p>
+
+<table>
+  <tr>
+    <td align="center">
+      <strong>Folded cover</strong><br />
+      <sub>One-thumb command and follow-up</sub><br /><br />
+      <img src="docs/images/companion-en-folded.png" alt="Pi Workroom Companion on a narrow folded cover screen" height="560" />
+    </td>
+    <td align="center">
+      <strong>Slab phone</strong><br />
+      <sub>Full conversation and composer</sub><br /><br />
+      <img src="docs/images/companion-en-slab.png" alt="Pi Workroom Companion on a regular slab phone" height="560" />
+    </td>
+  </tr>
+</table>
 
 ## Product direction
 
