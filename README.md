@@ -2,7 +2,7 @@
 
 > A local-first workroom for planning, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
-Run and resume Pi sessions, review agent changes, manage MCP tools, search code locally, and verify APIs from one local Electron workspace.
+Pi Workroom is a local desktop GUI app for running and resuming Pi sessions, reviewing agent changes, managing MCP tools, searching code locally, and verifying APIs.
 
 [中文 README](README.zh-CN.md) · [Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
 

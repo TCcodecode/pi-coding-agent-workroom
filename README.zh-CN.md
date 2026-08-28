@@ -2,7 +2,7 @@
 
 > 围绕 [Pi coding agent](https://github.com/earendil-works/pi) 的本地优先工作台：规划、研发、审阅、测试，以及随时继续工作。
 
-在一个本地 Electron 工作区中运行和恢复 Pi 会话、审阅 Agent 改动、管理 MCP 工具、搜索代码，并验证 API。
+Pi Workroom 是一个本地桌面 GUI 应用，用来运行和恢复 Pi 会话、审阅 Agent 改动、管理 MCP 工具、搜索代码，并验证 API。
 
 [English README](README.md) · [下载 Release](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [提交问题或建议](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [了解 Pi](https://github.com/earendil-works/pi)
 
