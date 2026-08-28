@@ -1,6 +1,6 @@
 # Pi Workroom
 
-> The desktop workspace for the [Pi coding agent](https://github.com/earendil-works/pi).
+> A local-first workroom for planning, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
 Run and resume Pi sessions, review agent changes, manage MCP tools, search code locally, and verify APIs from one local Electron workspace.
 
@@ -10,9 +10,9 @@ Run and resume Pi sessions, review agent changes, manage MCP tools, search code 
 
 ## Why Pi Workroom?
 
-Pi is excellent in the terminal. Long-running coding work also needs a durable place to see what is happening across projects and sessions: the plan, tool calls, file changes, API checks, and the next follow-up.
+Pi is excellent in the terminal. But an AI-assisted project needs a durable operating surface from the first plan through each iteration: project context, sessions, tool calls, file changes, tests, and the next follow-up.
 
-Pi Workroom is the desktop layer around Pi. It does not replace Pi or create another agent runtime. Pi remains the source of truth for models, providers, tools, extensions, and session semantics.
+Pi Workroom is built to be that surface: one workroom instead of a chain of disconnected terminals, test clients, project windows, and mobile handoffs. It does not replace Pi or create another agent runtime. Pi remains the source of truth for models, providers, tools, extensions, and session semantics.
 
 ## What you can do
 
@@ -23,15 +23,33 @@ Pi Workroom is the desktop layer around Pi. It does not replace Pi or create ano
 | **MCP and code search** | Project-aware MCP configuration, Cursor MCP import, local symbol search, and usage lookup |
 | **HTTP Workbench** | Repeatable `.http` tests, environments, run history, timing, errors, and sanitized responses |
 
+## Build → review → regression
+
+More projects and more agent output do not remove the review bottleneck; they make it more important. Pi Workroom treats testing as delivery evidence, not as an afterthought.
+
+The goal is not simply to accumulate unit tests or edge cases. It is to preserve repeatable, black-box regression checks that tell you whether an existing workflow still works after an iteration. Today, HTTP Workbench keeps repeatable API checks, environments, and run history beside the project. The product direction is to extend that feedback loop to the end-to-end paths that matter most.
+
 | Review a real change | Keep API checks with the project |
 | --- | --- |
 | ![Pi Workroom unified file diff review](docs/images/changes.png) | ![Pi Workroom HTTP Workbench with a successful JSON response](docs/images/http-workbench.png) |
 
 ### Continue from your phone
 
-Use the optional Companion on the same Wi-Fi to follow a session, send commands, and review tool activity or file changes from a phone.
+The optional, browser-based Companion lets you follow a session, send commands, and review tool activity or file changes from a phone on the same Wi-Fi. There is no separate app to install; use the phone's normal keyboard or built-in dictation to continue a task when you step away from the desk.
 
 <img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion sending a mobile command and reviewing its HTTP result" width="320" />
+
+## Product direction
+
+The current Companion is intentionally LAN-only. Do not expose its port to the public internet.
+
+Roadmap items are deliberately separate from the features above:
+
+- **Work away from the desk** — a secure mobile continuation experience for work outside the local network.
+- **See what the agent sees** — use a remote-desktop tool when a task needs an existing desktop UI; for web apps, open the running preview directly on the phone when that capability lands.
+- **Make regressions visible** — broaden repeatable black-box checks so review can focus on decisions and product quality instead of re-proving every prior workflow manually.
+
+The north star is simple: start focused work at your computer, step out for coffee, and keep creating from a phone without losing the project, its evidence, or the thread of the conversation.
 
 ## Install
 

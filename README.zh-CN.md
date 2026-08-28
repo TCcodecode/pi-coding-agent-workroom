@@ -1,6 +1,6 @@
 # Pi Workroom
 
-> [Pi coding agent](https://github.com/earendil-works/pi) 的桌面工作区。
+> 围绕 [Pi coding agent](https://github.com/earendil-works/pi) 的本地优先工作台：规划、研发、审阅、测试，以及随时继续工作。
 
 在一个本地 Electron 工作区中运行和恢复 Pi 会话、审阅 Agent 改动、管理 MCP 工具、搜索代码，并验证 API。
 
@@ -10,9 +10,9 @@
 
 ## 为什么需要 Pi Workroom？
 
-Pi 在终端里已经很好用；但当编码任务变长、项目和会话变多时，你还需要一个能持续看清工作状态的地方：计划、工具调用、文件改动、接口验证，以及下一步 follow-up。
+Pi 在终端里已经很好用；但一个由 AI 协作推进的项目，从最初的规划到每次迭代，都需要一个稳定的工作界面来承接项目上下文、会话、工具调用、文件改动、测试和下一步 follow-up。
 
-Pi Workroom 是 Pi 外围的桌面层，不会替代 Pi，也不会重新实现一个 Agent runtime。Pi 仍然是模型、Provider、工具循环、扩展和会话语义的事实来源。
+Pi Workroom 想成为这个界面：尽量在一个工作台中完成工作，而不是在终端、测试客户端、项目窗口和手机之间不断切换。它不会替代 Pi，也不会重新实现一个 Agent runtime。Pi 仍然是模型、Provider、工具循环、扩展和会话语义的事实来源。
 
 ## 你能用它做什么？
 
@@ -23,15 +23,33 @@ Pi Workroom 是 Pi 外围的桌面层，不会替代 Pi，也不会重新实现�
 | **MCP 与代码搜索** | 项目级 MCP 配置、Cursor MCP 导入、本地符号搜索和引用查找 |
 | **HTTP Workbench** | 可复跑 `.http` 测试、环境、运行历史、耗时、错误和脱敏响应 |
 
+## 构建 → 审阅 → 回归
+
+项目和 Agent 产出变多，并不会消除代码 Review 的瓶颈，反而会让它更关键。Pi Workroom 把测试当作交付证据，而不是最后才补的一步。
+
+重点不只是堆叠单元测试或边界测试，而是保留可以反复运行的黑盒回归：每次迭代后，能够确认既有工作流是否仍然成立。现在，HTTP Workbench 已经把可复跑的 API 检查、环境与运行历史留在项目旁边；产品方向是把这种反馈闭环逐步延伸到最关键的端到端路径。
+
 | 审阅一次真实改动 | 将 API 检查随项目保存 |
 | --- | --- |
 | ![Pi Workroom 的统一文件 Diff 审阅](docs/images/changes.png) | ![Pi Workroom HTTP Workbench 中成功返回的 JSON 响应](docs/images/http-workbench.png) |
 
 ### 从手机继续跟进
 
-可选 Companion 可在同一 Wi-Fi 下让你在手机上跟进会话、发送命令，并审阅工具活动或文件改动。
+可选的网页 Companion 可在同一 Wi-Fi 下让你用手机跟进会话、发送命令，并审阅工具活动或文件改动。它不需要另装 App；离开电脑时，直接使用手机键盘或系统语音输入继续任务。
 
 <img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion 在手机上发送命令并审阅 HTTP 结果" width="320" />
+
+## 产品方向
+
+当前 Companion 有意只在局域网内使用；请不要把端口暴露到公网。
+
+下面是与现有功能分开的 Roadmap：
+
+- **离开电脑也能继续工作**：提供安全的移动继续工作体验，覆盖局域网之外的场景。
+- **让你看到 Agent 所在的界面**：需要操作既有桌面 UI 时，可配合远程桌面工具；对于网页 App，后续可以直接在手机上打开运行中的预览。
+- **让回归更可见**：扩大可复跑的黑盒检查，让 Review 回到决策和产品质量，而不是每次都手工重新证明旧流程没有坏。
+
+北极星很简单：在电脑前开始专注工作，下楼喝杯咖啡时，也能拿起手机继续创作，不丢失项目、证据和上下文。
 
 ## 安装
 
