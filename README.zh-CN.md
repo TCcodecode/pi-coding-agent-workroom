@@ -33,11 +33,28 @@ Pi Workroom 想成为这个界面：尽量在一个工作台中完成工作，�
 | --- | --- |
 | ![Pi Workroom 的统一文件 Diff 审阅](docs/images/changes.png) | ![Pi Workroom HTTP Workbench 中成功返回的 JSON 响应](docs/images/http-workbench.png) |
 
-### 从手机继续跟进
+### 在各种手机形态上继续工作
 
-可选的网页 Companion 可在同一 Wi-Fi 下让你用手机跟进会话、发送命令，并审阅工具活动或文件改动。它不需要另装 App；离开电脑时，直接使用手机键盘或系统语音输入继续任务。
+可选的网页 Companion 不需要另装 App；在同一 Wi-Fi 下，你可以使用手机键盘或系统语音输入发送真实命令、跟进 Pi 的工具活动，并审阅文件改动。界面会从折叠后的窄外屏、普通直板手机，一直适配到展开后的双栏「对话 + Changes」工作区。
 
-<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion 在手机上发送命令并审阅 HTTP 结果" width="320" />
+<p align="center">
+  <img src="docs/images/companion-zh-CN-demo.gif" alt="Pi Workroom Companion 从折叠外屏、直板手机切换到展开折叠屏的响应式演示" width="760" />
+</p>
+<p align="center"><sub>折叠外屏 → 直板手机 → 展开折叠屏，对话与 Changes 并排</sub></p>
+
+<details>
+<summary>查看三种响应式布局</summary>
+
+<p align="center"><strong>折叠外屏 · 单手发送命令与继续追问</strong></p>
+<p align="center"><img src="docs/images/companion-zh-CN-folded.png" alt="Pi Workroom Companion 在折叠后的窄外屏上运行" width="300" /></p>
+
+<p align="center"><strong>直板手机 · 完整对话与输入区</strong></p>
+<p align="center"><img src="docs/images/companion-zh-CN-slab.png" alt="Pi Workroom Companion 在普通直板手机上运行" width="360" /></p>
+
+<p align="center"><strong>展开折叠屏 · 对话与 Changes 双栏并排</strong></p>
+<p align="center"><img src="docs/images/companion-zh-CN-unfolded.png" alt="Pi Workroom Companion 在展开折叠屏上并排显示对话和文件 Diff" width="760" /></p>
+
+</details>
 
 ## 产品方向
 

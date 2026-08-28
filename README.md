@@ -33,11 +33,28 @@ The goal is not simply to accumulate unit tests or edge cases. It is to preserve
 | --- | --- |
 | ![Pi Workroom unified file diff review](docs/images/changes.png) | ![Pi Workroom HTTP Workbench with a successful JSON response](docs/images/http-workbench.png) |
 
-### Continue from your phone
+### Continue from any screen
 
-The optional, browser-based Companion lets you follow a session, send commands, and review tool activity or file changes from a phone on the same Wi-Fi. There is no separate app to install; use the phone's normal keyboard or built-in dictation to continue a task when you step away from the desk.
+The optional, browser-based Companion needs no separate app: on the same Wi-Fi, use your phone's normal keyboard or built-in dictation to send real commands, follow Pi's tool activity, and review file changes. The interface adapts from a narrow foldable cover screen to a regular phone, then opens into a two-pane Chat + Changes workspace on an unfolded foldable.
 
-<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion sending a mobile command and reviewing its HTTP result" width="320" />
+<p align="center">
+  <img src="docs/images/companion-en-demo.gif" alt="Pi Workroom Companion adapting from a folded cover screen to a slab phone and an unfolded foldable" width="760" />
+</p>
+<p align="center"><sub>Folded cover → slab phone → unfolded foldable with Chat + Changes</sub></p>
+
+<details>
+<summary>See all three responsive layouts</summary>
+
+<p align="center"><strong>Folded cover · one-thumb command and follow-up</strong></p>
+<p align="center"><img src="docs/images/companion-en-folded.png" alt="Pi Workroom Companion on a narrow folded cover screen" width="300" /></p>
+
+<p align="center"><strong>Slab phone · full conversation and composer</strong></p>
+<p align="center"><img src="docs/images/companion-en-slab.png" alt="Pi Workroom Companion on a regular slab phone" width="360" /></p>
+
+<p align="center"><strong>Unfolded foldable · Chat and Changes side by side</strong></p>
+<p align="center"><img src="docs/images/companion-en-unfolded.png" alt="Pi Workroom Companion on an unfolded foldable with chat and file diff side by side" width="760" /></p>
+
+</details>
 
 ## Product direction
 

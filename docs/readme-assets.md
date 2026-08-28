@@ -9,12 +9,19 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 | `docs/images/hero.png` | Below the README intro | 1224×768 PNG | Desktop session, tool timeline, verified change, and review entry point |
 | `docs/images/changes.png` | Feature grid | 1224×768 PNG | Unified Diff and review state |
 | `docs/images/http-workbench.png` | Feature grid | 1224×768 PNG | A `.http` request with a successful JSON response and run history |
-| `docs/images/companion-mobile.png` | Phone Companion section | 430×844 PNG | A phone-sized Companion sending a command, using local HTTP tools, and returning a 200 result |
+| `docs/images/companion-en-demo.gif` | English Companion section | 960×900 GIF | The English Companion moving through folded cover, slab phone, and unfolded two-pane layouts |
+| `docs/images/companion-en-folded.png` | English responsive details | 360×800 PNG | A narrow cover-screen command and follow-up flow |
+| `docs/images/companion-en-slab.png` | English responsive details | 430×844 PNG | A regular phone conversation after Pi creates a release-readiness document |
+| `docs/images/companion-en-unfolded.png` | English responsive details | 960×820 PNG | Chat and the generated file Diff shown side by side |
+| `docs/images/companion-zh-CN-demo.gif` | Chinese Companion section | 960×900 GIF | The Chinese Companion moving through the same three responsive layouts |
+| `docs/images/companion-zh-CN-folded.png` | Chinese responsive details | 360×900 PNG | A narrow cover-screen Chinese follow-up about the session changes |
+| `docs/images/companion-zh-CN-slab.png` | Chinese responsive details | 430×844 PNG | A regular phone reviewing the Chinese task and response |
+| `docs/images/companion-zh-CN-unfolded.png` | Chinese responsive details | 960×820 PNG | Chinese chat and the generated Chinese file Diff shown side by side |
 
 ## Optional next assets
 
 - `docs/images/mcp-code-search.png`: MCP settings or local symbol search, if it adds a clearer product story.
-- `docs/images/demo.gif` or `docs/images/demo.mp4`: 20–30 seconds showing project → session → diff → HTTP check.
+- `docs/images/demo.mp4`: a longer desktop walkthrough showing project → session → diff → HTTP check, if a video becomes useful.
 - GitHub social preview: a 1280×640 PNG uploaded through Repository Settings, using a real cropped product screen and the phrase “Desktop workspace for the Pi coding agent”.
 
 ## Capture rules
@@ -30,5 +37,5 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 
 1. `hero.png` appears immediately after the language and release links in both README files.
 2. `changes.png` and `http-workbench.png` appear after the capability table.
-3. `companion-mobile.png` appears in the phone Companion section.
+3. The language-matched Companion GIF appears first; the three source screenshots remain available in a collapsed responsive-layout section.
 4. A future demo or social preview can be added without changing the current README structure.
