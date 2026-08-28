@@ -9,7 +9,7 @@ Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, p
 | `docs/images/hero.png` | Below the README intro | 1224×768 PNG | Desktop session, tool timeline, verified change, and review entry point |
 | `docs/images/changes.png` | Feature grid | 1224×768 PNG | Unified Diff and review state |
 | `docs/images/http-workbench.png` | Feature grid | 1224×768 PNG | A `.http` request with a successful JSON response and run history |
-| `docs/images/companion-mobile.png` | Phone Companion section | 430×932 PNG | A phone-sized Companion reviewing the same file Diff |
+| `docs/images/companion-mobile.png` | Phone Companion section | 430×844 PNG | A phone-sized Companion sending a command, using local HTTP tools, and returning a 200 result |
 
 ## Optional next assets
 

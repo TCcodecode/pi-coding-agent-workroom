@@ -29,9 +29,9 @@ Pi Workroom is the desktop layer around Pi. It does not replace Pi or create ano
 
 ### Continue from your phone
 
-Use the optional Companion on the same Wi-Fi to follow a session and review its changes from a phone.
+Use the optional Companion on the same Wi-Fi to follow a session, send commands, and review tool activity or file changes from a phone.
 
-<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion reviewing a file diff on a phone" width="320" />
+<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion sending a mobile command and reviewing its HTTP result" width="320" />
 
 ## Install
 

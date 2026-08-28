@@ -29,9 +29,9 @@ Pi Workroom 是 Pi 外围的桌面层，不会替代 Pi，也不会重新实现�
 
 ### 从手机继续跟进
 
-可选 Companion 可在同一 Wi-Fi 下让你在手机上跟进会话，并审阅文件改动。
+可选 Companion 可在同一 Wi-Fi 下让你在手机上跟进会话、发送命令，并审阅工具活动或文件改动。
 
-<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion 在手机上审阅文件 Diff" width="320" />
+<img src="docs/images/companion-mobile.png" alt="Pi Workroom Companion 在手机上发送命令并审阅 HTTP 结果" width="320" />
 
 ## 安装
 
