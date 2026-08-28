@@ -1,91 +1,47 @@
 # Pi Workroom
 
-> A local-first desktop workspace for the [Pi coding agent](https://github.com/earendil-works/pi). Manage projects and sessions, inspect agent runs and diffs, configure MCP servers, search code locally, and run repeatable HTTP tests in one Electron app.
+> The desktop workspace for the [Pi coding agent](https://github.com/earendil-works/pi).
 
-Pi Workroom is a desktop GUI for Pi coding agent sessions. Pi remains the agent runtime; Pi Workroom provides the project workspace, session management, visual review, and local integrations around it. If you are looking for a Pi agent desktop, Pi coding agent GUI, or a durable local workspace for long-running sessions, start here.
+Run and resume Pi sessions, review agent changes, manage MCP tools, search code locally, and verify APIs from one local Electron workspace.
 
-[Latest releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
+[中文 README](README.zh-CN.md) · [Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
 
-## What is Pi Workroom?
+<!-- Screenshot placeholder: add docs/images/hero.png here. See docs/readme-assets.md for the capture plan. -->
 
-Pi Workroom brings the day-to-day loop of a coding agent into one local desktop workspace:
+## Why Pi Workroom?
 
-- **Agent sessions** — manage multiple projects, sessions, forks, tabs, timelines, tools, plans, and follow-ups.
-- **Code review** — inspect file changes and unified diffs as the agent works.
-- **MCP and local code search** — configure project tools and search symbols without sending the index to a cloud service.
-- **HTTP Workbench** — turn API exploration into repeatable `.http` tests with environments, history, and sanitized responses.
+Pi is excellent in the terminal. Long-running coding work also needs a durable place to see what is happening across projects and sessions: the plan, tool calls, file changes, API checks, and the next follow-up.
 
-> 给 [Pi coding agent](https://github.com/earendil-works/pi) 一个真正可长期使用的桌面工作台。
+Pi Workroom is the desktop layer around Pi. It does not replace Pi or create another agent runtime. Pi remains the source of truth for models, providers, tools, extensions, and session semantics.
 
-**Pi Workroom** 是 Pi coding agent 的本地 Electron 客户端。它把会话、Agent 执行过程、代码变更、MCP 与可重复运行的 HTTP 验证汇集到同一个项目工作区，让你不必在终端、编辑器和 API 工具之间来回切换。
+## What you can do
 
-> **定位边界**：Pi Workroom 不是另一个模型，也不重写 Pi 的 Agent runtime。Pi 继续负责模型、Provider、工具循环、扩展与会话语义；Pi Workroom 专注于桌面工作区、可视化和本地集成。
-
-## 为什么是 Pi Workroom？
-
-终端很适合启动一次 Agent 任务；当任务变多、需要恢复上下文、审阅多轮改动和反复验证接口时，桌面工作台更合适。
-
-```text
-打开项目 → 新建或恢复会话 → 观察 Agent 执行 → 审阅文件变更
-    → 搜索代码 / 使用 MCP → 运行 HTTP 验证 → 继续迭代
-```
-
-Pi Workroom 将这条链路留在本地，并继续使用你熟悉的 Pi 会话与配置体系。
-
-## 主要能力
-
-| 工作区 | 用来做什么 | 你会得到什么 |
-| --- | --- | --- |
-| **Agent Workbench** | 长期管理 Pi 会话和 Agent 任务 | 多项目、多会话、会话树、实时时间线、工具调用、文件 Diff、计划与待办 |
-| **HTTP Workbench** | 将接口探测沉淀成可复跑验证 | `.http` 测试、环境配置、运行历史、脱敏响应，以及可由 Agent 调用的工具 |
-
-### 面向 Agent 的工作体验
-
-- 在一个项目中维护多个会话和打开中的 Tab；支持恢复、重命名、删除、导入、导出、fork 与 clone。
-- 时间线流式显示回复、thinking、通知与工具调用；工具默认折叠，需要时再查看输入、输出与状态。
-- 文件写入前后自动生成 unified diff，快速确认新增和删除内容。
-- Agent 正在运行时仍可编辑并发送 follow-up；任务结束可通过系统通知得知结果。
-- 在当前会话中选择模型、思考级别、工具和技能，并查看 token、上下文窗口和 Provider 用量。
-
-### 本地代码与 MCP
-
-- 使用 tree-sitter / WebAssembly 在本地建立代码符号索引，支持 `search_symbols` 和 `find_usages`。
-- 索引能力以 Pi extension 的形式提供给 Agent；索引数据库保存在项目的 `.code-index/`，不依赖云端服务。
-- 合并用户级与项目级 MCP 配置，支持导入 Cursor MCP 配置，并可在桌面端查看和启停项目服务器。
-
-### 可复跑的 HTTP 验证
-
-- 在 `.http` 文件中编写请求、选择环境并从编辑器运行。
-- 按项目维护 `local`、`dev`、`staging`、`production` 等环境。
-- 保存文件级和目录级的运行历史、状态、耗时、脱敏响应和错误信息。
-- 通过内建 `http-workbench` extension，让 Agent 创建、读取和运行 HTTP 测试。
-- 临时探测可以直接用 curl；需要重复验证时再沉淀为 `.http` 资产。
-
-HTTP 测试、环境和运行历史位于应用数据目录，而非你的代码仓库，因此默认不会制造 Git diff。
-
-## 快速开始
-
-### 安装发布版本
-
-从 [GitHub Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) 下载对应系统和架构的安装包。
-
-| 系统 | 推荐安装方式 |
+| Area | What it gives you |
 | --- | --- |
-| macOS | 下载 `.dmg`，将 `Pi Workroom.app` 拖入 Applications |
-| Windows | 运行 `.exe` 安装包；也可使用免安装的 `.zip` |
-| Linux | 使用 `.AppImage`；Debian / Ubuntu 也可安装 `.deb` |
+| **Agent workspace** | Multiple projects, sessions, tabs, session trees, plans, todos, and follow-ups |
+| **Live review** | A streaming timeline of replies and tool calls, plus unified file diffs |
+| **MCP and code search** | Project-aware MCP configuration, Cursor MCP import, local symbol search, and usage lookup |
+| **HTTP Workbench** | Repeatable `.http` tests, environments, run history, timing, errors, and sanitized responses |
 
-当前 macOS 构建尚未使用 Apple Developer ID 签名。首次启动请在 Finder 中对 `Pi Workroom.app` 选择“右键 → 打开”，或在“系统设置 → 隐私与安全性”中选择“仍要打开”。如果系统提示应用“已损坏”，请先核对下载文件的 SHA256 是否与 Release 中的 `SHA256SUMS` 一致；确认无误后，可移除**该应用**的下载隔离标记：
+<!-- Screenshot placeholder: add a 2×2 feature grid after this table. See docs/readme-assets.md. -->
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/Pi Workroom.app"
-```
+## Install
 
-不要为了安装 Pi Workroom 全局关闭 Gatekeeper。完成 Developer ID 签名和公证后，macOS 将恢复普通双击启动流程。
+### Download a release
 
-### 从源码运行
+Download the build for your platform from [GitHub Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases).
 
-准备 Node.js 22.12.0 或更高版本，然后在仓库根目录执行：
+| Platform | Available package |
+| --- | --- |
+| macOS | `.dmg` and `.zip` |
+| Windows | NSIS installer and `.zip` |
+| Linux | `.AppImage`, `.deb`, and `.tar.gz` |
+
+The current pre-release is titled Pi Workroom, but its package asset names still use the former **PiDesk** name because it was built before the rename. It is the same project; future packages use the Pi Workroom name. macOS packages are not yet Developer ID signed or notarized, so macOS may require opening the app from Finder the first time.
+
+### Run from source
+
+Requires Node.js 22.12.0 or later.
 
 ```bash
 git clone https://github.com/TCcodecode/pi-coding-agent-workroom.git
@@ -94,7 +50,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` 会在启动前检查 Node.js、Electron 包和平台桌面二进制是否完整。如果检查失败，请执行：
+If Electron is missing after installation, run:
 
 ```bash
 npm install --include=dev
@@ -102,130 +58,56 @@ npm rebuild electron
 npm run dev
 ```
 
-开发环境不要使用 `--omit=dev`、`--production` 或 `--ignore-scripts`，否则 Electron 的开发依赖或桌面二进制可能不会安装。
+## First five minutes
 
-启动后选择一个本地项目目录，创建或恢复 Pi 会话，并在设置中配置所需的模型 Provider。Pi Workroom 会继续使用 Pi 的会话、Provider、skills、extensions 和 MCP 生态。
+1. Open a local project folder.
+2. Create a Pi session or resume one you started in the terminal.
+3. Configure a model provider through Settings if Pi is not already configured.
+4. Send a task and follow its timeline, tool calls, plan, and file changes.
+5. Turn recurring API checks into `.http` tests in HTTP Workbench.
 
-### 常用命令
+Pi Workroom continues to use Pi's sessions, provider setup, skills, extensions, and MCP ecosystem.
 
-| 命令 | 用途 |
+## How it fits with Pi
+
+| Pi owns | Pi Workroom owns |
 | --- | --- |
-| `npm run dev` | 启动开发模式 |
-| `npm run build` | 构建 main、preload 与 renderer |
-| `npm run preview` | 预览构建产物 |
-| `npm test` | 运行 Vitest 测试 |
-| `npm run typecheck` | 运行 TypeScript 类型检查 |
-| `npm run dist` | 构建当前系统的安装包（不发布） |
-| `npm run dist:mac` | 构建 macOS 的 DMG 和 ZIP |
-| `npm run dist:win` | 构建 Windows 的 NSIS 安装包和 ZIP |
-| `npm run dist:linux` | 构建 Linux 的 AppImage、deb 和 tar.gz |
+| Models, providers, tool loop, extensions, session semantics | Desktop windows, project workspace, visual review, local integrations |
+| Pi session files and configuration | Project catalog, HTTP Workbench assets, code-index presentation |
 
-## 更新策略
+The renderer communicates with the Electron main process through typed IPC. It does not receive unrestricted file system, shell, or Node.js access.
 
-Windows 的 NSIS 安装版与 Linux AppImage 会在启动后检查 GitHub Release。发现新版本后，应用会提示你；只有在你点击下载和确认重启安装后才会更新。
+## Local data and security
 
-`.zip`、`.deb` 与 `.dmg` 通过下载下一版本更新。未签名的 macOS 构建不支持原地更新；待 Developer ID 签名可用后将启用同样的应用内更新体验。
+- Pi session files remain under Pi's own session system.
+- Project registration and HTTP Workbench state live in the application's local data directory.
+- Code indexes are stored in `<project>/.code-index/` and do not require a cloud indexing service.
+- Electron `contextIsolation` and sandboxing reduce renderer privilege, but Pi Workroom is not an operating-system security sandbox. Use a container, virtual machine, or another controlled environment when strong isolation is required.
 
-## 设计与安全边界
+## Development
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│                       Pi Workroom · Electron                 │
-│                                                              │
-│  React Renderer                                               │
-│  Timeline · Composer · Sessions · HTTP Workbench · Settings   │
-│                 │ typed IPC                                   │
-│                 ▼                                             │
-│  Preload · contextBridge · contextIsolation · sandbox         │
-│                 │                                             │
-│                 ▼                                             │
-│  Electron Main · desktop authority                            │
-│  Pi host · sessions · projects · MCP · code index · HTTP       │
-│  provider auth · notifications · file changes                  │
-│                 │                                             │
-│                 ▼                                             │
-│  @earendil-works/pi-coding-agent                              │
-│  Agent loop · providers · tools · extensions · session format │
-└──────────────────────────────────────────────────────────────┘
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-- **Pi 管理 Agent 语义**：模型、Provider、工具循环、扩展、压缩和会话语义由 Pi 负责。
-- **主进程管理桌面权限**：文件、进程、会话生命周期、MCP 配置、HTTP 资产与系统通知由 Electron main process 负责。
-- **渲染层只负责呈现**：Renderer 只消费状态和收集用户意图，不直接获得文件系统、Shell 或 Node.js 能力。
-- **明确而非绝对的安全保障**：`contextIsolation` 与 Electron sandbox 均开启；项目信任确认仅控制资源加载，不等同于操作系统级安全沙箱。需要强隔离时，请在容器、虚拟机或其他受控环境中运行 Agent。
-- **外部链接受限**：Renderer 发起的外部链接仅允许 `http(s)` 地址。
+The project is organized into four product surfaces: `app`, `session`, `workspace`, and `http`. Pi runtime semantics stay in the main-process Pi host; the renderer presents projected state through `window.pi`.
 
-## 数据存放位置
+## Contributing and support
 
-| 数据 | 位置 | 事实来源 / 所有者 |
-| --- | --- | --- |
-| Pi 会话 | `~/.pi/agent/sessions/` | Pi coding agent |
-| 项目注册表 | Electron `userData/projects.json` | Pi Workroom |
-| HTTP Workbench | `<userData>/http-workbench/<project-uid>/` | Pi Workroom |
-| 代码索引 | `<project>/.code-index/index.db` | Pi Workroom / code-index extension |
-| MCP 配置 | 用户级 `mcp.json` + 项目 `.mcp.json` / `.pi/mcp.json` | Pi MCP adapter 与 Pi Workroom |
+Please use [Issues](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) for bug reports and focused feature proposals. Include your platform, Pi Workroom version, reproduction steps, and relevant logs. Remove API keys, cookies, tokens, and private paths before sharing.
 
-Pi Workroom 不会复制并取代 Pi 的会话数据库。关闭应用后，Pi 的会话文件仍是可恢复的事实来源。
+## Visual assets to add
 
-## 项目结构
+The README is ready for real product visuals. The exact screenshots and demo to capture are listed in [docs/readme-assets.md](docs/readme-assets.md).
 
-```text
-src/main/                  Electron 主进程，按领域拆
-  app/                     窗口、IPC、更新、通知
-  session/                 PiHost、runtime、session catalog、plan
-  workspace/               项目注册表
-  http/                    HTTP 工作台资产与 Agent 工具
-  provider/                用量适配器与账号用量
-src/preload/               暴露给 Renderer 的受限 PiApi
-src/renderer/              React UI，与 main 同名领域
-  app/  session/  workspace/  http/  ui/
-src/shared/                跨进程合同（protocol + 领域类型）
+## License and acknowledgements
 
-packages/
-  code-index/              符号索引引擎 + Pi extension
-  mcp-bridge/              MCP 配置合并、导入与服务器控制
-  session-todo/            todowrite / todoread 与会话状态
-```
+No project license has been declared yet. Do not assume redistribution or reuse rights until the maintainer publishes one.
 
-## 技术栈
-
-| 层 | 技术 |
-| --- | --- |
-| Desktop shell | Electron 43 |
-| Agent runtime | [`@earendil-works/pi-coding-agent`](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) |
-| Renderer | React 19、Vite、Zustand |
-| UI | Radix UI、lucide-react |
-| Markdown | react-markdown、remark-gfm |
-| 代码智能 | web-tree-sitter 与本地索引 |
-| 验证 | Vitest、Testing Library |
-
-## 常见问题
-
-### Pi Workroom 会替代 Pi CLI 吗？
-
-不会。Pi Workroom 是 Pi 的桌面客户端；Pi 仍是 Agent engine。两者共享 Pi 的会话和配置体系，终端工作流可以继续使用。
-
-### 我需要把代码或会话上传到云端吗？
-
-不需要。Pi Workroom 的项目注册、HTTP Workbench 与代码索引都在本地；Pi 会话也沿用本地文件。模型 Provider 的网络请求则遵循你所选择 Provider 的配置和条款。
-
-### 为什么 HTTP Workbench 不把 `.http` 文件写进项目目录？
-
-环境配置、响应和运行历史通常属于个人本地状态，直接写入项目会制造无关的 Git diff。Pi Workroom 默认把这类资产按项目保存在应用数据目录；如需团队共享和版本控制，请在仓库中另行维护对应的测试资产。
-
-### Pi Workroom 是安全沙箱吗？
-
-不是。Electron 隔离、窄 IPC 接口和项目信任确认能够减少权限暴露与误操作，但不能替代容器或虚拟机等强隔离环境。
-
-## 参与和支持
-
-Pi Workroom 正在积极开发中。欢迎通过 [Issues](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) 报告 Bug、提出功能建议或参与讨论。提交问题时，请附上系统版本、Pi Workroom 版本、复现步骤与相关日志，并注意移除 API key、Cookie、令牌和私有路径等敏感信息。
-
-## 许可与上游致谢
-
-本仓库当前尚未声明项目许可证；在复用或分发代码前，请先与维护者确认授权范围。
-
-Pi Workroom 建立在下列项目之上：
+Pi Workroom is built around:
 
 - [Pi Agent Harness](https://github.com/earendil-works/pi)
 - [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
