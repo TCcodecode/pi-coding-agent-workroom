@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseFile } from "../src/parser.js";
 import { createCodeIndex } from "../src/index.js";
 
@@ -27,13 +30,22 @@ describe("index resilience", () => {
       if (calls === 1) throw new Error("memory access out of bounds");
       return realParse.apply(this, args as [string]);
     });
+    const projectRoot = await mkdtemp(join(tmpdir(), "code-index-resilience-"));
     try {
+      await writeFile(join(projectRoot, "alpha.ts"), "export function alpha() {}\n");
+      await writeFile(join(projectRoot, "beta.ts"), "export function beta() {}\n");
+
       const idx = createCodeIndex({ dbPath: ":memory:" });
-      const stats = await idx.index("/Users/tc/work/pi-workspace");
-      expect(stats.filesIndexed).toBeGreaterThan(0);
-      expect(stats.filesChanged).toBeGreaterThan(0);
+      try {
+        const stats = await idx.index(projectRoot);
+        expect(stats.filesIndexed).toBeGreaterThan(0);
+        expect(stats.filesChanged).toBeGreaterThan(0);
+      } finally {
+        idx.dispose();
+      }
     } finally {
       parserModule.Parser.prototype.parse = realParse;
+      await rm(projectRoot, { recursive: true, force: true });
     }
   });
 });
