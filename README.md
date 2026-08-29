@@ -156,7 +156,7 @@ The screenshots above use a deliberately isolated local demo project. The captur
 
 ## License and acknowledgements
 
-No project license has been declared yet. Do not assume redistribution or reuse rights until the maintainer publishes one.
+This project is licensed under the [MIT License](LICENSE).
 
 Pi Workroom is built around:
 

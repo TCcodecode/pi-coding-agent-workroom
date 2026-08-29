@@ -9,6 +9,7 @@
     "name": "TCcodecode",
     "email": "pi-desk@users.noreply.github.com"
   },
+  "license": "MIT",
   "private": true,
   "type": "module",
   "workspaces": [
