@@ -5,6 +5,15 @@ import { join } from "node:path";
 import { parseFile } from "../src/parser.js";
 import { createCodeIndex } from "../src/index.js";
 
+// Keep this failure-injection parser local to this test file. Mutating the
+// shared web-tree-sitter Parser prototype can make unrelated indexing tests
+// observe the simulated WASM trap when Vitest runs files concurrently.
+vi.mock("web-tree-sitter", async () => {
+  const actual = await vi.importActual<typeof import("web-tree-sitter")>("web-tree-sitter");
+  class IsolatedParser extends actual.Parser {}
+  return { ...actual, Parser: IsolatedParser };
+});
+
 describe("index resilience", () => {
   it("skips a file whose grammar parse traps the WASM VM", async () => {
     const parserModule = await import("web-tree-sitter");
