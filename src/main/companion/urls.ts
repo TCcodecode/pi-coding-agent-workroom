@@ -32,16 +32,20 @@ export function companionOrigins(options: {
   interfaces?: NodeJS.Dict<NetworkInterfaceInfo[]>;
   tailscaleIPv4?: string;
   tailscaleHostname?: string;
+  tailscaleServeOrigin?: string;
 }): CompanionListenUrl[] {
   const nics = options.interfaces ?? networkInterfaces();
   const seen = new Set<string>();
   const urls: CompanionListenUrl[] = [];
 
-  const add = (kind: CompanionUrlKind, host: string, label: string) => {
-    const origin = `http://${host}:${options.port}`;
+  const addOrigin = (kind: CompanionUrlKind, origin: string, label: string) => {
     if (seen.has(origin)) return;
     seen.add(origin);
     urls.push({ kind, origin, label });
+  };
+
+  const add = (kind: CompanionUrlKind, host: string, label: string) => {
+    addOrigin(kind, `http://${host}:${options.port}`, label);
   };
 
   for (const infos of Object.values(nics)) {
@@ -54,6 +58,7 @@ export function companionOrigins(options: {
 
   if (options.tailscaleIPv4) add("tailscale", options.tailscaleIPv4, "Tailscale");
   if (options.tailscaleHostname) add("tailscale", options.tailscaleHostname, "Tailscale");
+  if (options.tailscaleServeOrigin) addOrigin("tailscale", options.tailscaleServeOrigin, "Tailscale Serve");
 
   return urls;
 }

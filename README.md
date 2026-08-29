@@ -55,13 +55,22 @@ The optional, browser-based Companion needs no separate app: on the same Wi-Fi, 
   </tr>
 </table>
 
+### Phone Companion setup
+
+1. For same-network use, connect the phone and Mac to the same Wi-Fi. For remote use, install [Tailscale](https://tailscale.com/download) on both devices and sign in to the same tailnet; enable HTTPS certificates for the tailnet if Tailscale asks you to.
+2. In Pi Workroom, open **Settings → Phone** and enable **Allow phone connection**.
+3. Scan the QR code, or copy one of the pairing URLs. Use the **Tailscale Serve** URL outside the local network and the **Local network** URL at home.
+4. Keep the pairing URL private. Use **Rotate pairing token** if it was shared or a device should lose access.
+
+The Mac must stay awake with Pi Workroom running. Tailscale Serve is private to your tailnet; do not use Tailscale Funnel to expose Companion without a separate authentication layer. See the [Tailscale Serve documentation](https://tailscale.com/docs/features/tailscale-serve) for the network setup.
+
 ## Product direction
 
-The current Companion is intentionally LAN-only. Do not expose its port to the public internet.
+The Companion is LAN-first. When Tailscale is installed and connected, enabling it also configures a private HTTPS URL through Tailscale Serve, so you can continue from a phone outside the local network. The URL remains limited to your tailnet; do not expose the Companion with Tailscale Funnel or another public proxy unless you have added a separate user-authentication layer.
 
 Roadmap items are deliberately separate from the features above:
 
-- **Work away from the desk** — a secure mobile continuation experience for work outside the local network.
+- **Work away from the desk** — make private Tailscale access easier to discover and recover when the desktop or phone changes networks.
 - **See what the agent sees** — use a remote-desktop tool when a task needs an existing desktop UI; for web apps, open the running preview directly on the phone when that capability lands.
 - **Make regressions visible** — broaden repeatable black-box checks so review can focus on decisions and product quality instead of re-proving every prior workflow manually.
 

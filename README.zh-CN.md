@@ -55,13 +55,22 @@ Pi Workroom 想成为这个界面：尽量在一个工作台中完成工作，�
   </tr>
 </table>
 
+### 手机连接教程
+
+1. 在同一网络使用时，让手机和 Mac 连接同一个 Wi-Fi。需要跨网络使用时，在两台设备上安装 [Tailscale](https://tailscale.com/download)，并登录同一个 tailnet；如果 Tailscale 提示，请为该 tailnet 开启 HTTPS 证书。
+2. 在 Pi Workroom 打开 **Settings → Phone**，启用 **Allow phone connection**。
+3. 扫描二维码，或复制下面的配对地址。离开局域网时使用 **Tailscale Serve** 地址，在家中使用 **Local network** 地址。
+4. 请勿分享 pairing URL；如果地址已经泄露，或需要让某台设备失效，请使用 **Rotate pairing token**。
+
+Mac 必须保持唤醒并运行 Pi Workroom。Tailscale Serve 只对你的 tailnet 开放；没有额外的用户鉴权层，不要使用 Tailscale Funnel 暴露 Companion。网络配置可参考 [Tailscale Serve 文档](https://tailscale.com/docs/features/tailscale-serve)。
+
 ## 产品方向
 
-当前 Companion 有意只在局域网内使用；请不要把端口暴露到公网。
+Companion 默认优先使用局域网；安装并登录 Tailscale 后，启用 Companion 还会自动配置一个通过 Tailscale Serve 提供的私有 HTTPS 地址，因此手机可以在局域网之外继续工作。这个地址仍然只对你的 tailnet 开放；除非另行加入用户鉴权层，否则不要使用 Tailscale Funnel 或其他公网代理暴露 Companion。
 
 下面是与现有功能分开的 Roadmap：
 
-- **离开电脑也能继续工作**：提供安全的移动继续工作体验，覆盖局域网之外的场景。
+- **离开电脑也能继续工作**：让私有 Tailscale 访问在电脑或手机切换网络后更容易发现和恢复。
 - **让你看到 Agent 所在的界面**：需要操作既有桌面 UI 时，可配合远程桌面工具；对于网页 App，后续可以直接在手机上打开运行中的预览。
 - **让回归更可见**：扩大可复跑的黑盒检查，让 Review 回到决策和产品质量，而不是每次都手工重新证明旧流程没有坏。
 

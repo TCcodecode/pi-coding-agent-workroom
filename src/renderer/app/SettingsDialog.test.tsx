@@ -480,6 +480,8 @@ describe("SettingsDialog", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /phone/i }));
     const toggle = await screen.findByRole("switch", { name: /allow phone/i });
+    expect(screen.getByText(/how to connect from a phone/i)).toBeInTheDocument();
+    expect(screen.getByText(/install tailscale on both/i)).toBeInTheDocument();
     fireEvent.click(toggle);
     await waitFor(() => expect(setCompanionEnabled).toHaveBeenCalledWith(true));
     expect(await screen.findByText(/192\.168\.1\.23:17890/)).toBeInTheDocument();

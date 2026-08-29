@@ -760,7 +760,7 @@ export function SettingsDialog({
               <div className="settings-field">
                 <div className="settings-field-meta">
                   <label>Allow phone connection</label>
-                  <span>Opens a local gateway on port {companion?.port ?? 17890}. Same Wi-Fi first; Tailscale is the same URL later.</span>
+                  <span>Opens a local gateway on port {companion?.port ?? 17890}. LAN stays available; Tailscale Serve adds a private HTTPS URL when connected.</span>
                 </div>
                 <button
                   type="button"
@@ -778,6 +778,22 @@ export function SettingsDialog({
                 </button>
               </div>
               {companion?.error && <p className="settings-providers-error">{companion.error}</p>}
+              {companion?.tailscale && (
+                <p className={`settings-companion-status ${companion.tailscale.error ? "is-error" : ""}`}>
+                  {companion.tailscale.serving
+                    ? `Tailscale Serve active${companion.tailscale.origin ? ` · ${companion.tailscale.origin}` : ""}`
+                    : companion.tailscale.error ?? "Tailscale Serve is not active."}
+                </p>
+              )}
+              <div className="settings-companion-guide">
+                <div className="settings-companion-guide-title">How to connect from a phone</div>
+                <ol>
+                  <li>For the same Wi-Fi, connect the phone and computer to one network. For remote use, install Tailscale on both and sign in to the same tailnet.</li>
+                  <li>Turn on <strong>Allow phone connection</strong> above and keep Pi Workroom running.</li>
+                  <li>Scan the QR code, or copy a URL below. Use <strong>Tailscale Serve</strong> outside the local network and <strong>Local network</strong> at home.</li>
+                  <li>Keep the pairing URL private. Rotate the pairing token if it was shared or a device should lose access.</li>
+                </ol>
+              </div>
               {companion?.enabled && (
                 <>
                   {companion.qrDataUrl && (

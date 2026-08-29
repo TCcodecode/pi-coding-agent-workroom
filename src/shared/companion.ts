@@ -35,12 +35,21 @@ export interface CompanionListenUrl {
   label: string;
 }
 
+export interface CompanionTailscaleState {
+  installed: boolean;
+  connected: boolean;
+  serving: boolean;
+  origin?: string;
+  error?: string;
+}
+
 export interface CompanionState {
   enabled: boolean;
   listening: boolean;
   port: number;
   token: string;
   urls: CompanionListenUrl[];
+  tailscale?: CompanionTailscaleState;
   qrDataUrl?: string;
   error?: string;
 }
