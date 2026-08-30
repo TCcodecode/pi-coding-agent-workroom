@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/b701634f-1ae3-4782-a4fd-d4f6d613ba28
+
 # Pi Workroom
 
 > A local-first workroom for planning, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
