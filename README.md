@@ -1,7 +1,3 @@
-
-
-https://github.com/user-attachments/assets/b701634f-1ae3-4782-a4fd-d4f6d613ba28
-
 # Pi Workroom
 
 > A local-first workroom for planning, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
@@ -11,6 +7,10 @@ Pi Workroom is a local desktop GUI app for running and resuming Pi sessions, rev
 [中文 README](README.zh-CN.md) · [Releases](https://github.com/TCcodecode/pi-coding-agent-workroom/releases) · [Report an issue](https://github.com/TCcodecode/pi-coding-agent-workroom/issues) · [Pi coding agent](https://github.com/earendil-works/pi)
 
 ![Pi Workroom showing an agent session, verified change summary, and file review](docs/images/hero.png)
+
+## See it in action
+
+https://github.com/user-attachments/assets/b701634f-1ae3-4782-a4fd-d4f6d613ba28
 
 ## Why Pi Workroom?
 
