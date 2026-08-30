@@ -82,10 +82,11 @@ export function resetSessionStarts(): void {
 }
 
 function trackStart<T>(key: string, work: Promise<T>, kind: "preview" | "start"): Promise<T> {
-  inflightStarts.set(key, { kind, work });
-  return work.finally(() => {
-    if (inflightStarts.get(key)?.work === work) inflightStarts.delete(key);
+  const tracked = work.finally(() => {
+    if (inflightStarts.get(key)?.work === tracked) inflightStarts.delete(key);
   });
+  inflightStarts.set(key, { kind, work: tracked });
+  return tracked;
 }
 
 export function dropViewAndMaybeDispose(key: string): void {
@@ -339,7 +340,7 @@ export async function ensureActiveTabRuntime(): Promise<string | undefined> {
   if (inflight) await inflight.work;
 
   const currentTab = useWorkspaceStore.getState().tabs.find((item) => item.id === tabId) ?? tab;
-  if (findLiveSessionForTab(currentTab) || startedKeys.has(tabId) || inflight?.kind === "start") {
+  if (findLiveSessionForTab(currentTab) || startedKeys.has(tabId)) {
     return tabId;
   }
 

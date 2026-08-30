@@ -621,6 +621,52 @@ describe("Pi Workroom end-to-end send flow", () => {
     delete (window as unknown as { pi?: PiApi }).pi;
   });
 
+  test("waits for a new session runtime before submitting the first prompt", async () => {
+    const { api } = makeFakeApi();
+    let releaseStart!: (snapshot: PiSnapshot) => void;
+    vi.mocked(api.startSession).mockImplementation(
+      () => new Promise<PiSnapshot>((resolve) => { releaseStart = resolve; }),
+    );
+    (window as unknown as { pi: PiApi }).pi = api;
+    useAppStore.setState({
+      ...createInitialState(),
+      session: { ...createInitialState().session, cwd: "/tmp/project" },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    render(<App />);
+    fireEvent.keyDown(window, { key: "n", metaKey: true });
+    await waitFor(() => expect(api.startSession).toHaveBeenCalledTimes(1));
+
+    const input = screen.getByRole("textbox", { name: /message/i });
+    fireEvent.change(input, { target: { value: "start the live task" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await Promise.resolve();
+    expect(api.prompt).not.toHaveBeenCalled();
+    expect(api.startSession).toHaveBeenCalledTimes(1);
+
+    const sessionKey = vi.mocked(api.startSession).mock.calls[0]?.[0].sessionKey;
+    releaseStart({
+      ...useAppStore.getState(),
+      session: {
+        ...useAppStore.getState().session,
+        sessionId: "s-live",
+        cwd: "/tmp/project",
+        name: "Untitled",
+      },
+      projects: [{ id: "/tmp/project", name: "project", path: "/tmp/project", updatedAt: new Date().toISOString() }],
+      activeProjectId: "/tmp/project",
+    });
+
+    await waitFor(() => expect(api.prompt).toHaveBeenCalledWith(
+      "start the live task",
+      { sessionKey },
+    ));
+
+    delete (window as unknown as { pi?: PiApi }).pi;
+  });
+
   test("closes an unused unpinned tab before opening the next session", async () => {
     const { api } = makeFakeApi();
     (window as unknown as { pi: PiApi }).pi = api;

@@ -388,6 +388,15 @@ export function App() {
     const { session, projects, activeProjectId } = useAppStore.getState();
     if (session.sessionId) return true;
 
+    // A freshly opened tab may still be waiting for its runtime to start.
+    // Join that startup instead of issuing a second startSession call, which
+    // can leave the prompt racing a host slot that has not been attached yet.
+    const activeTabId = useWorkspaceStore.getState().activeTabId;
+    if (activeTabId) {
+      const sessionKey = await ensureActiveTabRuntime();
+      return Boolean(sessionKey && useAppStore.getState().session.sessionId);
+    }
+
     const project = projects?.find((p) => p.id === activeProjectId) ?? projects?.[0];
     const cwd = project?.path ?? session.cwd;
     if (!cwd) {
