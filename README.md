@@ -88,7 +88,7 @@ Download the build for your platform from [GitHub Releases](https://github.com/T
 | Windows | NSIS installer and `.zip` |
 | Linux | `.AppImage`, `.deb`, and `.tar.gz` |
 
-The current pre-release is titled Pi Workroom, but its package asset names still use the former **PiDesk** name because it was built before the rename. It is the same project; future packages use the Pi Workroom name. macOS packages are not yet Developer ID signed or notarized, so macOS may require opening the app from Finder the first time.
+The current public release is Pi Workroom v0.1.0, and its package assets use the Pi Workroom name. macOS packages are not yet Developer ID signed or notarized, so macOS may require opening the app from Finder the first time.
 
 ### Run from source
 

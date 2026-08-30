@@ -88,7 +88,7 @@ Companion 默认优先使用局域网；安装并登录 Tailscale 后，启用 C
 | Windows | NSIS 安装包与 `.zip` |
 | Linux | `.AppImage`、`.deb` 与 `.tar.gz` |
 
-当前预览版的标题已更新为 Pi Workroom，但安装包文件名仍带旧名称 **PiDesk**，因为它在改名前构建。它就是同一个项目；后续安装包会使用 Pi Workroom。macOS 安装包暂未完成 Developer ID 签名和公证，首次启动时可能需要在 Finder 中右键选择“打开”。
+当前公开 Release 为 Pi Workroom v0.1.0，安装包文件名已使用 Pi Workroom。macOS 安装包暂未完成 Developer ID 签名和公证，首次启动时可能需要在 Finder 中右键选择“打开”。
 
 ### 从源码运行
 
