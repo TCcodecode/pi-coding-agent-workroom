@@ -8777,3 +8777,141 @@ and a compact control rhythm. */ .settings-dialog-wide {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Compact agent activity surface
+   Activity rows are supporting context, so the assistant's answer remains the
+   strongest typographic layer. The live edge gets one restrained sweep; once
+   settled, every row returns to a quiet static treatment. */
+.timeline-item-heading {
+  min-height: 22px;
+  gap: 6px;
+}
+
+.timeline-item-heading strong {
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+}
+
+.timeline-item.message-item.assistant .message-content,
+.timeline-item.message-item.user .message-content {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.tool-name {
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+}
+
+.tool-name.is-running {
+  background: linear-gradient(
+    105deg,
+    var(--text-muted) 18%,
+    var(--text-secondary) 36%,
+    var(--surface-center) 50%,
+    var(--text-secondary) 64%,
+    var(--text-muted) 82%
+  );
+  background-size: 240% 100%;
+  /* `background` above is a shorthand and resets the clip from the base
+     shimmer rule. Restore text clipping here so only the glyphs reflect. */
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tool-shimmer 2.4s linear infinite;
+}
+
+.tool-inline-preview,
+.tool-result-summary {
+  font-size: var(--text-sm);
+}
+
+.tool-group-toggle {
+  flex-direction: row;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 4px;
+}
+
+.tool-group-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-group-previews {
+  display: none;
+}
+
+.tool-group-body-shell,
+.thinking-body-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--motion-duration-layout) var(--motion-ease-enter),
+    opacity var(--motion-duration-panel-exit) var(--motion-ease-exit);
+}
+
+.tool-group-body-shell.is-expanded,
+.thinking-body-shell.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--motion-duration-layout) var(--motion-ease-enter),
+    opacity var(--motion-duration-panel-enter) var(--motion-ease-enter);
+}
+
+.tool-group-body-shell.is-collapsed,
+.thinking-body-shell.is-collapsed {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tool-group-body-shell > .tool-group-body,
+.thinking-body-shell > .thinking-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.thinking-item .timeline-item-heading strong {
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+}
+
+.thinking-item.streaming .timeline-item-heading strong,
+.tool-item.running .tool-name {
+  color: var(--text-primary);
+}
+
+.thinking-preview {
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+.tool-group-count {
+  line-height: 15px;
+}
+
+.tool-item.running {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--text-secondary) 60%, transparent);
+}
+
+.tool-item.completed:not(.tool-group) .timeline-status {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-name.is-running {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .tool-group-body-shell,
+  .thinking-body-shell {
+    transition: none;
+  }
+}

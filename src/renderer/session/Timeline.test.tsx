@@ -514,6 +514,19 @@ describe("Timeline tool grouping", () => {
     expect(screen.queryByText("four")).not.toBeInTheDocument();
   });
 
+  test("keeps grouped details collapsed until requested and animates the shell state", () => {
+    render(<Timeline items={[bash("bash-1", "one"), bash("bash-2", "two")]} />);
+
+    const group = screen.getByRole("button", { name: /expand ran 2 commands/i });
+    const details = document.getElementById("timeline-details-group-bash-1");
+    expect(details).toHaveClass("is-collapsed");
+    expect(details).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.click(group);
+    expect(details).toHaveClass("is-expanded");
+    expect(details).toHaveAttribute("aria-hidden", "false");
+  });
+
   test("keeps standalone thinking visible when it is not next to grouped tools", () => {
     const items: TimelineItem[] = [
       { id: "think-1", kind: "thinking", content: "A standalone thought.", status: "completed" },
@@ -665,6 +678,19 @@ describe("Timeline running labels", () => {
 
     expect(screen.getByText("Read")).toBeInTheDocument();
     expect(screen.queryByText("Reading…")).not.toBeInTheDocument();
+  });
+
+  test("announces the latest running action through one live status", () => {
+    render(<Timeline items={[{
+      id: "tool-1",
+      kind: "tool",
+      toolCallId: "tool-1",
+      toolName: "read",
+      input: '{"path":"src/App.tsx"}',
+      status: "running",
+    }]} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Reading…");
   });
 });
 

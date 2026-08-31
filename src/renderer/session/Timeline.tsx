@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject, type TransitionEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FileChangeSummary, SessionStatus, TimelineItem } from "../../shared/protocol";
 import { Markdown } from "../ui/Markdown";
@@ -115,6 +115,10 @@ export const Timeline = memo(function Timeline({
   const turns = groupTurns(items);
   const sessionActive = sessionStatus === "running" || sessionStatus === "awaiting_approval";
   const activeTurnIndex = sessionActive ? turns.length - 1 : undefined;
+  const liveTool = [...items].reverse().find((item): item is ToolItem => item.kind === "tool" && item.status === "running");
+  const liveToolStatus = liveTool
+    ? `${describeTool(liveTool).runningLabel ?? "Working…"}${toolPreview(liveTool.input) ? ` ${toolPreview(liveTool.input)}` : ""}`
+    : undefined;
   const turnProps: TurnProps = {
     onReviewChanges,
     reviewOpen,
@@ -144,18 +148,22 @@ export const Timeline = memo(function Timeline({
   if (scrollElementRef && turns.length >= VIRTUALIZE_MIN_TURNS) {
     return (
       <>
+        {liveToolStatus && <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{liveToolStatus}</span>}
         {earlier}
         <VirtualizedTurns turns={turns} scrollElementRef={scrollElementRef} turnProps={turnProps} activeTurnIndex={activeTurnIndex} />
       </>
     );
   }
   return (
-    <div className="timeline">
-      {earlier}
-      {turns.map((turn, index) => (
-        <Turn key={turn[0]?.id ?? "turn"} items={turn} {...turnProps} isActiveTurn={index === activeTurnIndex} />
-      ))}
-    </div>
+    <>
+      {liveToolStatus && <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{liveToolStatus}</span>}
+      <div className="timeline">
+        {earlier}
+        {turns.map((turn, index) => (
+          <Turn key={turn[0]?.id ?? "turn"} items={turn} {...turnProps} isActiveTurn={index === activeTurnIndex} />
+        ))}
+      </div>
+    </>
   );
 }, (prev, next) => {
   // The timeline only needs to re-render when its items or the review
@@ -580,6 +588,13 @@ function ToolGroupView({
   const duration = groupDuration(group.items);
   const dangerous = group.items.some(isDangerousTool);
   const detailsId = `timeline-details-${group.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const [renderBody, setRenderBody] = useState(expanded);
+  useEffect(() => {
+    if (expanded) setRenderBody(true);
+  }, [expanded]);
+  const handleBodyTransitionEnd = useCallback((event: TransitionEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && !expanded) setRenderBody(false);
+  }, [expanded]);
   const previewLimit = 3;
   const previews = group.items.slice(0, previewLimit).map((item) => ({
     id: item.id,
@@ -610,24 +625,31 @@ function ToolGroupView({
           {duration && <span className="timeline-duration">{duration}</span>}
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </span>
-        <ul className="tool-group-previews">
+        <ul className="tool-group-previews" aria-hidden="true">
           {previews.map((preview) => preview.text ? <li key={preview.id}>{preview.text}</li> : null)}
           {extra > 0 && <li className="tool-group-previews-more">+{extra} more</li>}
         </ul>
       </button>
-      {expanded && (
-        <div id={detailsId} className="tool-group-body">
-          {group.items.map((tool) => (
-            <TimelineItemView
-              key={tool.id}
-              item={tool}
-              interruptedUserMessageIds={EMPTY_MESSAGE_ID_SET}
-              expanded={expandedIds.has(tool.id)}
-              onToggle={() => onToggleExpanded(tool.id)}
-            />
-          ))}
-        </div>
-      )}
+      <div
+        id={detailsId}
+        className={`tool-group-body-shell ${expanded ? "is-expanded" : "is-collapsed"}`}
+        aria-hidden={!expanded}
+        onTransitionEnd={handleBodyTransitionEnd}
+      >
+        {renderBody && (
+          <div className="tool-group-body">
+            {group.items.map((tool) => (
+              <TimelineItemView
+                key={tool.id}
+                item={tool}
+                interruptedUserMessageIds={EMPTY_MESSAGE_ID_SET}
+                expanded={expandedIds.has(tool.id)}
+                onToggle={() => onToggleExpanded(tool.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </article>
   );
 }
@@ -722,7 +744,7 @@ const TimelineItemView = memo(function TimelineItemView({
           <span className="tool-inline-preview">{preview || item.status}</span>
           {resultSummary && <span className={`tool-result-summary ${item.status === "error" ? "failed" : ""}`}>{resultSummary}</span>}
           {duration && <span className="timeline-duration">{duration}</span>}
-          <span className={`timeline-status ${item.status === "error" ? "failed" : ""}`} role={item.status === "running" ? "status" : undefined} aria-live={item.status === "running" ? "polite" : undefined}>{status ?? "complete"}</span>
+          <span className={`timeline-status ${item.status === "error" ? "failed" : ""}`}>{status ?? "complete"}</span>
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </button>
         {expanded && (hasInput || hasOutput || hasChange) && (
@@ -774,7 +796,13 @@ const TimelineItemView = memo(function TimelineItemView({
           {item.status === "streaming" && <span className="timeline-status">running</span>}
           <AppIcon name="chevronRight" size="xs" className={`timeline-chevron ${expanded ? "open" : ""}`} />
         </button>
-        {expanded && item.content.trim() && <div id={detailsId} className="thinking-body">{item.content}</div>}
+        <div
+          id={detailsId}
+          className={`thinking-body-shell ${expanded ? "is-expanded" : "is-collapsed"}`}
+          aria-hidden={!expanded}
+        >
+          {item.content.trim() && <div className="thinking-body">{item.content}</div>}
+        </div>
       </article>
     );
   }
