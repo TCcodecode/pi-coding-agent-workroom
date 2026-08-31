@@ -472,6 +472,7 @@ export function SettingsDialog({
         </div>
 
         <div className="settings-body">
+          <div key={tab} className="settings-body-content">
           {tab === "general" && (
             <>
               <section className="settings-section">
@@ -831,6 +832,7 @@ export function SettingsDialog({
               )}
             </section>
           )}
+          </div>
         </div>
 
         <div className="settings-footer">

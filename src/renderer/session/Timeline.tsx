@@ -272,9 +272,9 @@ const Turn = memo(function Turn({
   onToggleExpanded,
 }: TurnProps & { items: TimelineItem[]; isActiveTurn?: boolean }) {
   // Todo-list tools are pure meta rows: the session checklist lives in the
-  // right-hand Todos panel, so plan updates add nothing but noise here.
+  // right-hand Todos panel, so todo updates add nothing but noise here.
   const trace = mergeTimelineToolCalls(items.filter(
-    (item) => item.kind !== "tool" || describeTool(item).category !== "plan",
+    (item) => item.kind !== "tool" || describeTool(item).category !== "todo",
   ));
   const changes = summarizeFileChanges(trace);
   const entries = groupTimelineTools(trace);

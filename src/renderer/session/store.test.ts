@@ -248,13 +248,13 @@ describe("reducePiEvent", () => {
       state,
       event("todos_updated", {
         todos: [
-          { id: "1", content: "Plan", status: "completed", priority: "high" },
+          { id: "1", content: "Inspect project", status: "completed", priority: "high" },
           { id: "2", content: "Build", status: "in_progress", priority: "high" },
         ],
       }),
     );
     expect(state.session.todos).toEqual([
-      { id: "1", content: "Plan", status: "completed", priority: "high" },
+      { id: "1", content: "Inspect project", status: "completed", priority: "high" },
       { id: "2", content: "Build", status: "in_progress", priority: "high" },
     ]);
   });
@@ -416,11 +416,11 @@ describe("applyEvent delta coalescing", () => {
     useAppStore.getState().applyEvent(event("assistant_message_started", { messageId: "a1" }));
     useAppStore.getState().applyEvent(event("thinking_started", { messageId: "t1" }));
     useAppStore.getState().applyEvent(event("assistant_message_delta", { messageId: "a1", delta: "text" }));
-    useAppStore.getState().applyEvent(event("thinking_delta", { messageId: "t1", delta: "plan" }));
+    useAppStore.getState().applyEvent(event("thinking_delta", { messageId: "t1", delta: "reasoning" }));
 
     vi.advanceTimersByTime(50);
     expect(findContent("a1")?.content).toBe("text");
-    expect(findContent("t1")?.content).toBe("plan");
+    expect(findContent("t1")?.content).toBe("reasoning");
   });
 
   test("clips streaming thinking to 8KB", () => {

@@ -44,7 +44,7 @@ describe("companion mobile shell", () => {
     expect(app).toMatch(/visualViewport/);
     expect(app).toMatch(/scrollIntoView\(\{ block: "nearest", inline: "nearest" \}\)/);
     expect(app).toMatch(/groupTimelineTools/);
-    expect(app).toMatch(/category !== "plan"/);
+    expect(app).toMatch(/category !== "todo"/);
     expect(app).toMatch(/companion-terminal-tool-group/);
     expect(css).toMatch(/\.companion-terminal-tool-details\s*\{[\s\S]*max-height:\s*160px[\s\S]*overflow:\s*auto/);
     expect(app).not.toMatch(/companion-voice|native-dictation|按住|Grid3X3/);

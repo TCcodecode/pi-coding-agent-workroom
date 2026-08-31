@@ -1,6 +1,6 @@
 # Pi Workroom
 
-> A local-first workroom for planning, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
+> A local-first workroom for organizing, building, reviewing, testing, and continuing work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
 Pi Workroom is a local desktop GUI app for running and resuming Pi sessions, reviewing agent changes, managing MCP tools, searching code locally, and verifying APIs.
 
@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/b701634f-1ae3-4782-a4fd-d4f6d613ba28
 
 ## Why Pi Workroom?
 
-Pi is excellent in the terminal. But an AI-assisted project needs a durable operating surface from the first plan through each iteration: project context, sessions, tool calls, file changes, tests, and the next follow-up.
+Pi is excellent in the terminal. But an AI-assisted project needs a durable operating surface from the initial task through each iteration: project context, sessions, tool calls, file changes, tests, and the next follow-up.
 
 Pi Workroom is built to be that surface: one workroom instead of a chain of disconnected terminals, test clients, project windows, and mobile handoffs. It does not replace Pi or create another agent runtime. Pi remains the source of truth for models, providers, tools, extensions, and session semantics.
 
@@ -22,7 +22,7 @@ Pi Workroom is built to be that surface: one workroom instead of a chain of disc
 
 | Area | What it gives you |
 | --- | --- |
-| **Agent workspace** | Multiple projects, sessions, tabs, session trees, plans, todos, and follow-ups |
+| **Agent workspace** | Multiple projects, sessions, tabs, session trees, todos, and follow-ups |
 | **Live review** | A streaming timeline of replies and tool calls, plus unified file diffs |
 | **MCP and code search** | Project-aware MCP configuration, Cursor MCP import, local symbol search, and usage lookup |
 | **HTTP Workbench** | Repeatable `.http` tests, environments, run history, timing, errors, and sanitized responses |
@@ -118,7 +118,7 @@ npm run dev
 1. Open a local project folder.
 2. Create a Pi session or resume one you started in the terminal.
 3. Configure a model provider through Settings if Pi is not already configured.
-4. Send a task and follow its timeline, tool calls, plan, and file changes.
+4. Send a task and follow its timeline, tool calls, todo updates, and file changes.
 5. Turn recurring API checks into `.http` tests in HTTP Workbench.
 
 Pi Workroom continues to use Pi's sessions, provider setup, skills, extensions, and MCP ecosystem.

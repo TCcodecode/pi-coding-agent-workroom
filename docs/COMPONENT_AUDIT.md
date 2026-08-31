@@ -1,7 +1,7 @@
 # Pi Workroom UI 组件与样式审计报告
 
 > 审计日期：2026-08-16 · 范围：`src/renderer/`（Electron + React 19 + TypeScript）
-> 性质：纯只读审计 + 规范化执行计划。基线：`vitest` 52 个文件 / 513 个测试全绿（可写 HOME），`tsc --noEmit` 通过。
+> 性质：纯只读审计 + 规范化执行清单。基线：`vitest` 52 个文件 / 513 个测试全绿（可写 HOME），`tsc --noEmit` 通过。
 
 ---
 
@@ -28,7 +28,7 @@
 
 | 项目 | 证据 | 处置 |
 |---|---|---|
-| `TrustDialog.tsx` / `TreeDialog.tsx` / `ProjectPickerDialog.tsx` | 全 `src/` 无 import（仅各自 `.test.tsx` 引用） | 保留（规划中功能）但一并纳入 Dialog 规范化；或按用户决策删除 |
+| `TrustDialog.tsx` / `TreeDialog.tsx` / `ProjectPickerDialog.tsx` | 全 `src/` 无 import（仅各自 `.test.tsx` 引用） | 保留（待定功能）但一并纳入 Dialog 规范化；或按用户决策删除 |
 | `typography.ts`（`TYPOGRAPHY_FONT_FAMILIES` / `TYPOGRAPHY_SCALE`） | 仅被 `typography.test.ts` 引用，生产代码零消费，且与 `:root` 的 `--font-*`/`--text-*`/`--leading-*` 逐值重复 | 删除或改为从 CSS 变量读取 |
 | 死 token：`--text-display`、`--leading-display`、`--space-8`、`--radius-lg` | `styles.css:10,17,27,35` 定义但零引用 | 清理 |
 | `ResourceInspector.tsx:305-312` 本地 `formatRelativeTime` | 与共享 `formatRelativeTime.ts` 行为不一致（缺 "yesterday" 分支） | 删除本地副本，统一使用共享版 |
@@ -78,8 +78,8 @@ CSS：`.palette-backdrop` 被 5 组件复用，`.trust-backdrop` 是几乎重复
 
 ### 2.6 死代码与工程规范（第 4 份审计）
 
-- **死 CSS 类 7 个**（定义了但 TSX 从未引用）：`breadcrumb`、`muted`、`topbar-left`、`has-plan-workspace`、`inspector-footer`、`http-editor`、`http-results-panel`；另有 28 个经动态拼接可达（非死）。
-- **被引用但未定义的类 12 个**：`composer-input`、`plan-return-button`、`is-chat-open`、`is-chat-collapsed` 等（可能是历史遗留漏删）。
+- **死 CSS 类 6 个**（定义了但 TSX 从未引用）：`breadcrumb`、`muted`、`topbar-left`、`inspector-footer`、`http-editor`、`http-results-panel`；另有 28 个经动态拼接可达（非死）。
+- **被引用但未定义的类 11 个**：`composer-input`、`is-chat-open`、`is-chat-collapsed` 等（可能是历史遗留漏删）。
 - **工程规范缺失**：无 ESLint / Prettier / stylelint / .editorconfig、无 `lint` script；`tsconfig` 严格模式已开启 ✅；TODO/FIXME/console.log 为零 ✅。
 - **`formatRelativeTime` 3 份重复实现**：共享 `formatRelativeTime.ts` + `ResourceInspector` 本地副本 + 第 3 份（见 2.1 处置）。
 - **无测试组件 7 个**：App.tsx（无专属测试）等。
@@ -105,7 +105,7 @@ CSS：`.palette-backdrop` 被 5 组件复用，`.trust-backdrop` 是几乎重复
 
 ---
 
-## 4. 执行计划（按风险递增）
+## 4. 执行清单（按风险递增）
 
 | 阶段 | 内容 | 风险 | 验证 |
 |---|---|---|---|
@@ -153,19 +153,19 @@ CSS：`.palette-backdrop` 被 5 组件复用，`.trust-backdrop` 是几乎重复
 | token 修复 | `--text-tertiary` 未定义 bug → `--text-muted`；死 token `--text-display`/`--leading-display`/`--space-8`/`--radius-lg` 删除；diff 行配色 4+3 处统一为 `--diff-added-*`/`--diff-removed-*`（暗/亮双主题） | ✅ |
 | typography.ts | 死重复删除（生产零引用）；`typography.test.ts` 保留 CSS 侧校验、删除 TS 常量测试 | ✅ |
 | 内联样式 | ComposerMenu 静态 rotate → `.composer-menu-chevron` 类；树缩进魔法数字 3 处 → `--tree-indent-step: 14px`（ChangeInspector×2、HttpWorkbench×1） | ✅ |
-| rgba → color-mix | 新增 14 个 `--swatch-*` 基色 token（000000/319dff/202020/ffffff/3d3d3d/262722/f599c6/282a30/6583c4/416daf/22231f/0f1116/161f2c/1f2b3a）；**105 处**多站点家族 rgba → `color-mix(in srgb, var(--swatch-x) α%, transparent)`；:root 定义与 19 处单次使用 tint 保留 | ✅ |
+| rgba → color-mix | 新增共享 `--swatch-*` 基色 token；**105 处**多站点家族 rgba → `color-mix(in srgb, var(--swatch-x) α%, transparent)`；:root 定义与 19 处单次使用 tint 保留 | ✅ |
 | 金色残留 ⚠️ | `rgba(228,185,97,*)` 暖金 glow（`.session-tab.is-pinned.active`、`.send-button:hover`）违反"gold only on switcher"契约（theme.test 禁止 `#e4b961` hex）——保留字面量以维持视觉零变化，待用户决策是否改为中性黑 shadow | 📋 待决 |
 | z-index | 13 个硬编码值 → 13 个语义 token（`--z-base/raised/drawer/floating/backdrop/dialog/popover/command/menu/context-menu/alert-overlay/alert/topbar`），21 处替换，值逐一保持 | ✅ |
 | 验证 | `tsc` 双配置通过；vitest 52 文件/513 测试全绿（可写 HOME） | ✅ |
-| 死 CSS 类 | 7 个死类清理：`breadcrumb`/`muted`/`topbar-left`/`has-plan-workspace`/`inspector-footer`/`http-editor`/`http-results-panel` 规则删除（含成组选择器处理）；**例外**：`.http-editor` 是 theme.test 契约类，恢复保留；`has-plan-workspace` 实为 5 条复合选择器死规则，一并清理 | ✅ |
+| 死 CSS 类 | 6 个死类清理：`breadcrumb`/`muted`/`topbar-left`/`inspector-footer`/`http-editor`/`http-results-panel` 规则删除（含成组选择器处理）；**例外**：`.http-editor` 是 theme.test 契约类，恢复保留 | ✅ |
 | App 测试 | 新增 `App.test.tsx`（6 测试）：欢迎屏三态、Help 对话框开关、mod+K 命令面板、inspector 切换；此前 App 无专属测试 | ✅ |
 | App 拆分 | `WelcomeBlock.tsx` + `TopBar.tsx` 提取；1308→**1155 行** | ✅ |
 | ESLint | 引入 `eslint.config.js`（flat config：js + typescript-eslint + react-hooks 经典规则）；`npm run lint` **0 错误 6 警告**（exhaustive-deps，既有 store 同步模式）；修复真实代码未用变量 10+ 处、`any` 测试豁免、`{}`→`Record<string, never>`×6、`_` 前缀豁免 | ✅ |
-| 性能：切 tab 卡顿 | 实测 React commit 成本极小（30 轮/真实 markdown 负载仅 ~13ms）；**根因**：App 传给 Timeline 的 3 个回调是内联箭头 → Timeline memo 比较器永不生效 → 每次 store 更新（流式 delta 每 ~100ms 一次）都整体重渲染时间线并重解析 markdown。修复：回调 useCallback 化（比较器恢复生效）+ `alignActiveTabWithSession` 无变化时不再触发 store 更新；新增 `perf.tab-switch.test.tsx` 渲染循环守卫（断言每次切 tab ≤8 次 commit）。**剩余瓶颈（记录）**：IPC 快照整体传输（长会话全量 timeline 序列化，主进程+渲染进程双阻塞）、App 整店订阅 + SessionSidebar/Composer/ResourceInspector 未 memo（`changeAgentMode` 等非稳定引用） | ✅ 修复 + 📋 后续 |
+| 性能：切 tab 卡顿 | 实测 React commit 成本极小（30 轮/真实 markdown 负载仅 ~13ms）；**根因**：App 传给 Timeline 的 3 个回调是内联箭头 → Timeline memo 比较器永不生效 → 每次 store 更新（流式 delta 每 ~100ms 一次）都整体重渲染时间线并重解析 markdown。修复：回调 useCallback 化（比较器恢复生效）+ `alignActiveTabWithSession` 无变化时不再触发 store 更新；新增 `perf.tab-switch.test.tsx` 渲染循环守卫（断言每次切 tab ≤8 次 commit）。**剩余瓶颈（记录）**：IPC 快照整体传输（长会话全量 timeline 序列化，主进程+渲染进程双阻塞）、App 整店订阅 + SessionSidebar/Composer/ResourceInspector 未 memo（模型、工具等非稳定引用） | ✅ 修复 + 📋 后续 |
 
 ### 后续建议（未做，记录在案）
-- 死 CSS 类 7 个（`breadcrumb`/`muted`/`topbar-left`/`has-plan-workspace`/`inspector-footer`/`http-editor`/`http-results-panel`）→ 单独清理 pass（涉及成组选择器，风险中等）。
-- **"12 个被引用未定义类"已逐核：全部非问题** —— 3 个实为误报（`change-tree-folder`/`tool-group`/`http-code-line` 均有规则）；其余 9 个要么经祖先选择器生效（`composer-input`→`.composer-card textarea`、`http-tree-branch`→`.http-tree-row`、`plan-inspector-empty`/`mcp-server-list`/`plan-return-button`/`settings-mcp-section`/`settings-motion-state` 继承父级），要么是纯状态标记（`is-chat-open`/`is-chat-collapsed`，折叠由内联 grid 控制）。无真实样式缺口，可不动。
+- 死 CSS 类 6 个（`breadcrumb`/`muted`/`topbar-left`/`inspector-footer`/`http-editor`/`http-results-panel`）→ 单独清理 pass（涉及成组选择器，风险中等）。
+- **"11 个被引用未定义类"已逐核：全部非问题** —— 3 个实为误报（`change-tree-folder`/`tool-group`/`http-code-line` 均有规则）；其余 8 个要么经祖先选择器生效（`composer-input`→`.composer-card textarea`、`http-tree-branch`→`.http-tree-row`、`mcp-server-list`/`settings-mcp-section`/`settings-motion-state` 继承父级），要么是纯状态标记（`is-chat-open`/`is-chat-collapsed`，折叠由内联 grid 控制）。无真实样式缺口，可不动。
 - SessionSidebar 的 `ProjectTree`/`SessionRow`/右键菜单、App 的 `WelcomeBlock`/`TopBar` 进一步拆分（依赖间接测试，需先补 App 测试）。
 - 19 处单次使用 rgba tint → 可后续补 swatch 或保留字面量。
 - `--text-*` 命名空间过载（字号 vs 颜色）→ 建议拆 `--font-size-*`。

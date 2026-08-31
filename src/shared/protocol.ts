@@ -3,21 +3,16 @@ import type { AppUpdateState, ComposerImageAttachmentFile, ComposerImageAttachme
 import type { HttpApi } from "./http.js";
 import type { ProviderAuthStatus, ProviderLoginEvent, ProviderUsageSnapshot } from "./provider.js";
 import type {
-  AgentMode,
-  AgentProfile,
   FileChangeSummary,
   LiveSessionSummary,
   McpConfigView,
   McpStatusSnapshotView,
   ModelOption,
   PiCommand,
-  PlanArtifactSummary,
-  PlanStatus,
   ResourceSnapshot,
   RuntimeDiagnostics,
   SessionCommandOptions,
   SessionKey,
-  SessionModeState,
   SessionStartedPayload,
   SessionState,
   SessionSummary,
@@ -69,8 +64,6 @@ export type PiEvent =
   | PiEventBase<"queue_updated", { steering: string[]; followUp: string[] }>
   | PiEventBase<"model_changed", { model: string; provider: string }>
   | PiEventBase<"thinking_level_changed", { level: ThinkingLevel }>
-  | PiEventBase<"mode_changed", SessionModeState>
-  | PiEventBase<"plan_artifact_changed", { plan?: PlanArtifactSummary; plans: PlanArtifactSummary[] }>
   | PiEventBase<"resource_snapshot", ResourceSnapshot>
   | PiEventBase<"diagnostics_updated", RuntimeDiagnostics>
   | PiEventBase<"notification_created", { message: string; kind?: "info" | "error" }>
@@ -167,20 +160,13 @@ export interface PiApi {
   cloneSession(): Promise<void>;
   importSession(path: string, cwdOverride?: string): Promise<void>;
   compact(instructions?: string): Promise<void>;
-  setThinkingLevel(level: ThinkingLevel): Promise<void>;
-  setMode?(mode: AgentMode, opts?: SessionCommandOptions): Promise<SessionModeState>;
-  setModeProfile?(mode: AgentMode, profile: AgentProfile, opts?: SessionCommandOptions): Promise<SessionModeState>;
-  listPlans?(opts?: SessionCommandOptions): Promise<PlanArtifactSummary[]>;
-  readPlan?(planId: string, opts?: SessionCommandOptions): Promise<{ summary: PlanArtifactSummary; content: string }>;
-  updatePlan?(planId: string, content: string, revision?: string, opts?: SessionCommandOptions): Promise<PlanArtifactSummary>;
-  savePlan?(title: string, content: string, status?: PlanStatus, planId?: string, opts?: SessionCommandOptions): Promise<{ summary: PlanArtifactSummary; content: string }>;
-  startExecution?(planId?: string, opts?: SessionCommandOptions): Promise<SessionModeState>;
+  setThinkingLevel(level: ThinkingLevel, opts?: SessionCommandOptions): Promise<void>;
   setTools(tools: string[], opts?: SessionCommandOptions): Promise<void>;
   /** Persist skill enable/disable patterns (e.g. ["!superpowers"]) to settings.json and reload. */
   setSkills(patterns: string[]): Promise<void>;
   reload(): Promise<void>;
   executeCommand(name: string, args?: string): Promise<void>;
-  setModel(model: string): Promise<void>;
+  setModel(model: string, opts?: SessionCommandOptions): Promise<void>;
   getCommands(): Promise<PiCommand[]>;
   getModels(): Promise<ModelOption[]>;
   getTools(): Promise<ToolOption[]>;

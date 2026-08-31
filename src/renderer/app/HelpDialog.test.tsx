@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { HelpDialog } from "./HelpDialog";
 
@@ -14,6 +14,18 @@ describe("HelpDialog", () => {
   test("returns null when closed", () => {
     const { container } = render(<HelpDialog open={false} onClose={() => undefined} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test("keeps the dialog mounted during its exit transition", async () => {
+    const { rerender } = render(<HelpDialog open onClose={() => undefined} />);
+
+    rerender(<HelpDialog open={false} onClose={() => undefined} />);
+
+    expect(screen.getByRole("dialog", { name: "Help and diagnostics" })).toHaveClass("is-exiting");
+    expect(screen.getByRole("dialog", { name: "Help and diagnostics" })).toHaveAttribute("data-state", "closed");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Help and diagnostics" })).not.toBeInTheDocument();
+    });
   });
 
   test("renders runtime diagnostics when provided", () => {

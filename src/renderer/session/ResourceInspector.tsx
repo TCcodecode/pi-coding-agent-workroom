@@ -24,7 +24,6 @@ export interface ResourceInspectorProps {
   onToggleTools?: (names: string[]) => void;
   onToggleSkills?: (patterns: string[]) => void;
   onOpenChanges?: () => void;
-  onOpenPlan?: () => void;
   changeCount?: number;
   onClose?: () => void;
   tab?: InspectorTab;
@@ -297,7 +296,6 @@ export function ResourceInspector({
   onToggleTools,
   onToggleSkills,
   onOpenChanges,
-  onOpenPlan,
   changeCount = 0,
   onClose,
   tab: controlledTab,
@@ -413,7 +411,6 @@ export function ResourceInspector({
       <div className="inspector-header">
         <div className="right-pane-mode-tabs" role="tablist" aria-label="Right panel mode">
           <button type="button" role="tab" aria-selected="true" className="selected">Inspector</button>
-          {onOpenPlan && <button type="button" role="tab" aria-selected="false" onClick={onOpenPlan}>Plan</button>}
           <button type="button" role="tab" aria-selected="false" onClick={onOpenChanges}>
             Changes{changeCount > 0 && <span className="tab-badge">{changeCount}</span>}
           </button>
@@ -443,17 +440,17 @@ export function ResourceInspector({
         />
       </div>
 
-      <div className="inspector-tabs">
-        <button className={tab === "context" ? "selected" : ""} onClick={() => setTab("context")}>
+      <div className="inspector-tabs" role="tablist" aria-label="Inspector sections">
+        <button type="button" role="tab" aria-selected={tab === "context"} className={tab === "context" ? "selected" : ""} onClick={() => setTab("context")}>
           Context
         </button>
-        <button className={tab === "tools" ? "selected" : ""} onClick={() => setTab("tools")}>
+        <button type="button" role="tab" aria-selected={tab === "tools"} className={tab === "tools" ? "selected" : ""} onClick={() => setTab("tools")}>
           Tools{activeTools > 0 ? ` · ${activeTools}` : ""}
         </button>
-        <button className={tab === "extensions" ? "selected" : ""} onClick={() => setTab("extensions")}>
+        <button type="button" role="tab" aria-selected={tab === "extensions"} className={tab === "extensions" ? "selected" : ""} onClick={() => setTab("extensions")}>
           Extensions{extensionErrors + skillErrors + mcpFailures > 0 ? <span className="tab-badge error">{extensionErrors + skillErrors + mcpFailures}</span> : null}
         </button>
-        <button className={tab === "index" ? "selected" : ""} onClick={() => setTab("index")}>
+        <button type="button" role="tab" aria-selected={tab === "index"} className={tab === "index" ? "selected" : ""} onClick={() => setTab("index")}>
           Index
         </button>
       </div>

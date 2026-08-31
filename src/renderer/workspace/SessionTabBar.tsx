@@ -20,6 +20,7 @@ import {
 } from "./workspaceActions";
 import { AppIcon } from "../ui/icons";
 import { ShortcutKeys } from "../app/ShortcutKeys";
+import { PRESENCE_EXIT_DURATION_MS } from "../ui/usePresence";
 
 export interface SessionTabBarProps {
   hideShortcuts?: boolean;
@@ -47,14 +48,54 @@ export function SessionTabBar({
   const activeTabId = useWorkspaceStore((state) => state.activeTabId);
   const projects = useAppStore((state) => state.projects ?? []);
   const onActivate = (tabId: string) => void activateTab(tabId);
-  const onClose = (tabId: string) => void closeWorkspaceTab(tabId);
   const onCloseOthers = (tabId: string) => void closeOtherTabs(tabId);
   const onCloseToRight = (tabId: string) => void closeTabsToRight(tabId);
   const onTogglePin = (tabId: string) => toggleWorkspacePin(tabId);
   const mod = modKeyLabel();
-  const orderedTabs = sortTabsPinnedFirst(tabs);
+  const [exitingTabs, setExitingTabs] = useState<SessionTab[]>([]);
+  const exitTimersRef = useRef(new Map<string, number>());
+  const previousTabsRef = useRef(tabs);
+  const orderedActiveTabs = sortTabsPinnedFirst(tabs);
+  const activeTabIds = new Set(orderedActiveTabs.map((tab) => tab.id));
+  const removedTabs = previousTabsRef.current.filter((tab) => !activeTabIds.has(tab.id));
+  const transientTabs = [...exitingTabs, ...removedTabs].filter((tab, index, all) =>
+    !activeTabIds.has(tab.id) && all.findIndex((candidate) => candidate.id === tab.id) === index,
+  );
+  const orderedTabs = sortTabsPinnedFirst([
+    ...orderedActiveTabs,
+    ...transientTabs,
+  ]);
   const isSingleTab = orderedTabs.length === 1;
   const pinShortcut = pinShortcutLabel(mod);
+
+  const queueTabExit = useCallback((tab: SessionTab) => {
+    if (exitTimersRef.current.has(tab.id)) return;
+    setExitingTabs((current) => current.some((item) => item.id === tab.id) ? current : [...current, tab]);
+    const timer = window.setTimeout(() => {
+      exitTimersRef.current.delete(tab.id);
+      setExitingTabs((current) => current.filter((item) => item.id !== tab.id));
+    }, PRESENCE_EXIT_DURATION_MS);
+    exitTimersRef.current.set(tab.id, timer);
+  }, []);
+
+  useEffect(() => () => {
+    for (const timer of exitTimersRef.current.values()) window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const previousTabs = previousTabsRef.current;
+    previousTabsRef.current = tabs;
+    const currentTabIds = new Set(tabs.map((tab) => tab.id));
+    for (const tab of previousTabs) {
+      if (!currentTabIds.has(tab.id)) queueTabExit(tab);
+    }
+  }, [queueTabExit, tabs]);
+
+  const onClose = useCallback((tabId: string) => {
+    const tab = tabs.find((item) => item.id === tabId);
+    if (tab) queueTabExit(tab);
+    void closeWorkspaceTab(tabId);
+  }, [queueTabExit, tabs]);
 
   // Sliding capsule indicator: one pill that glides between tabs instead of
   // each tab painting its own active background. It is measured from the
@@ -77,7 +118,7 @@ export function SessionTabBar({
   // Measure before paint so the capsule is in place on the first frame.
   useLayoutEffect(() => {
     updateSlider();
-  }, [updateSlider, activeTabId, tabs]);
+  }, [updateSlider, activeTabId, tabs, exitingTabs]);
 
   // Track layout changes (title width, tab add/close, font load) and scroll.
   useEffect(() => {
@@ -105,17 +146,19 @@ export function SessionTabBar({
             aria-hidden
           />
         ) : null}
-        {orderedTabs.map((tab, index) => {
+        {orderedTabs.map((tab) => {
           const active = tab.id === activeTabId;
+          const isExiting = !activeTabIds.has(tab.id);
           const title = displayTabTitle(tab.title);
           const project = projectLabel(tab.projectId, projects);
-          const switchShortcut = tabShortcutLabel(index, mod);
+          const activeIndex = orderedActiveTabs.findIndex((item) => item.id === tab.id);
+          const switchShortcut = activeIndex >= 0 ? tabShortcutLabel(activeIndex, mod) : undefined;
           const status = statusClass(tab.status);
           const pinLabel = tab.pinned ? `Unpin “${title}”` : `Pin “${title}”`;
           const showPinShortcut = isSingleTab && !hideShortcuts;
           const pinControlLabel = showPinShortcut ? `${pinLabel} · Shortcut: ${pinShortcut}` : pinLabel;
-          const hasOtherTabs = orderedTabs.length > 1;
-          const hasTabsToRight = index < orderedTabs.length - 1;
+          const hasOtherTabs = orderedActiveTabs.length > 1;
+          const hasTabsToRight = activeIndex >= 0 && activeIndex < orderedActiveTabs.length - 1;
           const pinControl = (
             <button
               type="button"
@@ -142,7 +185,7 @@ export function SessionTabBar({
             <ContextMenu.Root key={tab.id}>
               <ContextMenu.Trigger asChild>
                 <div
-                  className={`session-tab session-tab--stacked ${active ? "active" : ""} ${tab.pinned ? "is-pinned" : ""} ${tab.isPreview ? "is-preview" : ""}`}
+                  className={`session-tab session-tab--stacked ${active ? "active" : ""} ${isExiting ? "is-exiting" : ""} ${tab.pinned ? "is-pinned" : ""} ${tab.isPreview ? "is-preview" : ""}`}
                   role="tab"
                   aria-selected={active}
                   title={[project, title, switchShortcut ? `Switch: ${switchShortcut}` : null]
@@ -170,8 +213,8 @@ export function SessionTabBar({
                       <ShortcutKeys
                         className="session-tab-kbd"
                         compact
-                        keys={["mod", String(index + 1)]}
-                        label={`Switch tab ${index + 1}`}
+                        keys={["mod", String(activeIndex + 1)]}
+                        label={`Switch tab ${activeIndex + 1}`}
                         title={`Switch tab ${switchShortcut}`}
                       />
                     ) : null}

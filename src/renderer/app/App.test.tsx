@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "./App";
 import { createInitialState, useAppStore } from "../session/store";
@@ -46,13 +46,27 @@ describe("App shell", () => {
     expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
   });
 
-  test("help dialog opens from the topbar and closes on Escape", () => {
+  test("animates and exposes the left sidebar toggle state", () => {
+    renderApp();
+    const hideButton = screen.getByRole("button", { name: "Hide sidebar" });
+    expect(hideButton).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(hideButton);
+
+    const showButton = screen.getByRole("button", { name: "Show sidebar" });
+    expect(showButton).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector(".app-shell")).toHaveClass("sidebar-collapsed");
+  });
+
+  test("help dialog opens from the topbar and closes on Escape", async () => {
     renderApp();
     fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     expect(screen.getByRole("dialog", { name: "Help and diagnostics" })).toBeInTheDocument();
     expect(screen.getByText("Open command palette")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Help and diagnostics" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Help and diagnostics" })).not.toBeInTheDocument();
+    });
   });
 
   test("command palette opens with mod+K and closes on Escape", () => {
@@ -65,10 +79,13 @@ describe("App shell", () => {
 
   test("inspector toggle shows and hides the right panel", () => {
     renderApp();
-    expect(screen.queryByRole("button", { name: /hide right panel/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /show right panel/i }));
-    expect(screen.getByRole("button", { name: /hide right panel/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /hide right panel/i }));
+    const showButton = screen.getByRole("button", { name: /show right panel/i });
+    expect(showButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(showButton);
+    const hideButton = screen.getByRole("button", { name: /hide right panel/i });
+    expect(hideButton).toBeInTheDocument();
+    expect(hideButton).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(hideButton);
     expect(screen.queryByRole("button", { name: /hide right panel/i })).not.toBeInTheDocument();
   });
 

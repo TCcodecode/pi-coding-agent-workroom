@@ -782,8 +782,8 @@ describe("Timeline todo tool rows", () => {
       },
     ]} />);
 
-    // The checklist lives in the Todos panel; plan updates are meta noise here.
-    expect(screen.queryByText("Updated plan")).not.toBeInTheDocument();
+    // The checklist lives in the Todos panel; todo updates are meta noise here.
+    expect(screen.queryByText("Updated todos")).not.toBeInTheDocument();
     expect(screen.queryByText("1/2 done")).not.toBeInTheDocument();
     expect(document.querySelector(".tool-item")).toBeNull();
   });
@@ -805,7 +805,7 @@ describe("Timeline todo tool rows", () => {
       ]}
     />);
 
-    expect(screen.queryByText("Updated plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updated todos")).not.toBeInTheDocument();
     expect(screen.getByText("Ran 2 commands")).toBeInTheDocument();
   });
 });

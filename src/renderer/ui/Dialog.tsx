@@ -1,4 +1,5 @@
 import { useEffect, type HTMLAttributes, type ReactNode } from "react";
+import { usePresence } from "./usePresence";
 
 /**
  * Shared modal dialog chrome: fixed backdrop + centered panel.
@@ -49,6 +50,8 @@ export function Dialog({
   panelProps,
   children,
 }: DialogProps) {
+  const presence = usePresence(open);
+
   useEffect(() => {
     if (!open || !closeOnEscape || !onClose) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -61,17 +64,18 @@ export function Dialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, closeOnEscape, onClose]);
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   return (
     <div
-      className={`palette-backdrop${backdropClassName ? ` ${backdropClassName}` : ""}`}
+      className={`palette-backdrop is-${presence.phase}${backdropClassName ? ` ${backdropClassName}` : ""}`}
+      data-state={open ? "open" : "closed"}
       role="dialog"
       aria-label={label}
       onClick={closeOnBackdrop && onClose ? onClose : undefined}
     >
       <div
-        className={panelClassName}
+        className={`${panelClassName ?? ""} dialog-panel-motion`}
         onClick={(event) => event.stopPropagation()}
         {...panelProps}
       >

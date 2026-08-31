@@ -3,7 +3,6 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiHost, type PiRuntimeLike, type PiSessionLike } from "./host.js";
-import { PlanModeStore } from "./plan/store.js";
 
 function createFakeRuntime(cwd = "/tmp/project", history: unknown[] = []) {
   const listeners = new Set<(event: unknown) => void>();
@@ -13,7 +12,7 @@ function createFakeRuntime(cwd = "/tmp/project", history: unknown[] = []) {
   let leafId: string | null = null;
   let steeringQueue: string[] = [];
   let followUpQueue: string[] = [];
-  const toolNames = ["read", "grep", "find", "ls", "write", "edit", "bash", "plan_save", "plan_list", "plan_read", "mcp_search"];
+  const toolNames = ["read", "grep", "find", "ls", "write", "edit", "bash", "mcp_search"];
   let activeToolNames = [...toolNames];
   const session: PiSessionLike & {
     getLastAssistantText?: () => string;
@@ -104,12 +103,6 @@ function createFakeRuntime(cwd = "/tmp/project", history: unknown[] = []) {
 }
 
 describe("PiHost", () => {
-  test("returns no plans before a runtime has started", () => {
-    const host = new PiHost({ workspaceId: "workspace-1" });
-
-    expect(host.listPlans()).toEqual([]);
-  });
-
   test("maps prompt controls to the real Pi session", async () => {
     const fake = createFakeRuntime();
     const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
@@ -126,108 +119,6 @@ describe("PiHost", () => {
     expect(fake.calls.map((call) => call.method)).toEqual([
       "prompt", "steer", "followUp", "abort", "setThinkingLevel", "setActiveToolsByName", "compact", "reload",
     ]);
-  });
-
-  test("switches the active runtime into a read-only plan tool policy", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-mode-test-"));
-    try {
-      const fake = createFakeRuntime(cwd);
-      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
-      fake.calls.length = 0;
-
-      const mode = await host.setMode("plan");
-
-      expect(mode.mode).toBe("plan");
-      expect(fake.calls.map((call) => call.method)).toEqual(["setThinkingLevel", "setActiveToolsByName"]);
-      expect(fake.calls[1]?.args[0]).toEqual(["read", "grep", "find", "ls", "plan_save", "plan_list", "plan_read", "mcp_search"]);
-      expect(host.snapshot().session.modeState?.mode).toBe("plan");
-      const stored = JSON.parse(readFileSync(join(cwd, ".pai/session-modes.json"), "utf8"));
-      expect(stored.sessions["session-1"]?.mode).toBe("plan");
-      expect(stored.sessions["file:/tmp/session.jsonl"]).toBeUndefined();
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
-
-  test("temporarily locks local write tools in Plan without losing Execute or MCP selection", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-mode-tools-test-"));
-    try {
-      const fake = createFakeRuntime(cwd);
-      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
-
-      host.setTools(["read", "bash", "edit", "write", "mcp_search"]);
-      await host.setMode("plan");
-      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "plan_save", "plan_list", "plan_read"]);
-
-      // Plan permits choosing connected tools but cannot turn local write back on.
-      host.setTools(["read", "mcp_search", "bash"]);
-      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "plan_save", "plan_list", "plan_read"]);
-
-      await host.setMode("execute");
-      expect(fake.session.getActiveToolNames()).toEqual(["read", "mcp_search", "bash", "edit", "write"]);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
-
-  test("deferres mid-turn model/effort changes until the turn ends", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-defer-profile-"));
-    try {
-      const fake = createFakeRuntime(cwd);
-      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
-
-      fake.setStreaming(true);
-      const modeState = await host.setModeProfile("execute", { thinkingLevel: "high" });
-      expect(modeState.executeProfile.thinkingLevel).toBe("high");
-      // Recorded, not applied to the running session yet.
-      expect(fake.calls.map((call) => call.method)).not.toContain("setThinkingLevel");
-
-      fake.setStreaming(false);
-      fake.emit({ type: "turn_end" });
-      expect(fake.calls.map((call) => call.method)).toContain("setThinkingLevel");
-      expect(fake.calls.find((call) => call.method === "setThinkingLevel")?.args[0]).toBe("high");
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
-
-  test("deferres a mid-turn plan/execute switch and applies it at turn end", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-defer-mode-"));
-    try {
-      const fake = createFakeRuntime(cwd);
-      const host = new PiHost({ workspaceId: "workspace-1", runtime: fake.runtime });
-
-      fake.setStreaming(true);
-      const modeState = await host.setMode("plan");
-      expect(modeState.mode).toBe("plan");
-      // Plan tool policy is not applied while the turn is still running.
-      expect(fake.session.getActiveToolNames()).toContain("edit");
-
-      fake.setStreaming(false);
-      fake.emit({ type: "turn_end" });
-      expect(fake.session.getActiveToolNames()).toEqual(["read", "grep", "find", "ls", "plan_save", "plan_list", "plan_read", "mcp_search"]);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
-
-  test("restores a sole session-owned plan when older mode state lacks activePlan", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-plan-restore-"));
-    try {
-      const saved = new PlanModeStore(cwd).savePlan({
-        title: "Recovered plan",
-        content: "# Recovered plan\n\n## Goal\nRestore the plan preview.",
-        sourceSession: "session-1",
-      });
-      const fake = createFakeRuntime(cwd);
-      const host = new PiHost({ workspaceId: "workspace-1", runtimeFactory: async () => fake.runtime });
-
-      const snapshot = await host.start({ cwd, sessionPath: "/tmp/session.jsonl" });
-
-      expect(snapshot.session.modeState?.activePlan).toMatchObject({ id: saved.summary.id, title: "Recovered plan" });
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
   });
 
   test("edits a follow-up queue item and can send it now", async () => {
@@ -680,7 +571,6 @@ describe("PiHost", () => {
       expect(logout).toHaveBeenCalledWith("amazon");
       expect(login).toHaveBeenCalledWith("deepseek", "api_key", expect.any(Object));
       expect(fake.session.model).toEqual({ provider: "deepseek", id: "deepseek-v4-flash" });
-      expect(host.snapshot().session.modeState?.executeProfile.modelKey).toBe("deepseek/deepseek-v4-flash");
       expect(JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"))).toEqual(expect.objectContaining({
         defaultProvider: "deepseek",
         defaultModel: "deepseek-v4-flash",
@@ -736,8 +626,8 @@ describe("PiHost", () => {
 
       await expect(host.loginWithApiKey("deepseek", "sk-test")).resolves.toEqual({ name: "DeepSeek" });
 
-      expect(host.snapshot().session.modeState?.executeProfile.modelKey).toBe("deepseek/deepseek-v4-flash");
-      expect(host.snapshot().session.modeState?.executeProfile.thinkingLevel).toBe("low");
+      expect(host.snapshot().session.model).toBe("deepseek/deepseek-v4-flash");
+      expect(fake.calls.find((call) => call.method === "setThinkingLevel")?.args[0]).toBe("low");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
       rmSync(agentDir, { recursive: true, force: true });
@@ -1463,9 +1353,6 @@ describe("PiHost", () => {
     expect(snap.preview).toBe(true);
     expect(snap.session.sessionId).toBe("sid-preview");
     expect(host.listLiveSessions()).toHaveLength(0);
-    await expect(host.setModeProfile("execute", { thinkingLevel: "medium" })).resolves.toMatchObject({
-      mode: "execute",
-    });
     expect(snap.timeline.some((item) => item.kind === "user")).toBe(true);
     expect(host.listLiveSessions()).toHaveLength(0);
   });

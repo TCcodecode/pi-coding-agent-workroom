@@ -279,7 +279,7 @@ export function CompanionApp() {
 
   const activeProjectPath = activeProject?.path ?? session.cwd;
   const timelineEntries = useMemo(
-    () => groupTimelineTools(timeline.filter((item) => item.kind !== "tool" || describeTool(item).category !== "plan")),
+    () => groupTimelineTools(timeline.filter((item) => item.kind !== "tool" || describeTool(item).category !== "todo")),
     [timeline],
   );
 

@@ -3,7 +3,7 @@ import type { AppIconName } from "../ui/icons";
 
 export type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
 
-export type ToolCategory = "shell" | "read" | "search" | "change" | "web" | "plan" | "mcp" | "other";
+export type ToolCategory = "shell" | "read" | "search" | "change" | "web" | "todo" | "mcp" | "other";
 
 export interface ToolPresentation {
   label: string;
@@ -28,7 +28,7 @@ const TOOL_PREVIEW_KEYS = ["command", "pattern", "query", "path", "file", "fileP
 
 /**
  * Categories whose consecutive completed tools collapse into one row. Edits,
- * MCP calls, and plan updates stay individual because each carries a distinct
+ * MCP calls and todo updates stay individual because each carries a distinct
  * file diff, server·tool target, or checklist change that grouping would hide.
  */
 const AGGREGATABLE_CATEGORIES: ReadonlySet<ToolCategory> = new Set(["shell", "read", "search", "web", "other"]);
@@ -40,7 +40,7 @@ export const CATEGORY_GROUP_LABEL: Record<ToolCategory, (count: number) => strin
   change: (count) => `Changed ${count} ${count === 1 ? "file" : "files"}`,
   web: (count) => `Browsed ${count} ${count === 1 ? "time" : "times"}`,
   mcp: (count) => `MCP · ${count} ${count === 1 ? "call" : "calls"}`,
-  plan: (count) => `Updated plan ${count} ${count === 1 ? "time" : "times"}`,
+  todo: (count) => `Updated todos ${count} ${count === 1 ? "time" : "times"}`,
   other: (count) => `Used ${count} ${count === 1 ? "tool" : "tools"}`,
 };
 
@@ -167,7 +167,7 @@ export function describeTool(item: ToolItem): ToolPresentation {
     return { label: "Browsed", category: "web", icon: "globe", preview: toolPreview(item.input, ["url", "query", "path"]), runningLabel: "Browsing…" };
   }
   if (["todowrite", "todocreate", "todoupdate", "todoread", "todo", "update_todos"].includes(name)) {
-    return { label: "Updated plan", category: "plan", icon: "check", preview: todoToolPreview(name, item.input), runningLabel: "Updating plan…" };
+    return { label: "Updated todos", category: "todo", icon: "check", preview: todoToolPreview(name, item.input), runningLabel: "Updating todos…" };
   }
   return { label: "Used tool", category: "other", icon: "wrench", preview: toolPreview(item.input), runningLabel: "Using tool…" };
 }

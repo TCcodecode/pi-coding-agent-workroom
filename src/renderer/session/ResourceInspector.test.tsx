@@ -240,7 +240,7 @@ describe("ResourceInspector", () => {
       ],
       onToggleTools,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Tools/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Tools/ }));
     const readToggle = screen.getAllByRole("checkbox")[1];
     expect(readToggle).not.toBeChecked();
     fireEvent.click(readToggle);
@@ -267,7 +267,7 @@ describe("ResourceInspector", () => {
         packages: [{ name: "foo", source: "npm:foo", enabled: true, resources: { extensions: 1, skills: 0, prompts: 0, themes: 0 } }],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     expect(screen.getByText("Extensions & Packages")).toBeInTheDocument();
     expect(screen.getByText("foo")).toBeInTheDocument();
     expect(screen.getByText("my-ext")).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe("ResourceInspector", () => {
         ],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     expect(screen.getByText("pkg-a")).toBeInTheDocument();
     expect(screen.getByText("pkg-b")).toBeInTheDocument();
     expect(screen.getByText("empty")).toBeInTheDocument();
@@ -334,7 +334,7 @@ describe("ResourceInspector", () => {
         },
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("github")).toBeInTheDocument();
     expect(screen.getByText("12 tools")).toBeInTheDocument();
@@ -349,7 +349,7 @@ describe("ResourceInspector", () => {
 
   test("extensions tab shows MCP empty states when no status is reported", () => {
     renderInspector();
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("No MCP status reported yet")).toBeInTheDocument();
   });
@@ -366,7 +366,7 @@ describe("ResourceInspector", () => {
         mcp: { version: 1, servers: [], totalTools: 0, connectedCount: 0, disabledCount: 0 },
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     expect(screen.getByText("No MCP servers configured")).toBeInTheDocument();
   });
 
@@ -387,7 +387,7 @@ describe("ResourceInspector", () => {
       },
       onToggleSkills,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     const superpowersGroup = screen.getByText("superpowers").closest("label")!;
     fireEvent.click(superpowersGroup.querySelector("input")!);
     expect(onToggleSkills).toHaveBeenCalledWith(["!skills/superpowers/**"]);
@@ -409,7 +409,7 @@ describe("ResourceInspector", () => {
       },
       onToggleSkills,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     const seoGroup = screen.getByText("seo").closest("label")!;
     fireEvent.click(seoGroup.querySelector("input")!);
     expect(onToggleSkills).toHaveBeenCalledWith(["!skills/seo"]);
@@ -431,7 +431,7 @@ describe("ResourceInspector", () => {
       },
       onToggleSkills,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     const group = screen.getByText("superpowers").closest("label")!.parentElement!;
     const brainstormingToggle = Array.from(group.querySelectorAll("input"))[1];
     fireEvent.click(brainstormingToggle);
@@ -451,7 +451,7 @@ describe("ResourceInspector", () => {
         packages: [],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     const watchGroup = screen.getByText("watch").closest("label")!;
     expect(watchGroup.querySelector("input")).not.toBeChecked();
   });
@@ -471,7 +471,7 @@ describe("ResourceInspector", () => {
         packages: [],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Extensions/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Extensions/ }));
     const headings = Array.from(document.querySelectorAll(".skill-group-name")).map((el) => el.textContent);
     expect(headings).toEqual(["on", "off"]);
   });
@@ -487,7 +487,7 @@ describe("ResourceInspector", () => {
         packages: [],
       },
     });
-    const extTab = screen.getByRole("button", { name: /Extensions/ });
+    const extTab = screen.getByRole("tab", { name: /Extensions/ });
     expect(extTab.textContent).toContain("1");
   });
 
@@ -560,7 +560,7 @@ describe("ResourceInspector", () => {
     }
 
     function openIndexTab() {
-      fireEvent.click(screen.getByRole("button", { name: /^Index/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /^Index/ }));
     }
 
     test("shows index status from store when ready", () => {

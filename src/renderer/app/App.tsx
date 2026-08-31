@@ -8,17 +8,17 @@ import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { SettingsDialog } from "./SettingsDialog";
 import { HelpDialog } from "./HelpDialog";
 import { HttpWorkbench } from "../http/HttpWorkbench";
-import { PlanInspector } from "../session/PlanInspector";
 import { AppIcon } from "../ui/icons";
 import { TopBar } from "./TopBar";
 import { WelcomeBlock } from "../session/WelcomeBlock";
 import { useDragResize } from "../ui/useDragResize";
 import { useLocalStorageState } from "../ui/useLocalStorageState";
+import { usePresence } from "../ui/usePresence";
 import { getPiApi } from "./piApi";
 import { useAppStore } from "../session/store";
 import { prependOlder } from "../session/views";
 import type { InspectorTab } from "../session/ResourceInspector";
-import type { AgentMode, AgentProfile, AppUpdateState, SessionModeState, SessionStatus } from "../../shared/protocol";
+import type { AppUpdateState, SessionStatus, ThinkingLevel } from "../../shared/protocol";
 import {
   dedupeTabs,
   loadOpenTabs,
@@ -43,7 +43,7 @@ import {
 import { subscribeHostEvents } from "../session/hostEvents";
 import { useWorkspaceHotkeys } from "./useWorkspaceHotkeys";
 
-type RightPane = "inspector" | "plan" | "changes";
+type RightPane = "inspector" | "changes";
 const EMPTY_INTERRUPTED_MESSAGE_IDS: readonly string[] = [];
 
 function defaultChangesWidth(): number {
@@ -59,16 +59,13 @@ export function App() {
   const [updateState, setUpdateState] = useState<AppUpdateState>();
   const [helpOpen, setHelpOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const rightPanelPresence = usePresence(inspectorOpen);
   const [motionEnabled, setMotionEnabled] = useLocalStorageState("pi.motionEnabled", true, (raw) => raw !== "false");
   const [rightPane, setRightPane] = useState<RightPane>("inspector");
   const [selectedChangePath, setSelectedChangePath] = useState<string | undefined>();
   const [inspectorWidth, setInspectorWidth] = useLocalStorageState("pi.inspectorWidth", 300, (raw) => {
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : 300;
-  });
-  const [planWidth, setPlanWidth] = useLocalStorageState("pi.planWidth", 420, (raw) => {
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : 420;
   });
   const [changesWidth, setChangesWidth] = useLocalStorageState("pi.changesWidth", () => defaultChangesWidth(), (raw) => {
     const n = Number(raw);
@@ -205,14 +202,13 @@ export function App() {
 
   const startDragResize = useDragResize();
   const resizeRightPanel = (event: React.MouseEvent<HTMLDivElement>) => {
-    const startWidth = rightPane === "changes" ? changesWidth : rightPane === "plan" ? planWidth : inspectorWidth;
-    const minWidth = rightPane === "changes" || rightPane === "plan" ? 360 : 280;
+    const startWidth = rightPane === "changes" ? changesWidth : inspectorWidth;
+    const minWidth = rightPane === "changes" ? 360 : 280;
     const occupiedSidebarWidth = sidebarCollapsed ? 0 : sidebarWidth + 5;
     const maxWidth = Math.max(minWidth, Math.min(1280, window.innerWidth - occupiedSidebarWidth - 240));
     startDragResize(event, (dx) => {
       const next = Math.min(maxWidth, Math.max(minWidth, startWidth - dx));
       if (rightPane === "changes") setChangesWidth(next);
-      else if (rightPane === "plan") setPlanWidth(next);
       else setInspectorWidth(next);
     });
   };
@@ -542,96 +538,20 @@ export function App() {
     state.projects?.find((p) => p.path === state.session.cwd || p.id === state.session.cwd)?.id ??
     state.activeProjectId;
 
-  const modeState = state.session.modeState ?? {
-    mode: "execute" as const,
-    planProfile: { thinkingLevel: state.session.thinkingLevel },
-    executeProfile: { modelKey: state.session.model || undefined, thinkingLevel: state.session.thinkingLevel },
-  };
-  const activeMode: AgentMode = modeState.mode;
-  const planAvailable = activeMode === "plan" || Boolean(modeState.activePlan);
-  const planWorkspaceEditable = activeMode === "plan";
-  const sidebarCollapsedBeforePlanRef = useRef(sidebarCollapsed);
-  const applyModeState = (next: SessionModeState): void => {
-    useAppStore.setState((current) => ({
-      session: {
-        ...current.session,
-        modeState: next,
-        model: next.mode === "plan"
-          ? next.planProfile.modelKey ?? current.session.model
-          : next.executeProfile.modelKey ?? current.session.model,
-        thinkingLevel: next.mode === "plan" ? next.planProfile.thinkingLevel : next.executeProfile.thinkingLevel,
-      },
-    }));
-  };
-  const currentModeState = (): SessionModeState => {
-    const session = useAppStore.getState().session;
-    return session.modeState ?? {
-      mode: "execute",
-      planProfile: { thinkingLevel: session.thinkingLevel },
-      executeProfile: { modelKey: session.model || undefined, thinkingLevel: session.thinkingLevel },
-    };
-  };
-  const changeAgentMode = (mode: AgentMode): void => {
-    if (!api?.setMode) {
-      pushError("当前 Pi Workroom 进程尚未加载 Plan/Execute 切换接口，请完全重启应用后再试。");
-      return;
-    }
-    const setMode = api.setMode;
+  const changeAgentModel = (model: string): void => {
+    if (!api?.setModel) return;
     void (async () => {
       const sessionKey = await ensureActiveTabRuntime();
-      const next = await setMode(mode, sessionKey ? { sessionKey } : undefined);
-      applyModeState(next);
-      const snapshot = await api.getSnapshot();
-      useAppStore.getState().applyWorkspaceSnapshot(snapshot);
+      await api.setModel(model, sessionKey ? { sessionKey } : undefined);
     })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
   };
-  const changeAgentModel = (model: string): void => {
-    if (api?.setModeProfile) {
-      const setModeProfile = api.setModeProfile;
-      void (async () => {
-        const sessionKey = await ensureActiveTabRuntime();
-        if (!sessionKey) return;
-        const nextModeState = currentModeState();
-        const mode = nextModeState.mode;
-        const profile = mode === "plan" ? nextModeState.planProfile : nextModeState.executeProfile;
-        const next = await setModeProfile(mode, { ...profile, modelKey: model }, { sessionKey });
-        applyModeState(next);
-      })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
-    } else {
-      pushError("当前 Pi Workroom 进程尚未加载模式配置接口，请完全重启应用后再试。");
-    }
+  const changeAgentThinking = (thinkingLevel: ThinkingLevel): void => {
+    if (!api?.setThinkingLevel) return;
+    void (async () => {
+      const sessionKey = await ensureActiveTabRuntime();
+      await api.setThinkingLevel(thinkingLevel, sessionKey ? { sessionKey } : undefined);
+    })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
   };
-  const changeAgentThinking = (thinkingLevel: AgentProfile["thinkingLevel"]): void => {
-    if (api?.setModeProfile) {
-      const setModeProfile = api.setModeProfile;
-      void (async () => {
-        const sessionKey = await ensureActiveTabRuntime();
-        if (!sessionKey) return;
-        const nextModeState = currentModeState();
-        const mode = nextModeState.mode;
-        const profile = mode === "plan" ? nextModeState.planProfile : nextModeState.executeProfile;
-        const next = await setModeProfile(mode, { ...profile, thinkingLevel }, { sessionKey });
-        applyModeState(next);
-      })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
-    } else {
-      pushError("当前 Pi Workroom 进程尚未加载模式配置接口，请完全重启应用后再试。");
-    }
-  };
-  const openPlanReview = (): void => {
-    setRightPane("plan");
-    setInspectorOpen(true);
-  };
-  useEffect(() => {
-    if (activeMode === "plan") {
-      sidebarCollapsedBeforePlanRef.current = sidebarCollapsed;
-      setSidebarCollapsed(true);
-      return;
-    }
-    setSidebarCollapsed(sidebarCollapsedBeforePlanRef.current);
-  }, [activeMode]);
-  useEffect(() => {
-    if (activeMode === "plan") openPlanReview();
-  }, [activeMode, modeState.activePlan?.id, state.session.sessionId]);
   const projectName =
     state.projects?.find((p) => p.id === composerProjectId)?.name ||
     state.session.cwd?.split("/").pop() ||
@@ -667,7 +587,7 @@ export function App() {
     }
   };
 
-  const planConversation = state.timeline.length > 0 ? (
+  const conversationTimeline = state.timeline.length > 0 ? (
     <Timeline
       items={state.timeline}
       scrollElementRef={timelineWrapRef}
@@ -707,8 +627,6 @@ export function App() {
     onProjectChange: (projectId) => void switchComposerProject(projectId),
     onOpenProject: () => void openProject(),
     thinkingLevel: state.session.thinkingLevel,
-    mode: activeMode,
-    onModeChange: changeAgentMode,
     onModelSelect: changeAgentModel,
     onThinkingLevel: changeAgentThinking,
     workspaceName: projectName,
@@ -721,7 +639,7 @@ export function App() {
     <div className="http-agent-chat-shell">
       <div className="http-agent-timeline">
         {state.timeline.length > 0 ? (
-          planConversation
+          conversationTimeline
         ) : activeView?.hydrate === "loading" ? (
           <div className="session-loading" role="status">
             <span className="session-loading-dot" aria-hidden />
@@ -763,9 +681,7 @@ export function App() {
       className={`app-shell ${inspectorOpen ? "with-inspector" : "chat-only"} ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${inspectorOpen && rightPane === "changes" ? "changes-open" : ""}`}
       style={{
         "--sidebar-width": `${sidebarWidth}px`,
-        "--right-panel-width": activeMode === "plan" && rightPane === "plan"
-          ? "70vw"
-          : `${rightPane === "changes" ? changesWidth : rightPane === "plan" ? planWidth : inspectorWidth}px`,
+        "--right-panel-width": `${rightPane === "changes" ? changesWidth : inspectorWidth}px`,
       } as React.CSSProperties}
     >
       <SessionSidebar
@@ -795,6 +711,7 @@ export function App() {
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize sidebar"
+        aria-hidden={sidebarCollapsed}
         onMouseDown={(event) => {
           const startWidth = sidebarWidth;
           startDragResize(event, (dx) => {
@@ -803,17 +720,13 @@ export function App() {
         }}
       />
 
-      <section className={`main-column ${activeMode === "plan" && rightPane === "plan" ? "plan-focus-main" : ""}`}>
+      <section className="main-column">
         <TopBar
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           onOpenHelp={() => setHelpOpen(true)}
-          planButton={activeMode === "execute" && modeState.activePlan
-            ? { title: modeState.activePlan.title, onOpen: openPlanReview }
-            : undefined}
-          hideShortcuts={activeMode === "plan" && rightPane === "plan"}
         />
 
         <div className="timeline-stage">
@@ -835,7 +748,7 @@ export function App() {
           >
             <div className="chat-column">
               {state.timeline.length > 0 ? (
-                planConversation
+                conversationTimeline
               ) : activeView?.hydrate === "loading" ? (
                 <div className="session-loading" role="status">
                   <span className="session-loading-dot" aria-hidden />
@@ -878,65 +791,53 @@ export function App() {
         </div>
       </section>
 
-      {inspectorOpen && (
-        <div
-          className="panel-resizer right-panel-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize right panel"
-          onMouseDown={resizeRightPanel}
-        />
-      )}
+      <div
+        className={`panel-resizer right-panel-resizer ${inspectorOpen ? "is-open" : "is-closed"}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize right panel"
+        aria-hidden={!inspectorOpen}
+        onMouseDown={inspectorOpen ? resizeRightPanel : undefined}
+      />
 
-      {inspectorOpen && (
-        rightPane === "changes" ? (
-          <ChangeInspector
-            changes={sessionChanges}
-            selectedPath={selectedChangePath}
-            onSelect={setSelectedChangePath}
-            onOpenFile={(path) => void openChangeFile(path)}
-            onUndo={(path) => void undoChange(path)}
-            onOpenInspector={() => setRightPane("inspector")}
-            onOpenPlan={planAvailable ? openPlanReview : undefined}
-            onClose={() => setInspectorOpen(false)}
-          />
-        ) : rightPane === "plan" ? (
-          <PlanInspector
-            api={api}
-            sessionId={state.session.sessionId}
-            sessionKey={useWorkspaceStore.getState().activeTabId}
-            activePlan={modeState.activePlan}
-            editable={planWorkspaceEditable}
-            onOpenInspector={() => setRightPane("inspector")}
-            onOpenChanges={() => openChanges()}
-            onClose={() => setInspectorOpen(false)}
-            onError={pushError}
-          />
-        ) : (
-          <ResourceInspector
-            session={state.session}
-            resources={state.resources}
-            tools={state.tools ?? []}
-            lockedToolNames={activeMode === "plan" ? ["bash", "edit", "write"] : undefined}
-            onToggleTools={(names) => {
-              if (!api) return;
-              void (async () => {
-                const sessionKey = await ensureActiveTabRuntime();
-                await api.setTools(names, sessionKey ? { sessionKey } : undefined);
-                const snapshot = await api.getSnapshot();
-                useAppStore.getState().applyWorkspaceSnapshot(snapshot);
-              })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
-            }}
-            onToggleSkills={(patterns) => void api?.setSkills(patterns)}
-            onOpenChanges={() => openChanges()}
-            onOpenPlan={planAvailable ? openPlanReview : undefined}
-            changeCount={sessionChanges.length}
-            onClose={() => setInspectorOpen(false)}
-            tab={inspectorTab}
-            onTabChange={setInspectorTab}
-          />
-        )
-      )}
+      <div className={`right-panel-shell is-${rightPanelPresence.phase}`} aria-hidden={!inspectorOpen} inert={!inspectorOpen ? true : undefined}>
+        {rightPanelPresence.mounted && (
+          <div key={rightPane} className="right-panel-content">
+            {rightPane === "changes" ? (
+              <ChangeInspector
+                changes={sessionChanges}
+                selectedPath={selectedChangePath}
+                onSelect={setSelectedChangePath}
+                onOpenFile={(path) => void openChangeFile(path)}
+                onUndo={(path) => void undoChange(path)}
+                onOpenInspector={() => setRightPane("inspector")}
+                onClose={() => setInspectorOpen(false)}
+              />
+            ) : (
+              <ResourceInspector
+                session={state.session}
+                resources={state.resources}
+                tools={state.tools ?? []}
+                onToggleTools={(names) => {
+                  if (!api) return;
+                  void (async () => {
+                    const sessionKey = await ensureActiveTabRuntime();
+                    await api.setTools(names, sessionKey ? { sessionKey } : undefined);
+                    const snapshot = await api.getSnapshot();
+                    useAppStore.getState().applyWorkspaceSnapshot(snapshot);
+                  })().catch((error) => pushError(error instanceof Error ? error.message : String(error)));
+                }}
+                onToggleSkills={(patterns) => void api?.setSkills(patterns)}
+                onOpenChanges={() => openChanges()}
+                changeCount={sessionChanges.length}
+                onClose={() => setInspectorOpen(false)}
+                tab={inspectorTab}
+                onTabChange={setInspectorTab}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       <CommandPalette
         open={paletteOpen}

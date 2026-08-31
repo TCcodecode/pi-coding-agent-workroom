@@ -7,7 +7,6 @@ import type {
   ModelOption,
   PiSnapshot,
   ResourceSnapshot,
-  SessionModeState,
   SessionTodoItem,
   ThinkingLevel,
   TimelineItem,
@@ -339,7 +338,6 @@ export function buildSnapshot(input: {
   sequence: number;
   runtime?: PiRuntimeLike;
   sessionTodos: SessionTodoItem[];
-  modeState?: SessionModeState;
   resources: ResourceSnapshot;
   models?: ModelOption[];
   tools?: ToolOption[];
@@ -378,7 +376,6 @@ export function buildSnapshot(input: {
       cost: stats?.cost ?? 0,
       sessionFile: session?.sessionFile,
       todos: input.sessionTodos,
-      modeState: input.runtime ? input.modeState : undefined,
       lastTurnEntryId: input.lastTurnEntryId,
     },
     sessions: [],

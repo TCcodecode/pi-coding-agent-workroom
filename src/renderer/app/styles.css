@@ -88,6 +88,14 @@
   --shadow-elevated: 0 22px 60px rgba(0, 0, 0, .12);
   --transition-fast: 120ms ease;
   --transition-normal: 180ms ease;
+  /* Motion scale: layout moves slower than feedback, exits stay snappy. */
+  --motion-duration-micro: 120ms;
+  --motion-duration-panel-enter: 220ms;
+  --motion-duration-panel-exit: 160ms;
+  --motion-duration-layout: 220ms;
+  --motion-ease-enter: cubic-bezier(.16, 1, .3, 1);
+  --motion-ease-exit: cubic-bezier(.55, 0, 1, .45);
+  --motion-ease-standard: cubic-bezier(.65, .35, .35, 1);
   --right-pane-content-padding: var(--space-4);
   --right-pane-content-bottom: var(--space-5);
   --right-pane-section-gap: var(--space-4);
@@ -100,8 +108,6 @@
   --settings-accent: #319DFF;
   --settings-accent-soft: #eaf5ff;
   --inspector-switch-accent: #319DFF;
-  --mode-selected: #F599C6;
-  --mode-selected-ink: #351622;
   --workspace-mode-accent: #ffea88;
   --workspace-mode-ink: #3d3d3d;
   --surface-message-user: #f1f1f1;
@@ -126,7 +132,6 @@
   --swatch-202833: #202833;
   --swatch-23794c: #23794c;
   --swatch-24333e: #24333e;
-  --swatch-24476f: #24476f;
   --swatch-2589dc: #2589dc;
   --swatch-26313d: #26313d;
   --swatch-27313d: #27313d;
@@ -134,7 +139,6 @@
   --swatch-303030: #303030;
   --swatch-303136: #303136;
   --swatch-30332f: #30332f;
-  --swatch-315985: #315985;
   --swatch-327c4d: #327c4d;
   --swatch-333e4b: #333e4b;
   --swatch-356da4: #356da4;
@@ -148,7 +152,6 @@
   --swatch-45515f: #45515f;
   --swatch-4b4e49: #4b4e49;
   --swatch-4d6787: #4d6787;
-  --swatch-4d6b9d: #4d6b9d;
   --swatch-555555: #555555;
   --swatch-5b5b5b: #5b5b5b;
   --swatch-666666: #666666;
@@ -179,9 +182,7 @@
   --swatch-8a5e17: #8a5e17;
   --swatch-8b96a2: #8b96a2;
   --swatch-8b98a6: #8b98a6;
-  --swatch-8d563e: #8d563e;
   --swatch-8d99a8: #8d99a8;
-  --swatch-8e4d70: #8e4d70;
   --swatch-96a0ac: #96a0ac;
   --swatch-98a3b1: #98a3b1;
   --swatch-9a6515: #9a6515;
@@ -230,7 +231,6 @@
   --swatch-e1e1e3: #e1e1e3;
   --swatch-e1e5e9: #e1e5e9;
   --swatch-e1e7ee: #e1e7ee;
-  --swatch-e1eeff: #e1eeff;
   --swatch-e2edf4: #e2edf4;
   --swatch-e4e4e8: #e4e4e8;
   --swatch-e4e9ef: #e4e9ef;
@@ -250,7 +250,6 @@
   --swatch-eceef1: #eceef1;
   --swatch-ededed: #ededed;
   --swatch-edf0f3: #edf0f3;
-  --swatch-edf4ff: #edf4ff;
   --swatch-edf7ff: #edf7ff;
   --swatch-eef2f6: #eef2f6;
   --swatch-f1f8ff: #f1f8ff;
@@ -268,7 +267,6 @@
   --swatch-f7f7f4: #f7f7f4;
   --swatch-f7f8fa: #f7f8fa;
   --swatch-f7f9fb: #f7f9fb;
-  --swatch-f9e7df: #f9e7df;
   --swatch-f9f9f9: #f9f9f9;
   --swatch-fae9e6: #fae9e6;
   --swatch-faf3e0: #faf3e0;
@@ -295,9 +293,6 @@
   --swatch-282a30: #282a30;
   --swatch-319dff: #319dff;
   --swatch-3d3d3d: #3d3d3d;
-  --swatch-416daf: #416daf;
-  --swatch-6583c4: #6583c4;
-  --swatch-f599c6: #f599c6;
   --swatch-ffffff: #ffffff;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -1446,11 +1441,6 @@ session title below */
 .composer-context-control { max-width: 220px; }
 .composer-model { max-width: 170px; }
 .composer-thinking { max-width: 96px; }
-.composer-mode-switch { display: inline-flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-elevated); }
-.composer-mode-option { padding: 4px 7px; border: 0; border-radius: 6px; color: var(--text-secondary); background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
-.composer-mode-option:hover:not(:disabled) { color: var(--text-primary); }
-.composer-mode-option.active { color: var(--mode-selected-ink); background: var(--mode-selected); box-shadow: 0 1px 2px color-mix(in srgb, var(--swatch-000000) 24%, transparent); }
-.composer-mode-option:disabled { cursor: default; opacity: .45; }
 .composer-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -1624,32 +1614,6 @@ session title below */
 .send-button { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--surface-elevated); background: var(--accent-primary); font-size: 16px; }
 .send-button:hover { background: var(--accent-hover); }
 .composer-hints { display: flex; justify-content: center; gap: 12px; padding-top: 8px; color: var(--text-secondary); font-size: 9px; }
-.plan-status,
-.plan-dirty { padding: 3px 6px; border-radius: 5px; color: var(--text-muted); background: var(--surface-elevated); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
-.plan-status-ready { color: var(--mode-selected); background: color-mix(in srgb, var(--swatch-f599c6) 18%, transparent); }
-.plan-status-executing { color: var(--text-muted); background: color-mix(in srgb, var(--swatch-6583c4) 16%, transparent); }
-.plan-dirty { color: var(--text-muted); background: rgba(183, 104, 80, .16); text-transform: none; letter-spacing: 0; }
-.plan-inspector { min-width: 0; }
-.plan-inspector-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 16px 16px 8px; }
-.plan-inspector-content { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; padding: 0 16px 16px; }
-.plan-inspector-title { display: flex; align-items: center; min-width: 0; gap: 9px; margin-bottom: 0; color: var(--text-primary); }
-.plan-inspector-title > div { display: flex; flex: 1 1 auto; align-items: center; min-width: 0; gap: 8px; }
-.plan-inspector-title strong { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.plan-inspector-title .plan-status { flex: 0 0 auto; }
-.plan-inspector-toolbar { display: flex; align-items: center; flex: 0 0 auto; gap: 5px; white-space: nowrap; }
-.plan-inspector-toolbar button { min-height: 28px; padding: 0 8px; border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-muted); background: var(--surface-elevated); font-size: 10px; font-weight: 600; }
-.plan-inspector-toolbar button:hover:not(:disabled) { border-color: var(--border-subtle); color: var(--text-primary); }
-.plan-inspector-toolbar button.ready { color: var(--text-muted); }
-.plan-inspector-toolbar button.execute { color: var(--text-muted); }
-.plan-inspector-toolbar button:disabled { cursor: default; opacity: .45; }
-.plan-inspector-preview,
-.plan-inspector-editor { flex: 1 1 auto; min-height: 0; width: 100%; overflow: auto; padding: 15px; border: 1px solid var(--border-subtle); border-radius: 9px; color: var(--text-primary); background: var(--surface-elevated); font-size: 12px; line-height: 1.65; }
-.plan-inspector-editor { outline: none; resize: none; font-family: var(--font-mono); }
-.plan-inspector-editor:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-202020) 8%, transparent); }
-.plan-inspector-preview p { margin: 0; color: var(--text-secondary); }
-.plan-inspector-preview .markdown h1 { margin-top: 0; font-size: 16px; }
-.plan-inspector-preview .markdown h2 { font-size: 14px; }
-.plan-inspector-footer { padding: 10px 16px; overflow: hidden; border-top: 1px solid var(--border-subtle); color: var(--text-secondary); font-family: var(--font-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .inspector {
   display: flex;
   flex-direction: column;
@@ -2819,7 +2783,7 @@ input[type="checkbox"]:focus-visible {
 .tool-action-change { color: var(--text-muted); }
 .tool-action-search,
 .tool-action-web { color: var(--text-muted); }
-.tool-action-plan { color: var(--text-muted); }
+.tool-action-todo { color: var(--text-muted); }
 .mcp-tag { flex: none; padding: 1px 5px; border-radius: 4px; color: var(--text-muted); background: var(--surface-elevated); font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .tool-sep { color: var(--text-secondary); flex: none; }
 .tool-inline-preview { flex: 1; min-width: 0; overflow: hidden; color: var(--text-muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -3359,9 +3323,11 @@ body { min-width: 1040px; }
 .app-shell.sidebar-collapsed.with-inspector.changes-open {
   grid-template-columns: minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-inspector-width));
 }
-.app-shell.sidebar-collapsed > .sidebar,
+/* Keep the grid children in place while the motion layer collapses their
+   columns. Removing a child from layout here makes CSS Grid auto-place the
+   main column into the wrong (zero-width) track. */
 .app-shell.sidebar-collapsed > .panel-resizer:not(.right-panel-resizer) {
-  display: none;
+  pointer-events: none;
 }
 .panel-resizer { width: var(--shell-resizer-width); }
 .right-panel-resizer { border-left: 1px solid transparent; }
@@ -4254,26 +4220,6 @@ composer and menus */ .welcome-orb {
   box-shadow: 0 12px 36px color-mix(in srgb, var(--swatch-262722) 10%, transparent);
 }
  .composer-card:focus-within { border-color: var(--swatch-c69b52); box-shadow: var(--focus-ring), 0 12px 36px color-mix(in srgb, var(--swatch-262722) 10%, transparent); }
- .composer-mode-switch {
-  border-color: var(--border-subtle);
-  background: var(--surface-elevated);
-}
- .composer-mode-option { color: var(--text-secondary); }
- .composer-mode-option:hover:not(:disabled) { color: var(--text-primary); }
- .composer-mode-option.active { color: var(--mode-selected-ink); background: var(--mode-selected); }
- .plan-status,
-.plan-dirty { color: var(--text-secondary); background: var(--surface-active); }
- .plan-status-ready { color: var(--swatch-8e4d70); background: color-mix(in srgb, var(--swatch-f599c6) 28%, transparent); }
- .plan-status-executing { color: var(--swatch-4d6b9d); background: color-mix(in srgb, var(--swatch-6583c4) 16%, transparent); }
- .plan-dirty { color: var(--swatch-8d563e); background: var(--swatch-f9e7df); }
- .plan-inspector-title { color: var(--text-primary); }
- .plan-inspector-preview,
-.plan-inspector-editor { border-color: var(--border-subtle); color: var(--text-primary); background: var(--surface-elevated); }
- .plan-inspector-toolbar button { border-color: var(--border-subtle); color: var(--text-secondary); background: var(--surface-elevated); }
- .plan-inspector-toolbar button:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); background: var(--surface-hover); }
- .plan-inspector-toolbar button.execute { border-color: color-mix(in srgb, var(--swatch-416daf) 28%, transparent); color: var(--swatch-315985); background: var(--swatch-edf4ff); }
- .plan-inspector-toolbar button.execute:hover:not(:disabled) { border-color: color-mix(in srgb, var(--swatch-416daf) 48%, transparent); color: var(--swatch-24476f); background: var(--swatch-e1eeff); }
- .plan-inspector-footer { border-top-color: var(--border-subtle); }
  .composer-queue-header,
 .composer-hints,
 .at-picker-label,
@@ -7595,8 +7541,8 @@ matching the compact macOS title-bar treatment rather than a collection of separ
   color: var(--swatch-5b5b5b);
   background: transparent;
 }
-/* When the central column gets narrow—such as Plan review occupying most of
-   the window—keep actions discoverable by retaining their icons only. */
+/* When the central column gets narrow, keep actions discoverable by retaining
+   their icons only. */
 @container (max-width: 560px) {
    .topbar-actions .shortcut-action-container .shortcut-keys--compact,
 .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd,
@@ -7614,22 +7560,6 @@ matching the compact macOS title-bar treatment rather than a collection of separ
     gap: 0;
   }
 
-}
-
-/* Plan focus is intentionally compact even when the browser reports a slightly wider container: never let the shortcut labels compete with the centered session title in this mode. */
-.main-column.plan-focus-main .topbar-actions .shortcut-action-container .shortcut-keys--compact,
-.main-column.plan-focus-main .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-kbd,
-.main-column.plan-focus-main .session-tab.session-tab--stacked .session-tab-kbd {
-  display: none !important;
-}
-.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container,
-.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container:hover,
-.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container.active,
-.main-column.plan-focus-main .topbar-actions .topbar-button.shortcut-action-container.active:hover {
-  width: 28px;
-  padding: 0;
-  justify-content: center;
-  gap: 0;
 }
 
 /* Final shared contract for the topbar shortcut actions. Keep selected/open
@@ -7664,16 +7594,6 @@ matching the compact macOS title-bar treatment rather than a collection of separ
   padding: 0 8px;
   gap: 6px;
 }
-.main-column.plan-focus-main .topbar-actions .shortcut-action-container,
-.main-column.plan-focus-main .topbar-actions .shortcut-action-container:hover,
-.main-column.plan-focus-main .topbar-actions .shortcut-action-container.active,
-.main-column.plan-focus-main .topbar-actions .shortcut-action-container.active:hover {
-  width: 28px;
-  padding: 0;
-  justify-content: center;
-  gap: 0;
-}
-
 @container (max-width: 560px) {
    .topbar-actions .shortcut-action-container,
 .topbar-actions .shortcut-action-container:hover,
@@ -8643,4 +8563,217 @@ and a compact control rhythm. */ .settings-dialog-wide {
     grid-column: 2;
     grid-row: 1 / 3;
   }
+}
+
+/* Motion system — shell transitions are layout-aware while panel contents stay
+   on the compositor. The DOM remains mounted long enough for exits to finish. */
+.app-shell {
+  transition: grid-template-columns var(--motion-duration-layout) var(--motion-ease-standard);
+}
+
+.app-shell.chat-only {
+  grid-template-columns: var(--sidebar-width, var(--shell-sidebar-width)) var(--shell-resizer-width) minmax(0, 1fr) 0px 0px;
+}
+
+.app-shell.with-inspector {
+  grid-template-columns: var(--sidebar-width, var(--shell-sidebar-width)) var(--shell-resizer-width) minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-inspector-width));
+}
+
+.app-shell.with-inspector.changes-open {
+  grid-template-columns: var(--sidebar-width, var(--shell-sidebar-width)) var(--shell-resizer-width) minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-changes-width));
+}
+
+.app-shell.sidebar-collapsed.chat-only {
+  grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px;
+}
+
+.app-shell.sidebar-collapsed.with-inspector,
+.app-shell.sidebar-collapsed.with-inspector.changes-open {
+  grid-template-columns: 0px 0px minmax(0, 1fr) var(--shell-resizer-width) var(--right-panel-width, var(--shell-inspector-width));
+}
+
+.app-shell.sidebar-collapsed > .sidebar {
+  display: flex;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-12px);
+  pointer-events: none;
+}
+
+.app-shell:not(.sidebar-collapsed) > .sidebar {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--motion-duration-panel-exit) var(--motion-ease-standard), transform var(--motion-duration-layout) var(--motion-ease-enter);
+}
+
+.app-shell.sidebar-collapsed > .panel-resizer:not(.right-panel-resizer) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-shell > .panel-resizer {
+  width: auto;
+  transition: background-color var(--motion-duration-micro) ease, opacity var(--motion-duration-panel-exit) var(--motion-ease-exit);
+}
+
+.right-panel-resizer.is-closed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.right-panel-shell {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity var(--motion-duration-panel-exit) var(--motion-ease-exit), transform var(--motion-duration-panel-exit) var(--motion-ease-exit);
+  pointer-events: none;
+}
+
+.right-panel-shell.is-entering,
+.right-panel-shell.is-exiting {
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+}
+
+.right-panel-shell.is-entered {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  transition-duration: var(--motion-duration-panel-enter);
+  transition-timing-function: var(--motion-ease-enter);
+}
+
+.right-panel-content {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  animation: panel-content-enter var(--motion-duration-panel-enter) var(--motion-ease-enter) both;
+}
+
+.palette-backdrop {
+  opacity: 1;
+  transition: opacity var(--motion-duration-panel-exit) var(--motion-ease-exit);
+}
+
+.palette-backdrop.is-entering,
+.palette-backdrop.is-exiting {
+  opacity: 0;
+}
+
+.palette-backdrop.is-exiting {
+  pointer-events: none;
+}
+
+.palette-backdrop > .dialog-panel-motion {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: 50% 18%;
+  transition: opacity var(--motion-duration-panel-enter) var(--motion-ease-enter), transform var(--motion-duration-panel-enter) var(--motion-ease-enter);
+}
+
+.palette-backdrop.is-entering > .dialog-panel-motion,
+.palette-backdrop.is-exiting > .dialog-panel-motion {
+  opacity: 0;
+  transform: translateY(8px) scale(.985);
+}
+
+.session-tab.session-tab--stacked {
+  animation: session-tab-enter var(--motion-duration-panel-enter) var(--motion-ease-enter) both;
+  transition: color var(--motion-duration-micro) ease, background-color var(--motion-duration-micro) ease, box-shadow var(--motion-duration-micro) ease, opacity var(--motion-duration-panel-exit) var(--motion-ease-exit), transform var(--motion-duration-micro) var(--motion-ease-enter);
+}
+
+.session-tab.session-tab--stacked:hover {
+  transform: translateY(-1px);
+}
+
+.session-tab.session-tab--stacked.is-exiting {
+  animation: session-tab-exit var(--motion-duration-panel-exit) var(--motion-ease-exit) both;
+  pointer-events: none;
+}
+
+.session-tab-slider {
+  transition: transform var(--motion-duration-layout) var(--motion-ease-enter), width var(--motion-duration-layout) var(--motion-ease-enter);
+}
+
+.right-pane-mode-tabs button,
+.inspector-tabs button,
+.settings-tab,
+.mode-switcher button {
+  transition: color var(--motion-duration-micro) ease, background-color var(--motion-duration-micro) ease, border-color var(--motion-duration-micro) ease, box-shadow var(--motion-duration-micro) ease, transform var(--motion-duration-micro) var(--motion-ease-enter);
+}
+
+.right-pane-mode-tabs button {
+  position: relative;
+}
+
+.right-pane-mode-tabs button::after {
+  position: absolute;
+  right: 7px;
+  bottom: 1px;
+  left: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+  content: "";
+  opacity: 0;
+  transform: scaleX(.35);
+  transition: opacity var(--motion-duration-micro) ease, transform var(--motion-duration-normal) var(--motion-ease-enter);
+}
+
+.right-pane-mode-tabs button.selected::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.inspector-tabs button:active,
+.settings-tab:active,
+.mode-switcher button:active {
+  transform: scale(.97);
+}
+
+.settings-tab.active {
+  box-shadow: inset 0 -2px 0 var(--border-strong);
+}
+
+.settings-body-content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  gap: var(--right-pane-section-gap);
+  animation: settings-section-enter var(--motion-duration-panel-enter) var(--motion-ease-enter) both;
+}
+
+/* Preserve the wide settings layout after introducing the keyed motion wrapper. */
+.settings-body-content > .settings-section {
+  width: min(820px, 100%);
+  margin: 0 auto;
+}
+
+.settings-body-content > .settings-section + .settings-section {
+  margin-top: 36px;
+}
+
+@keyframes panel-content-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes session-tab-enter {
+  from { opacity: 0; transform: translateY(3px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes session-tab-exit {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(8px) scale(.985); }
+}
+
+@keyframes settings-section-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }

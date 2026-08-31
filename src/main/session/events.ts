@@ -20,7 +20,6 @@ export interface SessionEventBridge {
   applyTodosFromToolResult(slot: RuntimeSlot, toolName: string | undefined, result: unknown, isError: boolean): void;
   maybeNudgeForTodos(slot: RuntimeSlot): void;
   reconcileTodosAfterTurn(slot: RuntimeSlot): void;
-  applyPendingMode(slot: RuntimeSlot): void;
 }
 
 function readTextFile(path: string): string | undefined {
@@ -228,7 +227,6 @@ export function handleSessionEvent(slot: RuntimeSlot, raw: unknown, host: Sessio
       if (event.level) host.emit("thinking_level_changed", { level: event.level }, raw, key);
       break;
     case "agent_end": {
-      host.applyPendingMode(slot);
       if (event.willRetry) {
         slot.status = "running";
         host.emitLiveSessionsChanged();
@@ -298,7 +296,6 @@ export function handleSessionEvent(slot: RuntimeSlot, raw: unknown, host: Sessio
     case "turn_end":
       slot.status = "idle";
       host.invalidateAccountUsageCache(slot.runtime.session.model?.provider);
-      host.applyPendingMode(slot);
       host.emit("turn_completed", {}, raw, key);
       host.emitLiveSessionsChanged();
       break;

@@ -4,7 +4,7 @@ import { SessionTabBar } from "../workspace/SessionTabBar";
 
 /**
  * Main-column top bar: sidebar toggle, session tabs, and the action cluster
- * (return to plan / help / inspector). Extracted from App.tsx.
+ * (help / inspector). Extracted from App.tsx.
  */
 export function TopBar({
   sidebarCollapsed,
@@ -12,18 +12,12 @@ export function TopBar({
   inspectorOpen,
   onToggleInspector,
   onOpenHelp,
-  planButton,
-  hideShortcuts,
 }: {
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   inspectorOpen: boolean;
   onToggleInspector: () => void;
   onOpenHelp: () => void;
-  /** "Return to plan" button, shown while a plan is active in execute mode. */
-  planButton?: { title: string; onOpen: () => void };
-  /** Shortcut hints are hidden while the plan pane owns the topbar. */
-  hideShortcuts: boolean;
 }) {
   return (
     <header className="topbar topbar-with-tabs">
@@ -31,6 +25,7 @@ export function TopBar({
         type="button"
         className={`topbar-left-panel-toggle ${sidebarCollapsed ? "is-collapsed" : ""}`}
         aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        aria-expanded={!sidebarCollapsed}
         title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={onToggleSidebar}
@@ -38,21 +33,9 @@ export function TopBar({
         <AppIcon name="panelLeft" size="md" />
       </button>
       <div className="topbar-tabs">
-        <SessionTabBar hideShortcuts={hideShortcuts} />
+        <SessionTabBar />
       </div>
       <div className="topbar-side topbar-actions">
-        {planButton ? (
-          <button
-            type="button"
-            className="topbar-button plan-return-button"
-            aria-label="Open plan"
-            title={`Open plan: ${planButton.title}`}
-            onClick={planButton.onOpen}
-          >
-            <AppIcon name="fileText" size="sm" />
-            <span>Open plan</span>
-          </button>
-        ) : null}
         <button
           className="topbar-button shortcut-action-container help-button"
           aria-label="Keyboard shortcuts"
@@ -60,17 +43,18 @@ export function TopBar({
           onClick={onOpenHelp}
         >
           <AppIcon name="circleHelp" size="md" />
-          {!hideShortcuts ? <ShortcutKeys className="topbar-kbd" compact keys={["mod", "?"]} /> : null}
+          <ShortcutKeys className="topbar-kbd" compact keys={["mod", "?"]} />
         </button>
         <button
-          type="button"
-          className={`topbar-button shortcut-action-container ${inspectorOpen ? "active" : ""}`}
-          aria-label={inspectorOpen ? "Hide right panel" : "Show right panel"}
-          title={inspectorOpen ? "Hide right panel" : "Show right panel"}
+        type="button"
+        className={`topbar-button shortcut-action-container ${inspectorOpen ? "active" : ""}`}
+        aria-label={inspectorOpen ? "Hide right panel" : "Show right panel"}
+        aria-expanded={inspectorOpen}
+        title={inspectorOpen ? "Hide right panel" : "Show right panel"}
           onClick={onToggleInspector}
         >
           <AppIcon name="panelRight" size="md" />
-          {!hideShortcuts ? <ShortcutKeys className="topbar-kbd" compact keys={["mod", "B"]} /> : null}
+          <ShortcutKeys className="topbar-kbd" compact keys={["mod", "B"]} />
         </button>
       </div>
     </header>

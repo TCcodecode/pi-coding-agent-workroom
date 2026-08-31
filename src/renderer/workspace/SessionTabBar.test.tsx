@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { SessionTabBar } from "./SessionTabBar";
 import type { SessionTab } from "./sessionTabs";
@@ -89,6 +89,38 @@ describe("SessionTabBar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close First" }));
     expect(onClose).toHaveBeenCalledWith("t1");
+  });
+
+  test("keeps a closed tab in the DOM until its exit transition finishes", async () => {
+    vi.spyOn(workspaceActions, "closeWorkspaceTab").mockImplementation(async (tabId) => {
+      useWorkspaceStore.setState((state) => ({
+        tabs: state.tabs.filter((tab) => tab.id !== tabId),
+        activeTabId: state.activeTabId === tabId ? "t2" : state.activeTabId,
+      }));
+    });
+    render(<SessionTabBar />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close First" }));
+
+    expect(screen.getByRole("tab", { name: /First/ })).toHaveClass("is-exiting");
+    await waitFor(() => {
+      expect(screen.queryByRole("tab", { name: /First/ })).not.toBeInTheDocument();
+    });
+  });
+
+  test("animates tabs removed by a batch close action", async () => {
+    vi.spyOn(workspaceActions, "closeOtherTabs").mockImplementation(async (tabId) => {
+      useWorkspaceStore.setState((state) => ({ tabs: state.tabs.filter((tab) => tab.id === tabId) }));
+    });
+    render(<SessionTabBar />);
+
+    fireEvent.contextMenu(screen.getAllByRole("tab")[0]!);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Close other tabs" }));
+
+    expect(screen.getByRole("tab", { name: /Second/ })).toHaveClass("is-exiting");
+    await waitFor(() => {
+      expect(screen.queryByRole("tab", { name: /Second/ })).not.toBeInTheDocument();
+    });
   });
 
   test("assigns unique shortcuts with the pinned tab first even when input order is mixed", () => {

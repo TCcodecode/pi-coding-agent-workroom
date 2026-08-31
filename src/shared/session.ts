@@ -1,35 +1,5 @@
 export type SessionStatus = "idle" | "running" | "awaiting_approval" | "completed" | "error" | "archived";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export type AgentMode = "plan" | "execute";
-export type PlanStatus = "draft" | "ready" | "executing" | "superseded" | "completed";
-
-export interface AgentProfile {
-  modelKey?: string;
-  thinkingLevel: ThinkingLevel;
-}
-
-export interface PlanArtifactSummary {
-  id: string;
-  path: string;
-  title: string;
-  status: PlanStatus;
-  updatedAt: string;
-  revision: string;
-  /** Session identity that owns this plan artifact. */
-  sourceSession?: string;
-}
-
-export interface SessionModeState {
-  mode: AgentMode;
-  planProfile: AgentProfile;
-  executeProfile: AgentProfile;
-  /**
-   * The user's normal runtime tool selection. Plan mode derives a temporary
-   * safe set from this instead of overwriting the preference.
-   */
-  executeToolNames?: string[];
-  activePlan?: PlanArtifactSummary;
-}
 
 export interface SessionStartedPayload {
   sessionId: string;
@@ -49,7 +19,6 @@ export interface SessionSummary {
   sessionFile?: string;
   messageCount: number;
   updatedAt: string;
-  modeState?: SessionModeState;
 }
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
@@ -83,8 +52,6 @@ export interface SessionState {
   todos?: SessionTodoItem[];
   /** Monotonic within-session revision used to reject stale snapshots. */
   todosRevision?: number;
-  /** Optional for backwards-compatible snapshots from older Pi Workroom runtimes. */
-  modeState?: SessionModeState;
   /**
    * User entry id of the in-process last turn. Rewind undoes this turn's
    * files and conversation. Absent after resume/hydrate or after a rewind.

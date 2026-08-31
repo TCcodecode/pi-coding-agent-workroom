@@ -67,7 +67,7 @@ When to use:
 - Skip todos only for genuinely trivial single-step questions or actions.
 
 How to use:
-- Use todowrite for the initial plan or a deliberate full-list replacement.
+- Use todowrite for the initial execution checklist or a deliberate full-list replacement.
 - Use todocreate to add one task and todoupdate to change one existing task; do not rewrite the full list for a single status change.
 - Use todoread when you need to refresh the current list before deciding what to do next.
 - Keep stable ids; never invent a new id when updating an existing task.

@@ -1,15 +1,12 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type {
-  AgentMode,
   PiEvent,
   SessionKey,
-  SessionModeState,
   SessionStatus,
   SessionTodoItem,
   ThinkingLevel,
 } from "../../shared/protocol.js";
 import type { ProviderUsageRegistry } from "../provider/index.js";
-import type { PlanModeStore } from "./plan/store.js";
 
 export interface PiSessionLike {
   sessionId: string;
@@ -152,16 +149,12 @@ export interface RuntimeSlot {
   runToolCount: number;
   sessionGeneration: number;
   status: SessionStatus;
-  /** Mode/model changed mid-turn; apply it once the running turn ends. */
-  pendingModeApply?: boolean;
   pendingFileMutations: Map<string, { path: string; absolutePath: string; before?: string }>;
   completedFileMutations: Map<string, { path: string; absolutePath: string; before?: string; after?: string }>;
   /** User entry id of the in-process last turn; rewindLastTurn undoes this turn only. */
   lastTurnUserEntryId?: string;
   /** First mutation this turn per path. `before` is the on-disk content at that first edit. */
   lastTurnFileSnapshots: Map<string, { path: string; absolutePath: string; before?: string }>;
-  modeState: SessionModeState;
-  planStore: PlanModeStore;
 }
 
-export type { AgentMode, SessionKey, ThinkingLevel };
+export type { SessionKey, ThinkingLevel };

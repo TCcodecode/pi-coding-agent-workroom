@@ -9,7 +9,7 @@ Four product surfaces, same names in `src/main/` and `src/renderer/`:
 | Domain | Owns |
 |---|---|
 | `app` | Window, IPC router, updates, settings, command palette |
-| `session` | PiHost facade, event projection, timeline, composer, plan mode |
+| `session` | PiHost facade, event projection, timeline, composer, session todos |
 | `workspace` | Projects, working-set tabs, sidebar |
 | `http` | HTTP workbench store, extension, UI |
 
@@ -24,7 +24,7 @@ Four product surfaces, same names in `src/main/` and `src/renderer/`:
 - New desktop panel: `src/renderer/<domain>/`.
 - New IPC field: add the type in `src/shared/<domain>.ts` first.
 - Do not create `core/`, `context/`, `utils/`, `helpers/`, or `services/`.
-- `packages/` only when there is a second consumer (Pi CLI or a pure engine). HTTP and plan stay under `src/`.
+- `packages/` only when there is a second consumer (Pi CLI or a pure engine). HTTP stays under `src/`.
 
 Cross-domain runtime traffic goes through `window.pi`. Renderer must not import `src/main`. Main must not import `src/renderer`.
 

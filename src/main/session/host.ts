@@ -15,7 +15,6 @@ import type {
   PiSnapshot,
   ProjectSummary,
   ProviderAuthStatus,
-  ProviderLoginEvent,
   ProviderLoginPrompt,
   ProviderUsageSnapshot,
   ResourceSnapshot,
@@ -25,15 +24,8 @@ import type {
   SessionTodoItem,
   SessionTreeNode,
   ThinkingLevel,
-  AgentMode,
-  AgentProfile,
-  PlanArtifactSummary,
-  PlanStatus,
-  SessionModeState,
   TimelineItem,
-  ToolCallState,
   ToolOption,
-  FileChangeSummary,
   McpConfigView,
   McpStatusSnapshotView,
 } from "../../shared/protocol.js";
@@ -52,7 +44,7 @@ import {
   setMcpServerDisabled,
 } from "@pi-desk/mcp-bridge";
 import type { McpStatusSnapshot } from "@pi-desk/mcp-bridge";
-import { deleteSessionFile, getSessionContext, listSessions as loadSessionCatalog, resolveSessionDisplayName } from "./catalog.js";
+import { deleteSessionFile, getSessionContext, listSessions as loadSessionCatalog } from "./catalog.js";
 import {
   addProject,
   getActiveProjectId,
@@ -67,9 +59,7 @@ import {
   type AccountUsage,
   type ProviderUsageRegistry,
 } from "../provider/index.js";
-import { createFileChangeSummary, filePathFromToolArgs } from "./fileChanges.js";
 import { HttpWorkbenchStore } from "../http/store.js";
-import { isPlanBlockedTool, PLAN_TOOL_NAMES, PlanModeStore, defaultModeState } from "./plan/store.js";
 import { normalizeAuthEvent, normalizeAuthSource } from "./auth.js";
 import { messageText as formatMessageText, modelName as formatModelName, resolveDisplayName as formatSessionName, resolvePathsEqual, stringify as formatUnknown } from "./display.js";
 import { handleSessionEvent } from "./events.js";
@@ -115,8 +105,6 @@ export class PiHost {
   private httpWorkbench?: HttpWorkbenchStore;
   /** Multi-session live slots. Foreground is `foregroundKey`. */
   private readonly slots = new Map<SessionKey, RuntimeSlot>();
-  /** Mode lookup used by the per-runtime plan extension before a slot is bound. */
-  private readonly planModes = new Map<string, AgentMode>();
   private foregroundKey?: SessionKey;
   private sequence = 0;
   private workspaceCwd: string | undefined;
@@ -251,16 +239,12 @@ export class PiHost {
     // Publish the hydrated state after the session reset event. This keeps the
     // renderer's checklist correct when opening a session with persisted todos.
     const slot = this.getSlot(key);
-    if (slot && (slot.modeState.mode === "plan" || slot.modeState.executeProfile.modelKey !== this.modelName(session) || slot.modeState.executeProfile.thinkingLevel !== session.thinkingLevel)) {
-      await this.applyModeRuntime(slot, { persist: false });
-    }
     this.emit(
       "todos_updated",
       { todos: slot?.sessionTodos ?? [], revision: slot?.todoRevision ?? 0 },
       undefined,
       key,
     );
-    if (slot) this.emitPlanArtifactChanged(slot);
     // Auto-trust project resources — no confirmation dialog in the desktop UI.
     this.emit("project_trust_resolved", { cwd: options.cwd, trusted: true }, undefined, key);
     this.emitLiveSessionsChanged();
@@ -444,12 +428,6 @@ export class PiHost {
   async prompt(text: string, opts?: SessionCommandOptions): Promise<void> {
     const slot = this.requireSlot(opts?.sessionKey);
     const session = slot.runtime.session;
-    if (slot.modeState.mode === "plan" && /^\/[A-Za-z0-9_-]+(?:\s|$)/.test(text.trim())) {
-      throw new Error("Commands are unavailable in Plan mode; use the plan editor or switch to Execute");
-    }
-    // Apply any mode/model/effort change recorded while a previous turn was
-    // still streaming so this turn starts with the newly selected profile.
-    await this.applyPendingMode(slot);
     // Resolve as soon as the message is accepted (preflight passes, turn starts)
     // instead of waiting for the whole agent turn, so the composer can clear the
     // input immediately. Turn errors after acceptance surface as session_error.
@@ -579,17 +557,10 @@ export class PiHost {
     await this.requireSlot(opts?.sessionKey).runtime.session.abort();
   }
 
-  setThinkingLevel(level: ThinkingLevel): void {
-    this.requireSession().setThinkingLevel(level);
-  }
-
-  private modeProfile(slot: RuntimeSlot, mode = slot.modeState.mode): AgentProfile {
-    return mode === "plan" ? slot.modeState.planProfile : slot.modeState.executeProfile;
-  }
-
-  /** Persist mode state with Pi's durable session identity, not a UI tab key. */
-  private modeStorageKey(slot: RuntimeSlot, session: PiSessionLike = slot.runtime.session): string {
-    return session.sessionId || slot.key;
+  setThinkingLevel(level: ThinkingLevel, opts?: SessionCommandOptions): void {
+    const slot = this.requireSlot(opts?.sessionKey);
+    slot.runtime.session.setThinkingLevel(level);
+    this.emit("thinking_level_changed", { level }, undefined, slot.key);
   }
 
   private allToolNames(session: PiSessionLike): string[] {
@@ -598,189 +569,12 @@ export class PiHost {
       : [];
   }
 
-  private executeToolNames(slot: RuntimeSlot, allTools = this.allToolNames(slot.runtime.session)): string[] {
-    const known = new Set(allTools);
-    const saved = slot.modeState.executeToolNames ?? slot.runtime.session.getActiveToolNames();
-    return [...new Set(saved)].filter((name) => known.has(name));
-  }
-
-  /**
-   * Plan mode is a temporary local-workspace safety layer.  It must not erase
-   * the user's normal tool choices or blanket-disable MCP/extension tools.
-   */
-  private applyToolPolicy(slot: RuntimeSlot): void {
-    const session = slot.runtime.session;
-    const allTools = this.allToolNames(session);
-    if (allTools.length === 0 || typeof session.setActiveToolsByName !== "function") return;
-    const executeToolNames = this.executeToolNames(slot, allTools);
-    if (!slot.modeState.executeToolNames) {
-      slot.modeState = { ...slot.modeState, executeToolNames };
-    }
-    const activeTools = slot.modeState.mode === "plan"
-      ? [...new Set([...executeToolNames.filter((name) => !isPlanBlockedTool(name)), ...PLAN_TOOL_NAMES])]
-      : executeToolNames;
-    session.setActiveToolsByName(activeTools.filter((name) => allTools.includes(name)));
-  }
-
-  private async applyModeRuntime(slot: RuntimeSlot, options: { persist: boolean }): Promise<void> {
-    const session = slot.runtime.session;
-    const profile = this.modeProfile(slot);
-    if (profile.modelKey && typeof session.setModel === "function") {
-      const [provider, ...idParts] = profile.modelKey.split("/");
-      const model = session.modelRuntime?.getModel(provider!, idParts.join("/"));
-      if (model) await session.setModel(model);
-    }
-    if (typeof session.setThinkingLevel === "function") session.setThinkingLevel(profile.thinkingLevel);
-    this.applyToolPolicy(slot);
-    this.planModes.set(session.sessionId, slot.modeState.mode);
-    if (options.persist) slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-  }
-
-  private emitPlanArtifactChanged(slot: RuntimeSlot): void {
-    let plans: PlanArtifactSummary[] = [];
-    try { plans = slot.planStore.listPlans(slot.runtime.session.sessionId); } catch { /* broken plan directory is surfaced on demand */ }
-    if (slot.modeState.activePlan && !plans.some((plan) => plan.id === slot.modeState.activePlan?.id)) {
-      slot.modeState = { ...slot.modeState, activePlan: undefined };
-      slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    }
-    // Backfill sessions created before extension-backed plan_save started
-    // persisting activePlan.  Filtering above is already by session identity,
-    // so adopting the sole matching artifact cannot attach another session's
-    // plan.  Multiple plans remain deliberately unselected until the user or
-    // agent saves/chooses one explicitly.
-    if (!slot.modeState.activePlan && plans.length === 1) {
-      slot.modeState = { ...slot.modeState, activePlan: plans[0] };
-      slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    }
-    this.emit("plan_artifact_changed", { plan: slot.modeState.activePlan, plans }, undefined, slot.key);
-  }
-
-  async setMode(mode: AgentMode, opts?: SessionCommandOptions): Promise<SessionModeState> {
-    const slot = this.requireSlot(opts?.sessionKey);
-    // Capture the currently enabled tools immediately before entering Plan.
-    // They are restored exactly when returning to Execute.
-    const executeToolNames = mode === "plan" && slot.modeState.mode !== "plan"
-      ? this.executeToolNames(slot)
-      : slot.modeState.executeToolNames;
-    slot.modeState = { ...slot.modeState, mode, executeToolNames };
-    if (slot.runtime.session.isStreaming) {
-      // Record the switch but let the running turn finish untouched. The new
-      // mode (tool policy included) takes effect on the next turn.
-      slot.pendingModeApply = true;
-      slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    } else {
-      await this.applyModeRuntime(slot, { persist: true });
-      slot.pendingModeApply = false;
-    }
-    this.emit("mode_changed", slot.modeState, undefined, slot.key);
-    this.emitPlanArtifactChanged(slot);
-    return slot.modeState;
-  }
-
-  async setModeProfile(mode: AgentMode, profile: AgentProfile, opts?: SessionCommandOptions): Promise<SessionModeState> {
-    const slot = this.getSlot(opts?.sessionKey);
-    if (!slot) {
-      return defaultModeState(profile.modelKey, profile.thinkingLevel);
-    }
-    const model = profile.modelKey
-      ? this.resolveModel(slot.runtime.session, profile.modelKey)
-      : undefined;
-    const allowed = this.supportedThinkingLevels(slot.runtime.session, model);
-    if (!allowed.includes(profile.thinkingLevel)) throw new Error(`Thinking level is not supported: ${profile.thinkingLevel}`);
-    if (profile.modelKey && !model) {
-      throw new Error(`Model not found: ${profile.modelKey}`);
-    }
-    slot.modeState = {
-      ...slot.modeState,
-      [mode === "plan" ? "planProfile" : "executeProfile"]: { ...profile },
-    };
-    if (mode === slot.modeState.mode) {
-      if (slot.runtime.session.isStreaming) {
-        // Record the new model/effort but leave the running turn untouched.
-        // It is applied when the turn ends (next turn uses the new profile).
-        slot.pendingModeApply = true;
-        slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-      } else {
-        await this.applyModeRuntime(slot, { persist: true });
-        slot.pendingModeApply = false;
-      }
-    } else {
-      slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    }
-    this.emit("mode_changed", slot.modeState, undefined, slot.key);
-    return slot.modeState;
-  }
-
-  listPlans(opts?: SessionCommandOptions): PlanArtifactSummary[] {
-    // A renderer may survive a development-time main-process restart. Until a
-    // session is restored, there is no session identity to scope plan files to.
-    // Treat that transitional state as an empty plan list rather than an IPC
-    // failure.
-    const slot = this.getSlot(opts?.sessionKey);
-    if (!slot) return [];
-    return slot.planStore.listPlans(slot.runtime.session.sessionId);
-  }
-
-  readPlan(planId: string, opts?: SessionCommandOptions): { summary: PlanArtifactSummary; content: string } {
-    const slot = this.requireSlot(opts?.sessionKey);
-    return slot.planStore.readPlan(planId, slot.runtime.session.sessionId);
-  }
-
-  updatePlan(planId: string, content: string, revision?: string, opts?: SessionCommandOptions): PlanArtifactSummary {
-    const slot = this.requireSlot(opts?.sessionKey);
-    const sessionId = slot.runtime.session.sessionId;
-    const saved = slot.planStore.updatePlan(planId, content, revision ?? slot.planStore.readPlan(planId, sessionId).summary.revision, sessionId);
-    if (slot.modeState.activePlan?.id === saved.id) slot.modeState = { ...slot.modeState, activePlan: saved };
-    slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    this.emitPlanArtifactChanged(slot);
-    return saved;
-  }
-
-  savePlan(title: string, content: string, status: PlanStatus = "draft", planId?: string, opts?: SessionCommandOptions): { summary: PlanArtifactSummary; content: string } {
-    const slot = this.requireSlot(opts?.sessionKey);
-    const saved = slot.planStore.savePlan({ title, content, status, planId, sourceSession: slot.runtime.session.sessionId });
-    slot.modeState = { ...slot.modeState, activePlan: saved.summary };
-    slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    this.emitPlanArtifactChanged(slot);
-    return saved;
-  }
-
-  async startExecution(planId?: string, opts?: SessionCommandOptions): Promise<SessionModeState> {
-    const slot = this.requireSlot(opts?.sessionKey);
-    if (slot.runtime.session.isStreaming) throw new Error("Stop the current turn before starting execution");
-    const id = planId ?? slot.modeState.activePlan?.id;
-    if (!id) throw new Error("Select a saved plan before starting execution");
-    const sessionId = slot.runtime.session.sessionId;
-    const plan = slot.planStore.readPlan(id, sessionId);
-    if (plan.summary.status !== "ready" && plan.summary.status !== "executing") {
-      throw new Error("Mark the plan ready before starting execution");
-    }
-    const executing = slot.planStore.setPlanStatus(id, "executing", sessionId);
-    slot.modeState = { ...slot.modeState, mode: "execute", activePlan: executing };
-    await this.applyModeRuntime(slot, { persist: true });
-    this.emit("mode_changed", slot.modeState, undefined, slot.key);
-    this.emitPlanArtifactChanged(slot);
-    const body = plan.content.match(/##\s+Execution handoff\s*([\s\S]*)/i)?.[1]?.trim() || plan.content;
-    const handoff = `Begin execution from the approved plan at ${executing.path}.\n\nExecution handoff:\n${body.slice(0, 6000)}`;
-    await this.prompt(handoff, { sessionKey: slot.key });
-    return slot.modeState;
-  }
-
   setTools(tools: string[], opts?: SessionCommandOptions): void {
     const slot = this.requireSlot(opts?.sessionKey);
     const allTools = this.allToolNames(slot.runtime.session);
     const known = new Set(allTools);
     const requested = [...new Set(tools)].filter((name) => known.has(name));
-    const previous = this.executeToolNames(slot, allTools);
-    // While Plan is active, local write tools stay locked. Keep their Execute
-    // preference untouched while allowing the user to tune MCP/extensions.
-    const executeToolNames = slot.modeState.mode === "plan"
-      ? [...new Set([...requested.filter((name) => !isPlanBlockedTool(name)), ...previous.filter(isPlanBlockedTool)])]
-      : requested;
-    slot.modeState = { ...slot.modeState, executeToolNames };
-    this.applyToolPolicy(slot);
-    slot.planStore.setMode(this.modeStorageKey(slot), slot.modeState);
-    this.emit("mode_changed", slot.modeState, undefined, slot.key);
+    slot.runtime.session.setActiveToolsByName(requested);
   }
 
   async setSkills(patterns: string[]): Promise<void> {
@@ -816,14 +610,15 @@ export class PiHost {
     await this.requireSession().reload();
   }
 
-  async setModel(modelKey: string): Promise<void> {
-    const session = this.requireSession();
+  async setModel(modelKey: string, opts?: SessionCommandOptions): Promise<void> {
+    const slot = this.requireSlot(opts?.sessionKey);
+    const session = slot.runtime.session;
     const [provider, ...idParts] = modelKey.split("/");
     const id = idParts.join("/");
     const model = session.modelRuntime?.getModel(provider, id);
     if (!model || !session.setModel) throw new Error(`Model not found: ${modelKey}`);
     await session.setModel(model);
-    this.emit("model_changed", { model: modelKey, provider });
+    this.emit("model_changed", { model: modelKey, provider }, undefined, slot.key);
   }
 
   async executeCommand(name: string, args = ""): Promise<void> {
@@ -850,14 +645,7 @@ export class PiHost {
         return;
       case "model":
         if (!args.trim()) throw new Error("/model requires provider/model");
-        {
-          const slot = this.requireSlot();
-          if (slot.modeState.mode === "plan") {
-            await this.setModeProfile("plan", { ...slot.modeState.planProfile, modelKey: args.trim() });
-          } else {
-            await this.setModel(args.trim());
-          }
-        }
+        await this.setModel(args.trim());
         return;
       case "import":
         if (!args.trim()) throw new Error("/import requires a JSONL path");
@@ -1421,7 +1209,6 @@ export class PiHost {
       sequence: this.sequence,
       runtime: this.runtime,
       sessionTodos: this.sessionTodos,
-      modeState: this.getSlot()?.modeState,
       resources: this.getResources(),
       models: this.getModels(),
       tools: this.getTools(),
@@ -1904,11 +1691,6 @@ export class PiHost {
       this.slots.delete(key);
     }
 
-    const planStore = new PlanModeStore(runtime.cwd);
-    const fallbackMode = defaultModeState(
-      this.modelName(runtime.session) || undefined,
-      (runtime.session.thinkingLevel || "medium") as ThinkingLevel,
-    );
     const slot: RuntimeSlot = {
       key,
       runtime,
@@ -1922,8 +1704,6 @@ export class PiHost {
       pendingFileMutations: new Map(),
       completedFileMutations: new Map(),
       lastTurnFileSnapshots: new Map(),
-      modeState: planStore.getModeForSession(runtime.session.sessionId || key, fallbackMode),
-      planStore,
     };
 
     const bindSession = (session: PiSessionLike, announce = true): void => {
@@ -1943,21 +1723,6 @@ export class PiHost {
       slot.turnToolCount = 0;
       slot.turnNudged = false;
       slot.runToolCount = 0;
-      const fallback = defaultModeState(
-        this.modelName(session) || undefined,
-        (session.thinkingLevel || "medium") as ThinkingLevel,
-      );
-      const storageKey = this.modeStorageKey(slot, session);
-      slot.modeState = slot.planStore.getModeForSession(storageKey, slot.modeState ?? fallback);
-      // Migrate any legacy tmp:<tab> record once this runtime knows the stable
-      // session identity.  Future opens use this key regardless of tab layout.
-      if (!slot.planStore.hasMode(storageKey) && slot.planStore.hasLegacyModeForSession(storageKey)) {
-        slot.planStore.setMode(storageKey, slot.modeState);
-      }
-      this.planModes.set(session.sessionId, slot.modeState.mode);
-      if (slot.modeState.mode === "plan" || slot.modeState.executeProfile.modelKey !== this.modelName(session) || slot.modeState.executeProfile.thinkingLevel !== session.thinkingLevel) {
-        void this.applyModeRuntime(slot, { persist: false }).catch(() => undefined);
-      }
       this.hydrateSessionTodos(slot, session);
       if (!announce) return;
       this.emit(
@@ -1980,8 +1745,6 @@ export class PiHost {
           slot.key,
         );
       }
-      this.emit("mode_changed", slot.modeState, undefined, slot.key);
-      this.emitPlanArtifactChanged(slot);
     };
 
     // The public start() event is the single initial session_started event.
@@ -2000,12 +1763,8 @@ export class PiHost {
       sessionPath: options.sessionPath,
       agentDir: this.agentDir,
       httpWorkbench: this.httpWorkbench,
-      planModes: this.planModes,
-      slots: this.slots,
       applyTodosFromBranch: (todos, sessionManager) => this.applyTodosFromBranch(todos, sessionManager),
-      emitPlanArtifactChanged: (slot) => this.emitPlanArtifactChanged(slot),
       applyMcpStatus: (snapshot) => this.applyMcpStatus(snapshot),
-      modeStorageKey: (slot) => this.modeStorageKey(slot),
     });
   }
 
@@ -2227,28 +1986,8 @@ export class PiHost {
   }
 
   /**
-   * Apply a mode/model/effort change that was recorded while a turn was
-   * streaming. Runs once the turn ends so the running turn is never mutated
-   * and the next turn uses the newly selected profile.
-   */
-  private async applyPendingMode(slot: RuntimeSlot): Promise<void> {
-    if (!slot.pendingModeApply || slot.runtime.session.isStreaming) return;
-    slot.pendingModeApply = false;
-    try {
-      await this.applyModeRuntime(slot, { persist: true });
-    } catch (error) {
-      this.emit(
-        "session_error",
-        { message: error instanceof Error ? error.message : String(error) },
-        undefined,
-        slot.key,
-      );
-    }
-  }
-
-  /**
    * A turn that finishes normally should leave the checklist consistent. The
-   * model often plans tasks with todowrite but forgets to close its
+   * model often tracks tasks with todowrite but forgets to close its
    * in_progress item, so the panel would keep showing stale "0/N done". Close
    * it in the mirrored view immediately, persist the reconciled list into the
    * session trace (so reloads and the model's next-turn context see the same
@@ -2285,7 +2024,6 @@ export class PiHost {
       applyTodosFromToolResult: (nextSlot, toolName, result, isError) => this.applyTodosFromToolResult(nextSlot, toolName, result, isError),
       maybeNudgeForTodos: (nextSlot) => this.maybeNudgeForTodos(nextSlot),
       reconcileTodosAfterTurn: (nextSlot) => this.reconcileTodosAfterTurn(nextSlot),
-      applyPendingMode: (nextSlot) => void this.applyPendingMode(nextSlot),
     });
   }
 
@@ -2386,7 +2124,6 @@ export class PiHost {
     } catch {
       // ignore
     }
-    this.planModes.delete(slot.runtime.session.sessionId);
     this.slots.delete(key);
     if (this.foregroundKey === key) {
       this.foregroundKey = this.slots.keys().next().value;
@@ -2429,9 +2166,7 @@ export class PiHost {
   }
 
   private activeModelProvider(): string | undefined {
-    const slot = this.getSlot();
-    const modelKey = slot ? this.modeProfile(slot).modelKey : undefined;
-    return this.runtime?.session.model?.provider || modelKey?.split("/")[0];
+    return this.runtime?.session.model?.provider;
   }
 
   private async selectAvailableModel(providerId?: string): Promise<void> {
@@ -2452,18 +2187,21 @@ export class PiHost {
     const modelKey = `${selected.provider}/${selected.id}`;
     const selectedModel = session.modelRuntime?.getModel(selected.provider, selected.id);
     const thinkingLevel = this.normalizeThinkingLevel(
-      this.modeProfile(slot).thinkingLevel,
+      (session.thinkingLevel || "medium") as ThinkingLevel,
       this.supportedThinkingLevels(session, selectedModel),
     );
-    if (this.modeProfile(slot).modelKey === modelKey && this.modelName(session) === modelKey) {
+    if (this.modelName(session) === modelKey && session.thinkingLevel === thinkingLevel) {
       this.persistDefaultModelSelection(modelKey);
       return;
     }
-    await this.setModeProfile(
-      slot.modeState.mode,
-      { ...this.modeProfile(slot), modelKey, thinkingLevel },
-      { sessionKey: slot.key },
-    );
+    if (this.modelName(session) !== modelKey && session.setModel) {
+      await session.setModel(selectedModel);
+      this.emit("model_changed", { model: modelKey, provider: selected.provider }, undefined, slot.key);
+    }
+    if (session.thinkingLevel !== thinkingLevel) {
+      session.setThinkingLevel(thinkingLevel);
+      this.emit("thinking_level_changed", { level: thinkingLevel }, undefined, slot.key);
+    }
     this.persistDefaultModelSelection(modelKey);
   }
 
@@ -2582,4 +2320,3 @@ export class PiHost {
     }
   }
 }
-

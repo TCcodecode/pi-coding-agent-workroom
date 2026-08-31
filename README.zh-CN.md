@@ -1,6 +1,6 @@
 # Pi Workroom
 
-> 围绕 [Pi coding agent](https://github.com/earendil-works/pi) 的本地优先工作台：规划、研发、审阅、测试，以及随时继续工作。
+> 围绕 [Pi coding agent](https://github.com/earendil-works/pi) 的本地优先工作台：组织、研发、审阅、测试，以及随时继续工作。
 
 Pi Workroom 是一个本地桌面 GUI 应用，用来运行和恢复 Pi 会话、审阅 Agent 改动、管理 MCP 工具、搜索代码，并验证 API。
 
@@ -10,7 +10,7 @@ Pi Workroom 是一个本地桌面 GUI 应用，用来运行和恢复 Pi 会话�
 
 ## 为什么需要 Pi Workroom？
 
-Pi 在终端里已经很好用；但一个由 AI 协作推进的项目，从最初的规划到每次迭代，都需要一个稳定的工作界面来承接项目上下文、会话、工具调用、文件改动、测试和下一步 follow-up。
+Pi 在终端里已经很好用；但一个由 AI 协作推进的项目，从最初的问题定义到每次迭代，都需要一个稳定的工作界面来承接项目上下文、会话、工具调用、文件改动、测试和下一步 follow-up。
 
 Pi Workroom 想成为这个界面：尽量在一个工作台中完成工作，而不是在终端、测试客户端、项目窗口和手机之间不断切换。它不会替代 Pi，也不会重新实现一个 Agent runtime。Pi 仍然是模型、Provider、工具循环、扩展和会话语义的事实来源。
 
@@ -18,7 +18,7 @@ Pi Workroom 想成为这个界面：尽量在一个工作台中完成工作，�
 
 | 区域 | 你会得到什么 |
 | --- | --- |
-| **Agent 工作区** | 多项目、多会话、多 Tab、会话树、计划、待办与 follow-up |
+| **Agent 工作区** | 多项目、多会话、多 Tab、会话树、待办与 follow-up |
 | **实时审阅** | 流式回复和工具调用时间线，以及统一格式的文件 Diff |
 | **MCP 与代码搜索** | 项目级 MCP 配置、Cursor MCP 导入、本地符号搜索和引用查找 |
 | **HTTP Workbench** | 可复跑 `.http` 测试、环境、运行历史、耗时、错误和脱敏响应 |
@@ -114,7 +114,7 @@ npm run dev
 1. 打开一个本地项目目录。
 2. 新建 Pi 会话，或恢复你此前在终端中使用的会话。
 3. 如果尚未完成 Pi 配置，在设置中登录或配置模型 Provider。
-4. 发送任务，在时间线中审阅工具调用、计划和文件改动。
+4. 发送任务，在时间线中审阅工具调用、待办更新和文件改动。
 5. 将反复使用的 API 检查沉淀成 HTTP Workbench 里的 `.http` 测试。
 
 Pi Workroom 会继续使用 Pi 已有的会话、Provider 配置、skills、extensions 和 MCP 生态。

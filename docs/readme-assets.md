@@ -1,4 +1,4 @@
-# Pi Workroom README visual capture plan
+# Pi Workroom README visual capture guide
 
 Use real Pi Workroom screens only. Do not use mockups, synthetic UI, API keys, private paths, customer data, or model credentials.
 

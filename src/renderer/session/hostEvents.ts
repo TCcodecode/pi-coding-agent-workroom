@@ -29,8 +29,6 @@ const SESSION_SCOPED_EVENT_TYPES = new Set<PiEvent["type"]>([
   "queue_updated",
   "model_changed",
   "thinking_level_changed",
-  "mode_changed",
-  "plan_artifact_changed",
   "agent_started",
   "turn_started",
   "turn_completed",

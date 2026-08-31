@@ -12,6 +12,29 @@ describe("Pi Workroom interaction language", () => {
     expect(css).toContain("--focus-ring: 0 0 0 1px rgba(32, 32, 32, .16), 0 4px 14px rgba(0, 0, 0, .14)");
     expect(css).toContain("--transition-fast: 120ms ease");
     expect(css).toContain("--transition-normal: 180ms ease");
+    expect(css).toContain("--motion-duration-panel-enter: 220ms");
+    expect(css).toContain("--motion-duration-panel-exit: 160ms");
+    expect(css).toContain("--motion-ease-enter: cubic-bezier(.16, 1, .3, 1)");
+  });
+
+  it("keeps shell panels mounted while animating their layout and exit states", () => {
+    expect(css).toMatch(/\.app-shell\s*\{[^}]*transition: grid-template-columns var\(--motion-duration-layout\)/s);
+    expect(css).toMatch(/\.app-shell\.chat-only\s*\{[^}]*0px 0px/s);
+    expect(css).toMatch(/\.right-panel-shell\.is-entered\s*\{[^}]*pointer-events: auto/s);
+    expect(css).toMatch(/\.right-panel-shell\.is-exiting\s*\{[^}]*opacity: 0/s);
+    expect(css).toMatch(/\.app-shell\.sidebar-collapsed\s*> \.sidebar\s*\{[^}]*pointer-events: none/s);
+    expect(css).toMatch(/\.app-shell\.sidebar-collapsed\s*> \.panel-resizer:not\(\.right-panel-resizer\)\s*\{[^}]*pointer-events: none/s);
+    expect(css).not.toMatch(/\.app-shell\.sidebar-collapsed\s*> \.panel-resizer:not\(\.right-panel-resizer\)\s*\{[^}]*display: none/s);
+  });
+
+  it("gives dialogs, tabs, and mode controls compositor-friendly feedback", () => {
+    expect(css).toMatch(/\.palette-backdrop\s*\{[^}]*opacity: 1[^}]*transition: opacity/s);
+    expect(css).toMatch(/\.palette-backdrop\.is-exiting\s*> \.dialog-panel-motion\s*\{[^}]*transform: translateY\(8px\) scale\(.985\)/s);
+    expect(css).toMatch(/\.session-tab\.session-tab--stacked\.is-exiting\s*\{[^}]*animation: session-tab-exit/s);
+    expect(css).toMatch(/\.session-tab-slider\s*\{[^}]*transition: transform[^}]*width/s);
+    expect(css).toMatch(/\.settings-body-content\s*\{[^}]*min-width: 0[^}]*animation: settings-section-enter/s);
+    expect(css).toMatch(/\.settings-body-content > \.settings-section\s*\{[^}]*width: min\(820px, 100%\)/s);
+    expect(css).toMatch(/\.right-pane-mode-tabs button::after\s*\{[^}]*transition: opacity/s);
   });
 
   it("gives keyboard users a consistent visible focus state", () => {

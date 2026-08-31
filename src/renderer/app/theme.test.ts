@@ -66,7 +66,6 @@ describe("Pi Workroom light surface hierarchy", () => {
     expect(source).not.toContain("--text-muted-dark");
     expect(source).not.toMatch(/\.session-picker\b/);
     expect(source).not.toMatch(/\.quick-actions\b/);
-    expect(source).not.toMatch(/\.plan-workspace\b/);
     expect(source).not.toMatch(/\.timeline-task\b/);
     expect(source).not.toMatch(/\.header-model\b/);
     expect(source).not.toMatch(/\.http-results-tabs\b/);
@@ -261,7 +260,6 @@ describe("Pi Workroom light surface hierarchy", () => {
 
   it("keeps accent jobs in :root and gold only on the workspace switcher", () => {
     expect(css).toContain("--settings-accent: #319DFF");
-    expect(css).toContain("--mode-selected: #F599C6");
     expect(css).toContain("--workspace-mode-accent: #ffea88");
     expect(css).toContain("--workspace-mode-ink: #3d3d3d");
 

@@ -527,7 +527,7 @@ describe("Pi Workroom end-to-end send flow", () => {
       }),
     );
     await waitFor(() => expect(screen.getByText("Second task")).toBeInTheDocument());
-    expect(screen.queryByText("First task")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("First task")).not.toBeInTheDocument());
 
     delete (window as unknown as { pi?: PiApi }).pi;
   });
