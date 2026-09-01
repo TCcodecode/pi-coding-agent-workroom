@@ -463,7 +463,8 @@ describe("Pi Workroom end-to-end send flow", () => {
     });
 
     fireEvent.keyDown(window, { key: "n", metaKey: true });
-    await waitFor(() => expect(api.newSession).toHaveBeenCalledWith({ sessionKey: expect.any(String) }));
+    await waitFor(() => expect(api.startSession).toHaveBeenCalledWith({ cwd: project.path, sessionKey: expect.any(String) }));
+    expect(api.newSession).not.toHaveBeenCalled();
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem("pi.openTabs") ?? "{}");
       expect(saved.tabs).toHaveLength(2);
@@ -616,7 +617,8 @@ describe("Pi Workroom end-to-end send flow", () => {
     await waitFor(() =>
       expect(api.startSession).toHaveBeenCalledWith({ cwd: "/tmp/project", sessionKey: expect.any(String) }),
     );
-    await waitFor(() => expect(api.newSession).toHaveBeenCalledWith({ sessionKey: expect.any(String) }));
+    await waitFor(() => expect(api.startSession).toHaveBeenCalledWith({ cwd: "/tmp/project", sessionKey: expect.any(String) }));
+    expect(api.newSession).not.toHaveBeenCalled();
 
     delete (window as unknown as { pi?: PiApi }).pi;
   });
@@ -679,11 +681,11 @@ describe("Pi Workroom end-to-end send flow", () => {
 
     render(<App />);
     fireEvent.keyDown(window, { key: "n", metaKey: true });
-    await waitFor(() => expect(api.newSession).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.startSession).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
 
     fireEvent.keyDown(window, { key: "n", metaKey: true });
-    await waitFor(() => expect(api.newSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.startSession).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
 
     delete (window as unknown as { pi?: PiApi }).pi;

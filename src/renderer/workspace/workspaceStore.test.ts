@@ -282,7 +282,7 @@ describe("startNewSession and openWorkspaceSession", () => {
     });
   });
 
-  test("startNewSession reserves a preview tab and asks the host for a new session", async () => {
+  test("startNewSession reserves a preview tab and starts one Pi runtime", async () => {
     const { useAppStore } = await import("../session/store");
     const { startNewSession } = await import("./workspaceActions");
     const startSession = vi.fn(async () => ({
@@ -292,12 +292,13 @@ describe("startNewSession and openWorkspaceSession", () => {
         sessionId: "s-new",
         cwd: "/tmp/project",
         name: "Untitled",
+        model: "deepseek/deepseek-v4-flash",
+        provider: "deepseek",
+        thinkingLevel: "high",
       },
     }));
-    const newSession = vi.fn(async () => undefined);
     window.pi = {
       startSession,
-      newSession,
       getSnapshot: vi.fn(async () => ({
         ...useAppStore.getState(),
         session: { ...useAppStore.getState().session, sessionId: "s-new", cwd: "/tmp/project" },
@@ -307,9 +308,17 @@ describe("startNewSession and openWorkspaceSession", () => {
 
     await startNewSession("/tmp/project");
 
-    expect(newSession).toHaveBeenCalledWith({ sessionKey: expect.any(String) });
+    expect(startSession).toHaveBeenCalledWith({ cwd: "/tmp/project", sessionKey: expect.any(String) });
+    expect(startSession).toHaveBeenCalledTimes(1);
     expect(useWorkspaceStore.getState().tabs).toHaveLength(1);
     expect(useWorkspaceStore.getState().tabs[0]?.projectId).toBe("/tmp/project");
+    const view = useAppStore.getState().getView(useWorkspaceStore.getState().activeTabId!);
+    expect(view?.session).toEqual(expect.objectContaining({
+      sessionId: "s-new",
+      model: "deepseek/deepseek-v4-flash",
+      provider: "deepseek",
+      thinkingLevel: "high",
+    }));
   });
 
   test("startNewSession keeps the resolved model list on the new session view", async () => {
@@ -333,10 +342,8 @@ describe("startNewSession and openWorkspaceSession", () => {
         name: "Untitled",
       },
     }));
-    const newSession = vi.fn(async () => undefined);
     window.pi = {
       startSession,
-      newSession,
       listLiveSessions: vi.fn(async () => []),
     } as never;
 
@@ -364,11 +371,9 @@ describe("startNewSession and openWorkspaceSession", () => {
     const focusSession = vi.fn(async (sessionKey: string) => {
       throw new Error(`Unknown sessionKey: ${sessionKey}`);
     });
-    const newSession = vi.fn(async () => undefined);
     window.pi = {
       startSession,
       focusSession,
-      newSession,
       listLiveSessions: vi.fn(async () => []),
     } as never;
 

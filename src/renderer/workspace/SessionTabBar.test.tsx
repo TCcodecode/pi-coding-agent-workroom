@@ -63,6 +63,25 @@ describe("SessionTabBar", () => {
     expect(document.querySelectorAll(".session-tab-pin-control.is-icon-only")).toHaveLength(2);
   });
 
+  test("keeps pin and status in one horizontal metadata group in every tab state", () => {
+    const runningTab = { ...tabs[0]!, status: "running" as const };
+    useWorkspaceStore.setState({ tabs: [runningTab, tabs[1]!], activeTabId: "t1" });
+    const rail = render(<SessionTabBar />);
+
+    const railTab = screen.getByRole("tab", { name: "First — Running" });
+    expect(railTab.querySelector(".session-tab-meta > .session-tab-leading")).toBeInTheDocument();
+    expect(railTab.querySelector(".session-tab-meta > .session-tab-status-lane > .session-tab-dot.is-running")).toBeInTheDocument();
+    expect(railTab.querySelector(".session-tab-main .session-tab-dot")).not.toBeInTheDocument();
+
+    rail.unmount();
+    useWorkspaceStore.setState({ tabs: [runningTab], activeTabId: "t1" });
+    render(<SessionTabBar />);
+
+    const singleTab = screen.getByRole("tab", { name: "First — Running" });
+    expect(singleTab.querySelector(".session-tab-meta > .session-tab-leading")).toBeInTheDocument();
+    expect(singleTab.querySelector(".session-tab-meta > .session-tab-status-lane > .session-tab-dot.is-running")).toBeInTheDocument();
+  });
+
   test("shows project suffix, ⌘N shortcuts and pin controls", () => {
     const onActivate = vi.spyOn(workspaceActions, "activateTab").mockResolvedValue();
     const onClose = vi.spyOn(workspaceActions, "closeWorkspaceTab").mockResolvedValue();

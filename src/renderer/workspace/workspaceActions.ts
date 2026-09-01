@@ -427,15 +427,13 @@ export async function startNewSession(projectId: string): Promise<void> {
       useAppStore.getState().bindForeground(sessionKey);
     }
   }
-  await api?.newSession({ sessionKey });
   if (!isCurrentActivation(navigation)) return;
-  const snap = started;
-  if (snap) {
+  if (started) {
     const patched = patchTab(useWorkspaceStore.getState().tabs, sessionKey, {
-      sessionId: snap.session.sessionId,
-      sessionFile: snap.session.sessionFile,
-      title: displayTabTitle(snap.session.name, "Untitled"),
-      status: snap.session.status,
+      sessionId: started.session.sessionId,
+      sessionFile: started.session.sessionFile,
+      title: displayTabTitle(started.session.name, "Untitled"),
+      status: started.session.status,
     });
     useWorkspaceStore.getState().replaceWorkingSet(touchTab(patched, sessionKey), sessionKey);
   }

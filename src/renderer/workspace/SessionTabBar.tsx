@@ -41,6 +41,14 @@ function statusClass(status: SessionTab["status"]): string {
   return "";
 }
 
+function statusLabel(status: SessionTab["status"]): string | undefined {
+  if (status === "running") return "Running";
+  if (status === "awaiting_approval") return "Awaiting approval";
+  if (status === "completed") return "Completed";
+  if (status === "error") return "Error";
+  return undefined;
+}
+
 export function SessionTabBar({
   hideShortcuts = false,
 }: SessionTabBarProps) {
@@ -138,7 +146,7 @@ export function SessionTabBar({
 
   return (
     <div className="session-tab-bar" role="tablist" aria-label="Open sessions">
-      <div ref={scrollRef} className={`session-tab-scroll ${isSingleTab ? "is-single" : ""}`}>
+      <div ref={scrollRef} className={`session-tab-scroll ${isSingleTab ? "is-single" : "is-multiple"}`}>
         {slider && !isSingleTab ? (
           <div
             className="session-tab-slider"
@@ -154,6 +162,7 @@ export function SessionTabBar({
           const activeIndex = orderedActiveTabs.findIndex((item) => item.id === tab.id);
           const switchShortcut = activeIndex >= 0 ? tabShortcutLabel(activeIndex, mod) : undefined;
           const status = statusClass(tab.status);
+          const statusText = statusLabel(tab.status);
           const pinLabel = tab.pinned ? `Unpin “${title}”` : `Pin “${title}”`;
           const showPinShortcut = isSingleTab && !hideShortcuts;
           const pinControlLabel = showPinShortcut ? `${pinLabel} · Shortcut: ${pinShortcut}` : pinLabel;
@@ -188,23 +197,25 @@ export function SessionTabBar({
                   className={`session-tab session-tab--stacked ${active ? "active" : ""} ${isExiting ? "is-exiting" : ""} ${tab.pinned ? "is-pinned" : ""} ${tab.isPreview ? "is-preview" : ""}`}
                   role="tab"
                   aria-selected={active}
-                  title={[project, title, switchShortcut ? `Switch: ${switchShortcut}` : null]
+                  aria-label={statusText ? `${title} — ${statusText}` : title}
+                  title={[project, title, statusText, switchShortcut ? `Switch: ${switchShortcut}` : null]
                     .concat(isSingleTab ? [`Pin: ${pinShortcut}`] : [])
                     .filter(Boolean)
                     .join(" · ")}
                 >
-                  {isSingleTab && status ? (
-                    <span className={`session-tab-dot ${status}`} aria-hidden />
-                  ) : null}
-                  {pinControl}
+                  <span className="session-tab-meta">
+                    <span className="session-tab-leading">
+                      {pinControl}
+                    </span>
+                    <span className="session-tab-status-lane" aria-hidden>
+                      {status ? <span className={`session-tab-dot ${status}`} /> : null}
+                    </span>
+                  </span>
                   <button
                     type="button"
                     className="session-tab-main"
                     onClick={() => onActivate(tab.id)}
                   >
-                    {!isSingleTab && status ? (
-                      <span className={`session-tab-dot ${status}`} aria-hidden />
-                    ) : null}
                     <span className="session-tab-text">
                       <span className="session-tab-project">{project || "Project"}</span>
                       <span className="session-tab-title">{title}</span>

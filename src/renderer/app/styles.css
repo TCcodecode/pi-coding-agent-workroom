@@ -5798,9 +5798,35 @@ not a segmented control. */ .session-tab-scroll.is-single {
   letter-spacing: 0;
 }
 
-/* Status remains discoverable without moving the centered label. */ .session-tab.session-tab--stacked .session-tab-dot {
-  position: absolute;
-  left: 7px;
+/* Pin and status share a compact inline group, rather than stacking the
+   status on top of the pin. The whole tab therefore stays on one horizontal
+   axis as tabs are added. */
+.session-tab.session-tab--stacked .session-tab-meta {
+  display: inline-flex;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--session-tab-control-gap);
+}
+.session-tab.session-tab--stacked .session-tab-leading {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+}
+.session-tab.session-tab--stacked .session-tab-status-lane {
+  display: inline-flex;
+  width: 5px;
+  height: 24px;
+  flex: 0 0 5px;
+  align-items: center;
+  justify-content: center;
+}
+.session-tab.session-tab--stacked .session-tab-status-lane .session-tab-dot {
+  position: static;
+  margin: 0;
 }
 
 /* Sliding capsule indicator: one pill that glides between tabs instead of
@@ -5913,13 +5939,13 @@ and title together. */ .session-tab-scroll.is-single {
      larger inline gap, so ⌘P→title is intentionally wider than pin→⌘P. */
   gap: var(--session-tab-inline-gap);
 }
- .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-dot {
-  position: static;
+.session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-meta { align-items: center; }
+.session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-leading {
+  width: auto;
   flex: 0 0 auto;
-  margin: 0;
-  align-self: center;
 }
- .session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control {
+.session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-status-lane { order: -1; }
+.session-tab-scroll.is-single .session-tab.session-tab--stacked .session-tab-pin-control {
   position: static;
   flex: 0 0 auto;
   margin: 0;
@@ -5979,6 +6005,34 @@ and title together. */ .session-tab-scroll.is-single {
     width: auto;
     max-width: none;
     flex: 1;
+  }
+}
+
+/* Multiple tabs keep their structure as the main column narrows: first drop
+   the per-tab switch hint, then reduce the minimum title lane. The rail keeps
+   scrolling once the minimum is reached, so controls never overlap or wrap. */
+@container (max-width: 880px) {
+  .session-tab-scroll.is-multiple .session-tab.session-tab--stacked {
+    min-width: 136px;
+    gap: var(--space-2);
+  }
+
+  .session-tab-scroll.is-multiple .session-tab-kbd {
+    display: none;
+  }
+}
+
+@container (max-width: 640px) {
+  .session-tab-scroll.is-multiple .session-tab.session-tab--stacked {
+    min-width: 116px;
+  }
+
+  .session-tab-scroll.is-multiple .session-tab.session-tab--stacked .session-tab-main {
+    padding-right: 28px;
+  }
+
+  .session-tab-scroll.is-multiple .session-tab.session-tab--stacked .session-tab-close {
+    right: 1px;
   }
 }
 

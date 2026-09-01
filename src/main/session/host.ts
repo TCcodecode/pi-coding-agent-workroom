@@ -88,7 +88,14 @@ export type {
 /** Fast/cheap model ids get a lower todo-nudge threshold (they drift more). */
 const FAST_MODEL_PATTERN = /flash|mini|haiku|lite|nano|small/i;
 const THINKING_LEVEL_ORDER: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-const DEFAULT_MODEL_THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high"]);
+
+type AvailableModel = {
+  provider?: string;
+  id?: string;
+  name?: string;
+  reasoning?: boolean;
+  thinkingLevelMap?: Partial<Record<ThinkingLevel, string | null>>;
+};
 
 export class PiHost {
   private readonly workspaceId: string;
@@ -727,29 +734,18 @@ export class PiHost {
       return this.availableModelsCache;
     }
 
-    const thinkingLevels = (session?.getAvailableThinkingLevels?.() ?? [
-      "off",
-      "minimal",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]) as ThinkingLevel[];
-
-    type RawModel = { provider?: string; id?: string; name?: string };
-    let raw: RawModel[] = [];
+    let raw: AvailableModel[] = [];
 
     try {
       if (modelRuntime.getAvailable) {
-        raw = [...(await modelRuntime.getAvailable())];
+        raw = [...(await modelRuntime.getAvailable())] as AvailableModel[];
       }
     } catch {
       raw = [];
     }
 
     if (raw.length === 0) {
-      raw = [...(modelRuntime.getAvailableSnapshot?.() ?? [])];
+      raw = [...(modelRuntime.getAvailableSnapshot?.() ?? [])] as AvailableModel[];
     }
 
     if (raw.length === 0) {
@@ -767,7 +763,7 @@ export class PiHost {
       try {
         await modelRuntime.refresh({ allowNetwork: false });
         if (modelRuntime.getAvailable) {
-          raw = [...(await modelRuntime.getAvailable())];
+          raw = [...(await modelRuntime.getAvailable())] as AvailableModel[];
         }
       } catch {
         // Availability refresh is best-effort; keep the empty list rather than fail.
@@ -794,7 +790,7 @@ export class PiHost {
     if (current?.provider && current.id) {
       const key = `${current.provider}/${current.id}`;
       if (!raw.some((model) => `${model.provider ?? ""}/${model.id ?? ""}` === key)) {
-        const found = modelRuntime.getModel?.(current.provider, current.id) as RawModel | undefined;
+        const found = modelRuntime.getModel?.(current.provider, current.id) as AvailableModel | undefined;
         raw.unshift(found ?? { provider: current.provider, id: current.id, name: current.id });
       }
     }
@@ -806,14 +802,23 @@ export class PiHost {
       seen.add(key);
       return true;
     });
+    const currentKey = current?.provider && current.id ? `${current.provider}/${current.id}` : undefined;
 
-    this.availableModelsCache = unique.map((model) => ({
-      id: `${model.provider ?? "unknown"}/${model.id ?? "unknown"}`,
-      provider: model.provider ?? "unknown",
-      label: model.name ?? model.id ?? "unknown",
-      available: true,
-      thinkingLevels,
-    }));
+    this.availableModelsCache = unique.map((model) => {
+      const needsRuntimeDetails = model.reasoning === undefined && model.thinkingLevelMap === undefined;
+      const runtimeModel = needsRuntimeDetails && model.provider && model.id
+        ? modelRuntime.getModel?.(model.provider, model.id) as AvailableModel | undefined
+        : undefined;
+      const details = runtimeModel ? { ...model, ...runtimeModel } : model;
+      const modelKey = `${model.provider ?? "unknown"}/${model.id ?? "unknown"}`;
+      return {
+        id: modelKey,
+        provider: model.provider ?? "unknown",
+        label: model.name ?? model.id ?? "unknown",
+        available: true,
+        thinkingLevels: this.supportedThinkingLevels(currentKey === modelKey ? session : undefined, details),
+      };
+    });
 
     return this.availableModelsCache;
   }
@@ -852,7 +857,7 @@ export class PiHost {
           provider: model.provider ?? "unknown",
           label: model.name ?? model.id ?? "unknown",
           available: true,
-          thinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+          thinkingLevels: this.supportedThinkingLevels(undefined, model),
         }));
     } catch {
       // The dedicated auth runtime is best-effort; keep the existing cache on failure.
@@ -2260,20 +2265,25 @@ export class PiHost {
     return session.modelRuntime?.getModel(provider, idParts.join("/"));
   }
 
-  private supportedThinkingLevels(session: PiSessionLike, model?: unknown): ThinkingLevel[] {
-    const fallback = (session.getAvailableThinkingLevels?.() ?? THINKING_LEVEL_ORDER)
+  private supportedThinkingLevels(session: PiSessionLike | undefined, model?: unknown): ThinkingLevel[] {
+    const details = model && typeof model === "object" ? model as AvailableModel : undefined;
+    const hasCapabilityMetadata = details && ("reasoning" in details || "thinkingLevelMap" in details);
+    if (hasCapabilityMetadata && details?.reasoning !== true) return ["off"];
+
+    if (details?.reasoning === true) {
+      const map = details.thinkingLevelMap;
+      const allowed = THINKING_LEVEL_ORDER.filter((level) => {
+        const value = map?.[level];
+        if (value === null) return false;
+        if (level === "xhigh" || level === "max") return value !== undefined;
+        return true;
+      });
+      return allowed.length > 0 ? allowed : ["off"];
+    }
+
+    const fallback = (session?.getAvailableThinkingLevels?.() ?? ["off"])
       .filter((level): level is ThinkingLevel => THINKING_LEVEL_ORDER.includes(level as ThinkingLevel));
-    const map = (model && typeof model === "object" && "thinkingLevelMap" in model)
-      ? (model as { thinkingLevelMap?: Partial<Record<ThinkingLevel, string | null>> }).thinkingLevelMap
-      : undefined;
-    if (!map) return fallback;
-    const allowed = THINKING_LEVEL_ORDER.filter((level) => {
-      const value = map[level];
-      if (value === null) return false;
-      if (typeof value === "string") return true;
-      return DEFAULT_MODEL_THINKING_LEVELS.has(level);
-    });
-    return allowed.length > 0 ? allowed : fallback;
+    return fallback.length > 0 ? fallback : ["off"];
   }
 
   private normalizeThinkingLevel(requested: ThinkingLevel, allowed: ThinkingLevel[]): ThinkingLevel {

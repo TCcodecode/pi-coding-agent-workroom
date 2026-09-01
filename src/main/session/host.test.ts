@@ -593,6 +593,7 @@ describe("PiHost", () => {
           provider: "deepseek",
           id: "deepseek-v4-flash",
           name: "DeepSeek V4 Flash",
+          reasoning: true,
           thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", max: "max" },
         },
       ];
@@ -703,6 +704,49 @@ describe("PiHost", () => {
     expect(models.some((model) => model.provider === "google")).toBe(false);
   });
 
+  test("refreshAvailableModels exposes thinking levels supported by each model", async () => {
+    const agentDir = mkdtempSync(join(tmpdir(), "pi-model-thinking-"));
+    try {
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify({}));
+      writeFileSync(join(agentDir, "auth.json"), JSON.stringify({
+        deepseek: { configured: true },
+        openai: { configured: true },
+        anthropic: { configured: true },
+      }));
+      const fake = createFakeRuntime();
+      const models = [
+        {
+          provider: "deepseek",
+          id: "deepseek-v4-flash",
+          name: "DeepSeek V4 Flash",
+          reasoning: true,
+          thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", max: "max" },
+        },
+        { provider: "openai", id: "gpt-4", name: "GPT-4", reasoning: false },
+        { provider: "anthropic", id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", reasoning: true, thinkingLevelMap: { max: "max" } },
+      ];
+      fake.session.modelRuntime = {
+        getModels: () => models,
+        getModel: (provider: string, id: string) => models.find((model) => model.provider === provider && model.id === id),
+        getAvailable: async () => models.map(({ provider, id, name }) => ({ provider, id, name })),
+        getAvailableSnapshot: () => [],
+        hasConfiguredAuth: () => true,
+      };
+      fake.session.model = { provider: "deepseek", id: "deepseek-v4-flash" };
+
+      const host = new PiHost({ workspaceId: "workspace-1", agentDir, runtime: fake.runtime });
+      const available = await host.refreshAvailableModels();
+
+      expect(available.map(({ id, thinkingLevels }) => ({ id, thinkingLevels }))).toEqual([
+        { id: "deepseek/deepseek-v4-flash", thinkingLevels: ["off", "high", "max"] },
+        { id: "openai/gpt-4", thinkingLevels: ["off"] },
+        { id: "anthropic/claude-sonnet-4-6", thinkingLevels: ["off", "minimal", "low", "medium", "high", "max"] },
+      ]);
+    } finally {
+      rmSync(agentDir, { recursive: true, force: true });
+    }
+  });
+
   test("refreshAvailableModels recovers when the live runtime reports stale empty availability", async () => {
     const fake = createFakeRuntime();
     let liveConfigured = false;
@@ -801,9 +845,9 @@ describe("PiHost", () => {
 
       const authRuntime = {
         getAvailable: async () => [
-          { provider: "anthropic", id: "claude-opus-4-6", name: "Claude Opus 4.6" },
-          { provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
-          { provider: "deepseek", id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+          { provider: "anthropic", id: "claude-opus-4-6", name: "Claude Opus 4.6", reasoning: true, thinkingLevelMap: { max: "max" } },
+          { provider: "deepseek", id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", reasoning: true, thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", max: "max" } },
+          { provider: "deepseek", id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", reasoning: true, thinkingLevelMap: { minimal: null, low: null, medium: null, high: "high", max: "max" } },
         ],
       };
       const host = new PiHost({
@@ -817,6 +861,7 @@ describe("PiHost", () => {
         "deepseek/deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
       ].sort());
+      expect(models.every((model) => model.thinkingLevels.join(",") === "off,high,max")).toBe(true);
     } finally {
       rmSync(agentDir, { recursive: true, force: true });
     }
